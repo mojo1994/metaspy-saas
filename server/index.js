@@ -214,7 +214,7 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 })
 
 // ─── Email / Recovery Routes ──────────────────────────────────────
-import { sendEmail, recoveryEmailHtml, verificationEmailHtml, purchaseConfirmationEmailHtml } from './email.js'
+import { sendEmail, recoveryEmailHtml, verificationEmailHtml, purchaseConfirmationEmailHtml, pendingCheckoutEmailHtml } from './email.js'
 
 function generateCode() {
   return String(Math.floor(100000 + Math.random() * 900000))
@@ -428,6 +428,17 @@ app.post('/api/subscription/create-checkout', authMiddleware, async (req, res) =
     const checkoutUrl = KIRVANO_STATIC_LINKS[plan]
     if (!checkoutUrl) return res.status(500).json({ error: 'Link nao configurado' })
     await run('UPDATE users SET pending_plan = $1 WHERE id = $2', [plan, req.user.id])
+
+    try {
+      await sendEmail({
+        to: req.user.email,
+        subject: 'MetaSpy - Finalize sua compra!',
+        html: pendingCheckoutEmailHtml({ name: req.user.name, email: req.user.email }),
+      })
+    } catch (emailErr) {
+      console.error('Erro ao enviar email de checkout pendente:', emailErr)
+    }
+
     res.json({ checkoutUrl })
   } catch {
     res.status(500).json({ error: 'Erro ao criar checkout' })

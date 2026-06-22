@@ -325,3 +325,108 @@ export function purchaseConfirmationEmailHtml({ name, plan, days }) {
     </tr>
   `)
 }
+
+export function pendingCheckoutEmailHtml({ name, email }) {
+  return emailLayout(`
+    <tr><td height="16"></td></tr>
+
+    <tr>
+      <td align="center" style="padding-bottom:24px">
+        <table role="presentation" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="width:52px;height:52px;background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:14px;font-size:26px;line-height:52px;color:#fff;font-weight:700">M</td>
+            <td style="padding-left:12px;font-size:22px;font-weight:700;color:#fff;letter-spacing:-0.5px">MetaSpy</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background:#12121e;border:1px solid #1e1e32;border-radius:16px;padding:36px 32px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="font-size:32px;padding-bottom:16px">🚀</td>
+          </tr>
+          <tr>
+            <td align="center" style="font-size:20px;font-weight:700;color:#fff;padding-bottom:12px">Ola, ${name}!</td>
+          </tr>
+          <tr>
+            <td align="center" style="font-size:14px;color:#c084fc;font-weight:600;padding-bottom:8px">Voce esta a um passo de escalar sua operacao</td>
+          </tr>
+          <tr>
+            <td align="center" style="font-size:14px;color:#8484a0;line-height:1.6;padding-bottom:24px">
+              com o <strong style="color:#fff">nosso arsenal espiao massivo</strong>.<br>
+              Nao perca essa oportunidade!
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background:linear-gradient(135deg,rgba(168,85,247,0.12),rgba(124,58,237,0.06));border:1px solid rgba(168,85,247,0.25);border-radius:12px;padding:20px 24px;margin-bottom:24px">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="font-size:13px;color:#f59e0b;font-weight:600;padding-bottom:8px">⏳ OFERTA POR TEMPO LIMITADO</td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-size:12px;color:#8484a0;line-height:1.5">
+                    Complete sua compra dentro dos <strong style="color:#fff">proximos 15 minutos</strong><br>
+                    e leve com desconto o <strong style="color:#c084fc">Trigger</strong> (disponivel em breve)
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-bottom:8px">
+              <a href="https://centralspyads.netlify.app/planos" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 36px;border-radius:8px">
+                Voltar ao Checkout
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="font-size:12px;color:#5c5c78">
+              Clique no botao acima para finalizar sua compra
+            </td>
+          </tr>
+
+          <tr>
+            <td style="height:1px;background:linear-gradient(90deg,transparent,#2a2a44,transparent);padding:0 40px"><div style="height:1px"></div></td>
+          </tr>
+
+          <tr>
+            <td align="center" style="font-size:13px;color:#6c6c88;line-height:1.5;padding-top:20px">
+              Este email foi enviado para <strong style="color:#8484a0">${email}</strong>.<br>
+              Se nao iniciou esta compra, ignore-o.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:24px 16px 0">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding-bottom:8px;text-align:center;font-size:11px;color:#42425a">
+              MetaSpy &mdash; Todos os direitos reservados
+            </td>
+          </tr>
+          <tr>
+            <td style="text-align:center;font-size:11px;color:#3a3a50">
+              <a href="https://centralspyads.netlify.app/termos" style="color:#6c6c88;text-decoration:none">Termos de Uso</a>
+              &nbsp;&bull;&nbsp;
+              <a href="https://centralspyads.netlify.app/privacidade" style="color:#6c6c88;text-decoration:none">Privacidade</a>
+              &nbsp;&bull;&nbsp;
+              <a href="https://centralspyads.netlify.app/contato" style="color:#6c6c88;text-decoration:none">Contato</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="text-align:center;padding-top:8px;font-size:11px;color:#a855f7;font-weight:600">
+              ⚠ Nao encontrou? Verifique sua caixa de spam.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  `)
+}
