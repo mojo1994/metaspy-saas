@@ -10,7 +10,7 @@ import { createReadStream, existsSync, mkdirSync, readdirSync, writeFileSync, re
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
-import archiver from 'archiver'
+import { Archiver } from 'archiver'
 import { exiftool } from 'exiftool-vendored'
 import mime from 'mime-types'
 import { initDb, initSchema, one, query, run } from './db.js'
@@ -355,7 +355,7 @@ app.get('/api/clone/deep/:id/download', async (req, res) => {
   const dir = join(CLONES_DIR, req.params.id)
   if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
   try {
-    const archive = archiver('zip', { zlib: { level: 9 } })
+    const archive = new Archiver('zip', { zlib: { level: 9 } })
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="clone-${req.params.id}.zip"`)
     archive.pipe(res)
@@ -698,7 +698,7 @@ app.get('/api/cloaker/camouflage-download/:id', async (req, res) => {
     if (!htmlFile) return res.status(404).json({ erro: 'Arquivo nao encontrado.' })
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="camuflado-${req.params.id}.zip"`)
-    const archive = archiver('zip', { zlib: { level: 9 } })
+    const archive = new Archiver('zip', { zlib: { level: 9 } })
     archive.pipe(res)
     archive.file(join(dir, htmlFile), { name: htmlFile })
     if (mediaFile) archive.file(join(dir, mediaFile), { name: mediaFile })
