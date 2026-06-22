@@ -94,6 +94,17 @@ export async function initSchema() {
       used INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS pages (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL DEFAULT 'Sem titulo',
+      html TEXT NOT NULL DEFAULT '',
+      type TEXT NOT NULL DEFAULT 'page',
+      published INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `)
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan TEXT`).catch(() => {})
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified INTEGER NOT NULL DEFAULT 0`).catch(() => {})

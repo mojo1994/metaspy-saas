@@ -103,6 +103,9 @@ export default function Dashboard() {
           <NavLink to="/dashboard/cleaner" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             Remover Metadados
           </NavLink>
+          <NavLink to="/dashboard/paginas" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            Paginas
+          </NavLink>
         </nav>
 
         <div className="sidebar-section-label">Conta</div>

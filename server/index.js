@@ -941,6 +941,97 @@ app.get('/api/cleaner/download/:id', authMiddleware, async (req, res) => {
   }
 })
 
+// ─── Pages Routes ────────────────────────────────────────────────────
+function slugify(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .trim()
+    .slice(0, 60) || 'pagina'
+}
+
+app.post('/api/pages', authMiddleware, async (req, res) => {
+  try {
+    const { title, html } = req.body
+    if (!title || !html) return res.status(400).json({ error: 'Titulo e HTML obrigatorios.' })
+    const id = randomUUID()
+    const baseSlug = slugify(title)
+    let slug = baseSlug
+    let exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+    let counter = 1
+    while (exists) {
+      slug = `${baseSlug}-${counter}`
+      exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+      counter++
+    }
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [id, req.user.id, slug, title.trim(), html, 'page', 1, now, now])
+    const page = await one('SELECT * FROM pages WHERE id = $1', [id])
+    res.status(201).json(page)
+  } catch (err) {
+    console.error('Erro criar pagina:', err)
+    res.status(500).json({ error: 'Erro ao criar pagina.' })
+  }
+})
+
+app.get('/api/pages', authMiddleware, async (req, res) => {
+  try {
+    const pages = await query('SELECT id, slug, title, type, published, created_at, updated_at FROM pages WHERE user_id = $1 ORDER BY updated_at DESC', [req.user.id])
+    res.json(pages)
+  } catch {
+    res.status(500).json({ error: 'Erro ao listar paginas.' })
+  }
+})
+
+app.get('/api/pages/:id', authMiddleware, async (req, res) => {
+  try {
+    const page = await one('SELECT * FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
+    res.json(page)
+  } catch {
+    res.status(500).json({ error: 'Erro ao buscar pagina.' })
+  }
+})
+
+app.put('/api/pages/:id', authMiddleware, async (req, res) => {
+  try {
+    const { title, html } = req.body
+    const page = await one('SELECT id FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    await run('UPDATE pages SET title = $1, html = $2, updated_at = $3 WHERE id = $4',
+      [title?.trim() || 'Sem titulo', html || '', now, req.params.id])
+    const updated = await one('SELECT * FROM pages WHERE id = $1', [req.params.id])
+    res.json(updated)
+  } catch {
+    res.status(500).json({ error: 'Erro ao atualizar pagina.' })
+  }
+})
+
+app.delete('/api/pages/:id', authMiddleware, async (req, res) => {
+  try {
+    await run('DELETE FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    res.json({ ok: true })
+  } catch {
+    res.status(500).json({ error: 'Erro ao deletar pagina.' })
+  }
+})
+
+// Public route: serve page HTML by slug (no auth)
+app.get('/api/page/:slug', async (req, res) => {
+  try {
+    const page = await one('SELECT html, title FROM pages WHERE slug = $1 AND published = 1', [req.params.slug.toLowerCase()])
+    if (!page) return res.status(404).send('Pagina nao encontrada.')
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    res.send(page.html)
+  } catch {
+    res.status(500).send('Erro ao carregar pagina.')
+  }
+})
+
 // Cleanup cron: remove files older than 1 hour
 setInterval(async () => {
   const oneHour = 60 * 60 * 1000
