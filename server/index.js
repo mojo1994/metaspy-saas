@@ -264,9 +264,14 @@ app.post('/api/subscription/create-checkout', authMiddleware, async (req, res) =
   }
 })
 
+const WEBHOOK_LOG = []
+
 app.post('/api/subscription/webhook', async (req, res) => {
   try {
     const event = req.body
+    WEBHOOK_LOG.unshift({ time: new Date().toISOString(), event })
+    if (WEBHOOK_LOG.length > 20) WEBHOOK_LOG.length = 20
+    console.log('WEBHOOK RECEBIDO:', JSON.stringify(event).slice(0, 500))
     if (event.event === 'payment.approved' || event.event === 'subscription.approved') {
       const metadata = event.metadata || {}
       let userId = metadata.user_id
@@ -410,6 +415,10 @@ app.get('/api/debug/user', async (req, res) => {
     if (!user) return res.json({ error: 'Usuario nao encontrado' })
     res.json({ user })
   } catch { res.status(500).json({ error: 'Erro' }) }
+})
+
+app.get('/api/debug/webhooks', (req, res) => {
+  res.json({ webhooks: WEBHOOK_LOG })
 })
 
 // ─── Health ───────────────────────────────────────────────────────
