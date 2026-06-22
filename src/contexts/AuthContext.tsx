@@ -14,6 +14,7 @@ interface AuthContextType {
   user: User | null
   login: (email: string, senha: string) => Promise<string | null>
   signup: (email: string, nome: string, senha: string) => Promise<string | null>
+  verifySignup: (email: string, code: string) => Promise<string | null>
   logout: () => void
   isAuthenticated: boolean
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>
@@ -88,15 +89,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const body = await res.json().catch(() => ({}))
         return body.error || 'Erro ao criar conta'
       }
+      return null
+    } catch {
+      return 'Erro de conexão com o servidor'
+    }
+  }
+
+  async function verifySignup(email: string, code: string): Promise<string | null> {
+    try {
+      const res = await fetch('/api/auth/verify-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code })
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        return body.error || 'Erro ao confirmar codigo'
+      }
       const data = await res.json()
       const u: User = {
         id: data.user.id,
         email: data.user.email,
-        nome: data.user.name || name,
+        nome: data.user.name || '',
         plano: data.user.plan || 'nenhum',
         subscription_status: data.user.subscription_status || 'inactive',
-        subscription_expiry: null,
-        clones_used: 0
+        subscription_expiry: data.user.subscription_expiry || null,
+        clones_used: data.user.clones_used || 0
       }
       setUser(u)
       setAccessToken(data.accessToken)
@@ -159,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [accessToken, refreshToken])
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, isAuthenticated: !!user, fetchWithAuth, updateUser }}>
+    <AuthContext.Provider value={{ user, login, signup, verifySignup, logout, isAuthenticated: !!user, fetchWithAuth, updateUser }}>
       {children}
     </AuthContext.Provider>
   )

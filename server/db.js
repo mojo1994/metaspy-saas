@@ -94,4 +94,5 @@ export async function initSchema() {
     );
   `)
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan TEXT`).catch(() => {})
+  await pool.query(`ALTER TABLE email_codes ADD COLUMN IF NOT EXISTS metadata TEXT`).catch(() => {})
 }

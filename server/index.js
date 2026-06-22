@@ -121,19 +121,51 @@ app.post('/api/auth/signup', async (req, res) => {
   try {
     const { email, name, password } = req.body
     if (!email || !name || !password) return res.status(400).json({ error: 'Preencha todos os campos' })
-    const existing = await one('SELECT id FROM users WHERE email = $1', [email.toLowerCase().trim()])
+    const emailLower = email.toLowerCase().trim()
+    const existing = await one('SELECT id FROM users WHERE email = $1', [emailLower])
     if (existing) return res.status(409).json({ error: 'Email ja cadastrado' })
+
     const hash = await bcrypt.hash(password, 10)
+    const code = generateCode()
+    const now = new Date()
+    const expires = new Date(now.getTime() + 15 * 60 * 1000)
+    const id = randomUUID()
+    const metadata = JSON.stringify({ name: name.trim(), password_hash: hash })
+    await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, '', emailLower, code, 'signup', expires.toISOString(), metadata, now.toISOString()])
+
+    await sendEmail({ to: emailLower, subject: 'MetaSpy - Confirme seu cadastro', html: verificationEmailHtml(code) })
+    res.json({ ok: true, message: 'Codigo de confirmacao enviado para seu email.' })
+  } catch (err) {
+    console.error('Erro signup:', err)
+    res.status(500).json({ error: 'Erro ao enviar codigo de confirmacao.' })
+  }
+})
+
+app.post('/api/auth/verify-signup', async (req, res) => {
+  try {
+    const { email, code } = req.body
+    if (!email || !code) return res.status(400).json({ error: 'Preencha todos os campos.' })
+
+    const emailLower = email.toLowerCase().trim()
+    const record = await one('SELECT * FROM email_codes WHERE email = $1 AND code = $2 AND type = $3 AND used = 0 AND expires_at > $4',
+      [emailLower, code.toString(), 'signup', new Date().toISOString()])
+    if (!record) return res.status(400).json({ error: 'Codigo invalido ou expirado. Solicite um novo codigo.' })
+
+    const metadata = JSON.parse(record.metadata || '{}')
     const id = randomUUID()
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
     await run('INSERT INTO users (id, name, email, password_hash, plan, subscription_status, clones_used, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [id, name.trim(), email.toLowerCase().trim(), hash, 'nenhum', 'inactive', 0, now])
+      [id, metadata.name, emailLower, metadata.password_hash, 'nenhum', 'inactive', 0, now])
+    await run('UPDATE email_codes SET used = 1 WHERE id = $1', [record.id])
+
     const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, created_at FROM users WHERE id = $1', [id])
     const accessToken = generateToken(id)
     const refreshToken = generateRefreshToken(id)
     res.json({ user, accessToken, refreshToken })
   } catch (err) {
-    res.status(500).json({ error: 'Erro ao criar conta' })
+    console.error('Erro verify-signup:', err)
+    res.status(500).json({ error: 'Erro ao confirmar cadastro.' })
   }
 })
 
