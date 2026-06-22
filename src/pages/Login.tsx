@@ -15,10 +15,10 @@ export default function Login() {
     setErro('')
     if (!email || !senha) { setErro('Preencha todos os campos.'); return }
     setLoading(true)
-    const ok = await login(email, senha)
+    const error = await login(email, senha)
     setLoading(false)
-    if (ok) navigate('/dashboard')
-    else setErro('Email ou senha inválidos.')
+    if (error === null) navigate('/dashboard')
+    else setErro(error)
   }
 
   return (

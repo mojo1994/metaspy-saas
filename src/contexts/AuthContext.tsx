@@ -12,8 +12,8 @@ interface User {
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, senha: string) => Promise<boolean>
-  signup: (email: string, nome: string, senha: string) => Promise<boolean>
+  login: (email: string, senha: string) => Promise<string | null>
+  signup: (email: string, nome: string, senha: string) => Promise<string | null>
   logout: () => void
   isAuthenticated: boolean
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>
@@ -43,14 +43,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  async function login(email: string, password: string): Promise<boolean> {
+  async function login(email: string, password: string): Promise<string | null> {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       })
-      if (!res.ok) return false
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        return body.error || 'Erro ao fazer login'
+      }
       const data = await res.json()
       const u: User = {
         id: data.user.id,
@@ -67,20 +70,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('metaspy_session', JSON.stringify(u))
       localStorage.setItem('metaspy_access_token', data.accessToken)
       localStorage.setItem('metaspy_refresh_token', data.refreshToken)
-      return true
+      return null
     } catch {
-      return false
+      return 'Erro de conexão com o servidor'
     }
   }
 
-  async function signup(email: string, name: string, password: string): Promise<boolean> {
+  async function signup(email: string, name: string, password: string): Promise<string | null> {
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, name, password })
       })
-      if (!res.ok) return false
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        return body.error || 'Erro ao criar conta'
+      }
       const data = await res.json()
       const u: User = {
         id: data.user.id,
@@ -97,9 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('metaspy_session', JSON.stringify(u))
       localStorage.setItem('metaspy_access_token', data.accessToken)
       localStorage.setItem('metaspy_refresh_token', data.refreshToken)
-      return true
+      return null
     } catch {
-      return false
+      return 'Erro de conexão com o servidor'
     }
   }
 

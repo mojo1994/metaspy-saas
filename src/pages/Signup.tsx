@@ -17,10 +17,10 @@ export default function Signup() {
     if (!nome || !email || !senha) { setErro('Preencha todos os campos.'); return }
     if (senha.length < 6) { setErro('Senha deve ter ao menos 6 caracteres.'); return }
     setLoading(true)
-    const ok = await signup(email, nome, senha)
+    const error = await signup(email, nome, senha)
     setLoading(false)
-    if (ok) navigate('/planos')
-    else setErro('Este email já está cadastrado.')
+    if (error === null) navigate('/planos')
+    else setErro(error)
   }
 
   return (
