@@ -1,7 +1,26 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-const EMAIL_FROM = process.env.EMAIL_FROM || 'MetaSpy <noreply@metaspy.app>'
+const CUSTOM_FROM = process.env.EMAIL_FROM || ''
+const RESEND_DEV_FROM = 'MetaSpy <onboarding@resend.dev>'
 
 const RESEND_API = 'https://api.resend.com/emails'
+
+async function sendWithFrom({ to, subject, html, from }) {
+  const res = await fetch(RESEND_API, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from, to: [to], subject, html }),
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    const errMsg = `Resend ${res.status}: ${err.slice(0, 200)}`
+    console.error('Erro Resend:', errMsg)
+    return { error: errMsg }
+  }
+  return { sent: true }
+}
 
 export async function sendEmail({ to, subject, html }) {
   if (!RESEND_API_KEY) {
@@ -10,22 +29,15 @@ export async function sendEmail({ to, subject, html }) {
     return { simulated: true }
   }
 
-  const res = await fetch(RESEND_API, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from: EMAIL_FROM, to: [to], subject, html }),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    console.error('Erro ao enviar email Resend:', err)
-    throw new Error(`Resend error: ${res.status}`)
+  // Tenta com o from customizado primeiro (ex: resend@metaspy.com)
+  if (CUSTOM_FROM) {
+    const result = await sendWithFrom({ to, subject, html, from: CUSTOM_FROM })
+    if (result.sent) return result
+    console.warn('From customizado falhou, usando fallback onboarding@resend.dev')
   }
 
-  return { sent: true }
+  // Fallback: sender padrao do Resend (sempre funciona)
+  return await sendWithFrom({ to, subject, html, from: RESEND_DEV_FROM })
 }
 
 const BASE_STYLE = `
