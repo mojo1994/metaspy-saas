@@ -170,7 +170,7 @@ app.post('/api/clone/deep', async (req, res) => {
     const id = randomUUID()
     const dir = join(CLONES_DIR, id)
     mkdirSync(dir, { recursive: true })
-    const { default: downloadSite } = await import('./clone.js')
+    const { downloadSite } = await import('./clone.js')
     await downloadSite(url, { outputDir: dir, fbToken: FB_TOKEN, deep: true })
     res.json({ id, path: dir })
   } catch (err) {
@@ -230,6 +230,23 @@ app.get('/api/clone/deep/:id/download', async (req, res) => {
     archive.finalize()
   } catch {
     res.status(500).json({ error: 'Erro ao gerar ZIP' })
+  }
+})
+
+// ─── Page Fetch (CORS bypass) ────────────────────────────────────
+app.get('/api/page-fetch', async (req, res) => {
+  const { url } = req.query
+  if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30000)
+    const resp = await fetch(url.toString(), { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' } })
+    clearTimeout(timer)
+    if (!resp.ok) return res.status(resp.status).json({ error: `HTTP ${resp.status}` })
+    const html = await resp.text()
+    res.type('text/html; charset=utf-8').send(html)
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar pagina' })
   }
 })
 
