@@ -78,7 +78,7 @@ export default function Planos() {
           As ferramentas que os top players usam para escalar ofertas no Meta Ads. <br />
           Teste grátis agora. Sem cartão. Resultado do primeiro dia.
         </p>
-        <button className="btn btn-gradient planos-hero-cta" onClick={() => window.open('https://pay.kirvano.com/94aa8ec8-bb4a-4921-bb43-a3a7646d397c', '_blank')}>
+        <button className="btn btn-gradient planos-hero-cta" onClick={() => handleCheckout('gratuito')}>
           TESTAR GRÁTIS
         </button>
       </section>
@@ -190,7 +190,7 @@ export default function Planos() {
       <section className="planos-cta-bottom">
         <h2>Pronto para escalar?</h2>
         <p>Junte-se a centenas de profissionais que já usam o MetaSpy para dominar o Meta Ads.</p>
-        <button className="btn btn-gradient" style={{ padding: '14px 40px', fontSize: 16 }} onClick={() => window.open('https://pay.kirvano.com/94aa8ec8-bb4a-4921-bb43-a3a7646d397c', '_blank')}>
+        <button className="btn btn-gradient" style={{ padding: '14px 40px', fontSize: 16 }} onClick={() => handleCheckout('gratuito')}>
           TESTAR GRÁTIS
         </button>
       </section>

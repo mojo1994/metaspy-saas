@@ -238,47 +238,26 @@ app.get('/api/clone/deep/:id/download', async (req, res) => {
 // ─── Subscription Routes ─────────────────────────────────────────
 const KIRVANO_API = 'https://api.kirvano.com'
 
+const KIRVANO_STATIC_LINKS = {
+  gratuito: 'https://pay.kirvano.com/94aa8ec8-bb4a-4921-bb43-a3a7646d397c',
+  mensal: 'https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd',
+  anual: 'https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad',
+}
+
+const KIRVANO_CHECKOUT_UUIDS = {
+  '94aa8ec8-bb4a-4921-bb43-a3a7646d397c': 'gratuito',
+  '879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd': 'mensal',
+  '2498bd06-c4e9-412f-ab0d-bd9cededb5ad': 'anual',
+}
+
 app.post('/api/subscription/create-checkout', authMiddleware, async (req, res) => {
   try {
     const { plan } = req.body
     const config = PLAN_CONFIG[plan]
     if (!config) return res.status(400).json({ error: 'Plano invalido' })
-    const payload = {
-      name: plan === 'mensal' ? 'MetaSpy - Mensal' : 'MetaSpy - Anual',
-      amount: Math.round(config.price * 100),
-      description: plan === 'mensal' ? 'Assinatura Mensal MetaSpy' : 'Assinatura Anual MetaSpy',
-      quantity: 1,
-      quantity_type: 'subscription',
-      period: plan === 'mensal' ? 'monthly' : 'yearly',
-      recurring: true,
-      max_charges: plan === 'anual' ? 12 : 0,
-      redirect_url: KIRVANO_SUCCESS_URL,
-      cancel_url: KIRVANO_CANCEL_URL,
-      skippable: false,
-      customer: {
-        name: req.user.name,
-        email: req.user.email,
-      },
-      metadata: {
-        user_id: req.user.id,
-        plan: plan,
-      },
-      expires_in: 30,
-    }
-    const resp = await fetch(`${KIRVANO_API}/v1/checkout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${KIRVANO_API_KEY}`,
-      },
-      body: JSON.stringify(payload),
-    })
-    const data = await resp.json()
-    if (data.checkout_url || data.url) {
-      res.json({ checkoutUrl: data.checkout_url || data.url })
-    } else {
-      res.status(500).json({ error: 'Erro ao criar checkout' })
-    }
+    const checkoutUrl = KIRVANO_STATIC_LINKS[plan]
+    if (!checkoutUrl) return res.status(500).json({ error: 'Link nao configurado' })
+    res.json({ checkoutUrl })
   } catch {
     res.status(500).json({ error: 'Erro ao criar checkout' })
   }
@@ -290,7 +269,9 @@ app.post('/api/subscription/webhook', async (req, res) => {
     if (event.event === 'payment.approved' || event.event === 'subscription.approved') {
       const metadata = event.metadata || {}
       let userId = metadata.user_id
-      const plan = metadata.plan || 'gratuito'
+      const checkoutUrl = event.checkout_url || ''
+      const uuidMatch = checkoutUrl.match(/kirvano\.com\/([a-f0-9-]+)/)
+      const plan = uuidMatch ? (KIRVANO_CHECKOUT_UUIDS[uuidMatch[1]] || 'gratuito') : (metadata.plan || 'gratuito')
       if (!userId && event.customer?.email) {
         const user = await one('SELECT id FROM users WHERE email = $1', [event.customer.email.toLowerCase().trim()])
         if (user) userId = user.id
