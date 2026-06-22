@@ -1,0 +1,326 @@
+NEW FEATURES & MODIFICATIONS
+3.1 Tool Restructuring
+The sidebar will now contain four main sections:
+
+MetaSpy – (likely dashboard or landing after login, showing overview).
+
+Clonador – unchanged functionality, but UI/UX enhancements (dynamic buttons, progress indicators, better error handling).
+
+Cloacker – new tool allowing users to create cloaking scripts for landing pages.
+
+Configurações – standard SaaS settings (About Us, Terms, Privacy, etc.).
+
+Perfil – user profile management (name, email, password change, current plan details).
+
+3.2 Cloacker Feature (Creative Cloaker)
+Purpose: Provide a script generator that produces a JavaScript snippet to cloak a webpage (i.e., show different content to bots vs. humans).
+
+Requirements:
+
+Users can input a target URL (the page to cloak) and a safe page URL (for bots).
+
+The system generates a self-contained HTML/JS script that includes:
+
+User-agent detection, IP reputation checking, browser fingerprinting, etc.
+
+Logic to redirect or render different content.
+
+The generated script should be downloadable or provided as a code snippet.
+
+Backend logic:
+
+Endpoint to generate cloaker script (POST).
+
+Store generated scripts per user (for history).
+
+Script parameters: target URL, safe URL, optional custom rules.
+
+Security: Sanitize inputs, prevent code injection, rate-limit generation.
+
+3.3 Subscription & Payment Integration (Kirvano)
+Goal: Replace the free limit with a monthly subscription plan (only monthly, no annual). Free tier remains but with stricter limits (e.g., 3 clones total, no cloaker access). Premium monthly unlocks unlimited clones, cloaker usage, and advanced options.
+
+Kirvano Integration:
+
+Use Kirvano’s Webhook API to handle payment confirmations.
+
+Endpoints required:
+
+POST /api/subscription/webhook – to receive Kirvano events (payment.success, subscription.canceled, etc.).
+
+POST /api/subscription/create-checkout – returns a checkout URL to redirect user.
+
+GET /api/subscription/status – returns current user’s subscription status (active/inactive).
+
+Subscription Flow:
+
+User clicks “Upgrade” in UI.
+
+Backend creates a Kirvano checkout session (monthly plan) and returns URL.
+
+User completes payment on Kirvano.
+
+Kirvano sends webhook to our backend.
+
+Backend updates user’s subscriptionStatus to active and sets expiryDate (30 days from payment).
+
+On each API request, check subscription status and enforce limits.
+
+If subscription expires, user reverts to free tier; webhook handles cancellations.
+
+Database Changes:
+
+Add fields to User model:
+
+subscriptionStatus: enum['free', 'active', 'cancelled', 'expired']
+
+subscriptionId: string (Kirvano transaction ID)
+
+subscriptionExpiry: Date
+
+clonesUsed: number (reset monthly? decide: clones are total used – we may change to monthly quota for premium)
+
+cloakerScripts: array (to store generated scripts metadata)
+
+Endpoint Summary (new):
+
+POST /api/subscription/create-checkout – body: { plan: 'monthly' } (only monthly allowed).
+
+POST /api/subscription/webhook – Kirvano webhook handler (verify signature).
+
+GET /api/subscription/status – returns current subscription info.
+
+4. BACKEND UPDATES (DETAILED)
+4.1 Architecture Changes
+Middleware: Add subscription check middleware to protect premium endpoints (Cloacker generation, unlimited cloning).
+
+Rate Limiting: Per user per endpoint (clone, cloaker).
+
+Job Queue: For cloning tasks (to prevent blocking); use Bull or similar.
+
+4.2 Clonador Improvements (UI/UX Only – Backend untouched)
+Backend: No changes to cloning logic.
+
+Frontend: Add dynamic buttons for pause/resume/cancel (requires backend to support if not already). If not, implement cancellation via job IDs.
+
+4.3 Cloacker Backend
+POST /api/cloaker/generate
+
+Request: { targetUrl, safeUrl, customRules?: object }
+
+Validate URLs, sanitize.
+
+Generate a unique script ID.
+
+Store script metadata in DB (user ID, generated script, target/safe URLs, timestamp).
+
+Return: { scriptId, scriptCode, downloadLink }
+
+GET /api/cloaker/scripts – list user’s generated scripts.
+
+GET /api/cloaker/script/:id – retrieve a specific script code.
+
+DELETE /api/cloaker/script/:id – delete a script.
+
+4.4 User Profile & Settings
+PUT /api/user/profile – update name, email (with re-verification), password (hash).
+
+GET /api/user/settings – get settings (theme preference, etc.).
+
+PUT /api/user/settings – update settings.
+
+GET /api/user/plan – get current plan details (free/active, expiry, usage).
+
+4.5 Security Enhancements
+Input Validation: All endpoints must validate and sanitize inputs (URLs, strings).
+
+Authentication: JWT tokens with short expiry (15 min) + refresh token.
+
+CORS: Restrict to frontend domain.
+
+Rate Limiting:
+
+Clone endpoint: 5 requests per minute for free, 20 for premium.
+
+Cloaker generate: 10 requests per hour for premium, disabled for free.
+
+Webhook Security: Verify Kirvano webhook signatures using secret key (provided by Kirvano).
+
+Data Encryption: Sensitive data (e.g., user passwords) hashed with bcrypt.
+
+Logging & Monitoring: Log all administrative actions (subscription changes, deletions).
+
+GDPR Compliance: Allow user data export and deletion.
+
+5. API ENDPOINT SPECIFICATIONS (New & Modified)
+5.1 Subscription Endpoints
+POST /api/subscription/create-checkout
+Auth: Required (JWT).
+Request:
+
+json
+{ "plan": "monthly" }
+Response:
+
+json
+{ "checkoutUrl": "https://kirvano.com/checkout/..." }
+Logic:
+
+Validate plan (only 'monthly').
+
+Call Kirvano API to create a checkout session with success/cancel URLs.
+
+Return the URL.
+
+POST /api/subscription/webhook
+Auth: None (but verify signature).
+Request: Kirvano payload (JSON).
+Response: 200 OK.
+Logic:
+
+Verify signature using stored secret.
+
+Parse event type (payment.success, subscription.cancelled, etc.).
+
+Update user’s subscription status and expiry accordingly.
+
+If payment.success: set status to 'active', expiry = now + 30 days.
+
+If subscription.cancelled: set status to 'cancelled' (still active until expiry).
+
+GET /api/subscription/status
+Auth: Required.
+Response:
+
+json
+{
+  "status": "active",
+  "expiry": "2026-07-21T...",
+  "plan": "monthly",
+  "features": { "unlimitedClones": true, "cloaker": true }
+}
+5.2 Cloaker Endpoints
+POST /api/cloaker/generate
+Auth: Required, premium only.
+Request:
+
+json
+{
+  "targetUrl": "https://example.com/offer",
+  "safeUrl": "https://example.com/safe",
+  "customRules": { "userAgents": ["Googlebot"], "ipBlocks": ["192.168.0.0/16"] } // optional
+}
+Response:
+
+json
+{
+  "scriptId": "uuid",
+  "scriptCode": "// generated JS code",
+  "downloadLink": "/api/cloaker/script/uuid/download"
+}
+Logic:
+
+Validate URLs (must be valid HTTP/HTTPS).
+
+Generate a unique script using a template (e.g., based on fingerprintjs, user-agent parsing).
+
+Store in DB with user ID.
+
+Return the script.
+
+GET /api/cloaker/scripts
+Auth: Required.
+Response: List of scripts with metadata (id, targetUrl, createdAt, etc.).
+
+GET /api/cloaker/script/:id
+Auth: Required, ownership check.
+Response: The script code and metadata.
+
+DELETE /api/cloaker/script/:id
+Auth: Required, ownership check.
+Response: 204 No Content.
+
+5.3 Existing Endpoints Modifications
+POST /api/clone – now checks subscription limits:
+
+Free: only if clonesUsed < 3 (or 5, adjust).
+
+Premium: unlimited.
+
+Also enforce rate limits.
+
+GET /api/user/profile – include subscription info.
+
+PUT /api/user/profile – allow password change (with old password verification).
+
+6. DATABASE SCHEMA UPDATES (MongoDB/PostgreSQL)
+User Collection/Table:
+Add fields:
+
+javascript
+{
+  // existing fields
+  subscriptionStatus: { type: String, enum: ['free', 'active', 'cancelled', 'expired'], default: 'free' },
+  subscriptionId: { type: String, unique: true, sparse: true },
+  subscriptionExpiry: { type: Date },
+  clonesUsed: { type: Number, default: 0 },  // total clones ever used (or reset monthly? We'll keep total for free limit)
+  cloakerScripts: [{
+    scriptId: { type: String, unique: true },
+    targetUrl: String,
+    safeUrl: String,
+    scriptCode: String,
+    createdAt: Date
+  }]
+}
+Clones Collection: (unchanged) – but we may add a reference to user and status.
+
+7. UI/UX IMPROVEMENTS (Brief)
+Clonador: Add dynamic buttons (Start, Pause, Resume, Cancel) if not already present; improve progress bar with real-time updates via WebSocket or polling.
+
+Cloacker: New page with form inputs, preview of generated script, copy-to-clipboard, and download.
+
+Settings: Standard SaaS pages (About, Privacy, Terms).
+
+Profile: Show current plan, usage, upgrade button.
+
+Subscription Flow: Modal or dedicated page to initiate checkout, show success/failure.
+
+8. DEPLOYMENT & ENVIRONMENT VARIABLES
+Add to .env:
+
+text
+KIRVANO_API_KEY=...
+KIRVANO_WEBHOOK_SECRET=...
+KIRVANO_SUCCESS_URL=https://metaspy.com/dashboard
+KIRVANO_CANCEL_URL=https://metaspy.com/upgrade
+JWT_SECRET=...
+DATABASE_URL=...
+9. TESTING REQUIREMENTS
+Unit Tests: For subscription logic, cloaker generation, validation.
+
+Integration Tests: Webhook handling, checkout flow.
+
+Security Tests: Input injection, rate limiting, auth bypass.
+
+Load Tests: Cloning and cloaker generation under concurrent usage.
+
+10. DELIVERY & TIMELINE
+Backend API changes: 2 weeks.
+
+Frontend integration: 1 week (parallel).
+
+Testing & QA: 1 week.
+
+Total: 4 weeks.
+
+11. ADDITIONAL NOTES
+Cloaker Script Template: We will provide a base JavaScript template that includes fingerprinting, user-agent detection, and IP checking. The backend injects the user’s target/safe URLs into the template and returns the full script. No external libraries should be used to keep it lightweight.
+
+Cloning Limits: For free users, after 3 clones, they cannot clone more until they upgrade. They can still access their existing clones.
+
+Subscription Grace Period: When a subscription expires, the user keeps premium features for 7 days grace? Not required; we can set to immediate free downgrade but keep data.
+
+Kirvano Webhook Reliability: Ensure idempotency (check transaction ID to avoid duplicate processing).
+
+12. CONTACT & SUPPORT
+For any clarifications, contact the project lead. All technical decisions must be documented in the project wiki.

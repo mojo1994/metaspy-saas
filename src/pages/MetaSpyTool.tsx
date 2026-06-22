@@ -1,0 +1,711 @@
+import { useState, useMemo, useCallback } from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import { useNavigate } from 'react-router-dom'
+import type { Anuncio, FilterState } from '../types'
+import HelpTooltip from '../components/HelpTooltip'
+
+const FB_API_BASE = '/api/ads-archive'
+const CAMPOS_API_PRINCIPAL = [
+  'id', 'ad_creation_time', 'ad_creative_bodies', 'ad_creative_link_captions',
+  'ad_creative_link_descriptions', 'ad_creative_link_titles', 'ad_delivery_start_time',
+  'ad_delivery_stop_time', 'ad_snapshot_url', 'ad_active_status',
+  'ad_creative_thumbnail_url', 'page_id', 'page_name', 'publisher_platforms',
+  'ad_creative_link_url', 'estimated_audience_size', 'impressions', 'spend'
+].join(',')
+const CAMPOS_API_FALLBACK = [
+  'id', 'ad_creation_time', 'ad_creative_bodies', 'ad_delivery_start_time',
+  'ad_delivery_stop_time', 'ad_snapshot_url', 'ad_active_status',
+  'ad_creative_thumbnail_url', 'page_id', 'page_name', 'publisher_platforms'
+].join(',')
+const PAUSA_RATE_LIMIT_MS = 15000
+const TIMEOUT_REQUISICAO_API_MS = 30000
+const CACHE_EXPIRACAO_MS = 5 * 60 * 1000
+
+const cacheApi = new Map<string, { valor: unknown; criadoEm: number }>()
+
+function obterCacheApi(chave: string): unknown | null {
+  const entry = cacheApi.get(chave)
+  if (entry && Date.now() - entry.criadoEm < CACHE_EXPIRACAO_MS) {
+    return entry.valor
+  }
+  return null
+}
+
+function salvarCacheApi(chave: string, valor: unknown) {
+  cacheApi.set(chave, { valor, criadoEm: Date.now() })
+  if (cacheApi.size > 200) {
+    const primeiro = cacheApi.keys().next().value
+    if (primeiro) cacheApi.delete(primeiro)
+  }
+}
+
+function normalizarTexto(t: string) {
+  return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+function badgeScore(score: number) {
+  if (score >= 80) return { texto: 'ALTA ESCALA', classe: 'alta' }
+  if (score >= 60) return { texto: 'ESCALADA', classe: 'escalando' }
+  return { texto: 'TESTANDO', classe: 'testando' }
+}
+
+function statusAnuncio(a: Anuncio) {
+  if (!a.ativo) return 'Inativo'
+  return 'Ativo'
+}
+
+function calcularScoreEscala(anuncio: {
+  diasAtivo: number; impressionsMax: number; spendMax: number;
+  variacoesAtivas: number; audienceMax: number; dataFimISO: string | null;
+  plataformas: string[]
+}): number {
+  const variacoes = Math.min(10, Math.max(1, (() => {
+    let pontos = 0
+    if (anuncio.spendMax >= 100000) pontos += 4
+    else if (anuncio.spendMax >= 50000) pontos += 3
+    else if (anuncio.spendMax >= 10000) pontos += 2
+    else if (anuncio.spendMax > 0) pontos += 1
+    if (anuncio.impressionsMax >= 1000000) pontos += 4
+    else if (anuncio.impressionsMax >= 250000) pontos += 3
+    else if (anuncio.impressionsMax >= 50000) pontos += 2
+    else if (anuncio.impressionsMax > 0) pontos += 1
+    return pontos
+  })()))
+  const pVariacoes = Math.min(100, variacoes * 10)
+  const pTempo = Math.min(100, (anuncio.diasAtivo / 90) * 100)
+  const pConsistencia = !anuncio.dataFimISO ? 100 : Math.max(20, 100 - Math.min(80, anuncio.diasAtivo * 0.5))
+  const pPlataformas = Math.min(100, (anuncio.plataformas.length / 4) * 100)
+  const pEngajamento = Math.min(100, anuncio.impressionsMax / 10000)
+  return Math.max(0, Math.min(100, Math.round(
+    pVariacoes * 0.3 + pTempo * 0.25 + pConsistencia * 0.2 + pPlataformas * 0.15 + pEngajamento * 0.1
+  )))
+}
+
+function extrairLimiteSuperior(campo: unknown): number {
+  if (!campo) return 0
+  if (typeof campo === 'number') return Math.max(0, campo)
+  if (typeof campo === 'object') {
+    const obj = campo as Record<string, unknown>
+    const val = obj.upper_bound ?? obj.upperBound ?? obj.max ?? obj.value
+    return Math.max(0, Number(val) || 0)
+  }
+  return 0
+}
+
+function normalizarPlataformas(plataformas: unknown): string[] {
+  const lista = Array.isArray(plataformas) ? (plataformas as string[]) : []
+  const mapa: Record<string, string> = {
+    facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger',
+    audience_network: 'Audience Network', audiencenetwork: 'Audience Network'
+  }
+  const normalizadas = lista.map(p => mapa[p.toLowerCase()] || p.charAt(0).toUpperCase() + p.slice(1))
+  return [...new Set(normalizadas)]
+}
+
+function detectarDestino(texto: string): string {
+  const t = normalizarTexto(texto)
+  if (/wa\.me|whatsapp/.test(t)) return 'WhatsApp'
+  if (/instagram/.test(t)) return 'Instagram'
+  return 'Pagina de vendas'
+}
+
+function detectarEntregavel(texto: string): string {
+  const t = normalizarTexto(texto)
+  const mapa = [
+    { chave: 'Nutra', termos: ['nutra', 'suplemento', 'capsula', 'comprimido'] },
+    { chave: 'App', termos: ['app', 'aplicativo', 'software', 'sistema'] },
+    { chave: 'PDF', termos: ['pdf', 'ebook', 'apostila', 'guia'] },
+    { chave: 'Curso', termos: ['curso', 'aula', 'treinamento', 'formacao'] },
+    { chave: 'Instagram', termos: ['instagram', 'perfil', 'seguidores', 'reels'] },
+    { chave: 'Mentoria', termos: ['mentoria', 'sessao', 'consultoria'] }
+  ]
+  for (const item of mapa) {
+    if (item.termos.some(termo => t.includes(termo))) return item.chave
+  }
+  return 'Indefinido'
+}
+
+function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
+  const id = String(ad.id || '').trim()
+  if (!id) return null
+
+  const corpos = (ad.ad_creative_bodies as string[]) || []
+  const titulos = (ad.ad_creative_link_titles as string[]) || []
+  const descricoes = (ad.ad_creative_link_descriptions as string[]) || []
+  const textoCompleto = (corpos.filter(Boolean).join(' ') || descricoes.filter(Boolean).join(' ') || titulos.filter(Boolean).join(' ')).trim()
+  const thumbnail = (ad.ad_creative_thumbnail_url as string) || ''
+  const snapshot = (ad.ad_snapshot_url as string) || `https://www.facebook.com/ads/library/?id=${id}`
+  const plataformas = normalizarPlataformas(ad.publisher_platforms)
+  const criacao = (ad.ad_creation_time as string) || ''
+  const parada = (ad.ad_delivery_stop_time as string) || null
+  const activeStatus = String(ad.ad_active_status || 'UNKNOWN').toUpperCase()
+  const impressions = ad.impressions as { lower_bound?: number; upper_bound?: number } | undefined
+  const spend = ad.spend as { lower_bound?: number; upper_bound?: number } | undefined
+  const audience = ad.estimated_audience_size as { lower_bound?: number; upper_bound?: number } | undefined
+  const pageName = String(ad.page_name || '').trim()
+
+  const spendMax = Math.max(Number(spend?.upper_bound || spend?.lower_bound || 0), extrairLimiteSuperior(ad.spend_max))
+  const impressionsMax = Math.max(Number(impressions?.upper_bound || impressions?.lower_bound || 0), extrairLimiteSuperior(ad.impressions_max))
+  const audienceMax = Math.max(Number(audience?.upper_bound || audience?.lower_bound || 0), extrairLimiteSuperior(ad.estimated_audience_size_upper))
+  const quantCopias = Math.max(1, corpos.length)
+  const diasAtivo = criacao ? Math.floor((Date.now() - new Date(criacao).getTime()) / 86400000) : 0
+  const fimNoPassado = !!(parada && new Date(parada).getTime() < Date.now())
+  const ativo = activeStatus === 'ACTIVE' && !fimNoPassado
+
+  const score = calcularScoreEscala({
+    diasAtivo, impressionsMax: Number(impressionsMax), spendMax: Number(spendMax),
+    variacoesAtivas: quantCopias, audienceMax: Number(audienceMax),
+    dataFimISO: parada, plataformas
+  })
+
+  const textoAnuncio = `${textoCompleto} ${pageName} ${snapshot}`
+  const anuncio: Anuncio = {
+    idAnuncio: id,
+    anunciante: pageName || titulos?.[0]?.slice(0, 40) || '(sem nome)',
+    tituloOferta: titulos?.[0] || pageName || '',
+    texto: textoCompleto.slice(0, 280),
+    textoCompleto,
+    midias: thumbnail ? [{ url: thumbnail, tipo: 'imagem' }] : [],
+    dataInicioISO: criacao || null,
+    dataFimISO: parada,
+    dataUltimaAtualizacaoISO: null,
+    plataformas,
+    urlDestino: (ad.ad_creative_link_url as string) || '',
+    urlBiblioteca: snapshot,
+    cta: 'Saiba mais',
+    adActiveStatus: activeStatus,
+    statusTexto: ativo ? 'Ativo' : 'Inativo',
+    ativo,
+    diasAtivo,
+    spendMax: Number(spendMax),
+    impressionsMax: Number(impressionsMax),
+    audienceMax: Number(audienceMax),
+    variacoesAtivasEstimadas: quantCopias,
+    variacoesAtivas: quantCopias,
+    consistenciaTemporal: !parada ? 100 : 55,
+    engajamentoEstimado: Math.round(Math.min(100, Number(impressionsMax) / 10000)),
+    scoreEscala: score,
+    statusEscala: score >= 80 ? 'ALTA ESCALA' : score >= 60 ? 'ESCALADA' : 'TESTANDO',
+    evergreen: diasAtivo > 90,
+    entregavel: detectarEntregavel(textoAnuncio),
+    destino: detectarDestino(textoAnuncio),
+    origem: 'api'
+  }
+  return anuncio
+}
+
+
+
+export default function MetaSpyTool() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [anuncios, setAnuncios] = useState<Anuncio[]>([])
+  const [carregando, setCarregando] = useState(false)
+  const [progresso, setProgresso] = useState(0)
+  const [mensagem, setMensagem] = useState('')
+  const [alerta, setAlerta] = useState('')
+  const [modalAnuncio, setModalAnuncio] = useState<Anuncio | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filtrosExpandidos, setFiltrosExpandidos] = useState(false)
+  const [filtros, setFiltros] = useState<FilterState>({
+    ordenacao: 'mais_recente',
+    plataforma: 'ambos',
+    pais: 'BR',
+    statusApi: 'ACTIVE',
+    midia: 'todos',
+    scoreMin: 0,
+    diasMin: 0,
+    destino: 'todos',
+    entregavel: 'todos',
+    segmento: '',
+    palavrasNegativas: ''
+  })
+
+  const apiOnline = true
+
+  const anunciosFiltrados = useMemo(() => {
+    let lista = [...anuncios]
+    if (filtros.plataforma !== 'ambos') {
+      lista = lista.filter(a => (a.plataformas || []).map(p => normalizarTexto(p)).includes(filtros.plataforma))
+    }
+    if (filtros.midia !== 'todos') {
+      lista = lista.filter(a => (a.midias || []).map(m => normalizarTexto(m.tipo || '')).includes(filtros.midia))
+    }
+    if (filtros.scoreMin > 0) {
+      lista = lista.filter(a => (a.scoreEscala || 0) >= filtros.scoreMin)
+    }
+    if (filtros.diasMin > 0) {
+      lista = lista.filter(a => (a.diasAtivo || 0) >= filtros.diasMin || (a.diasAtivo || 0) === 0)
+    }
+    if (filtros.statusApi === 'ACTIVE') {
+      lista = lista.filter(a => statusAnuncio(a) === 'Ativo')
+    } else if (filtros.statusApi === 'INACTIVE') {
+      lista = lista.filter(a => statusAnuncio(a) !== 'Ativo')
+    }
+    if (filtros.destino !== 'todos') {
+      lista = lista.filter(a => normalizarTexto(a.destino || '') === normalizarTexto(filtros.destino))
+    }
+    if (filtros.entregavel !== 'todos') {
+      lista = lista.filter(a => normalizarTexto(a.entregavel || '') === normalizarTexto(filtros.entregavel))
+    }
+    if (filtros.palavrasNegativas) {
+      const palavras = filtros.palavrasNegativas.split(/\s+/).filter(Boolean).map(p => normalizarTexto(p))
+      if (palavras.length) {
+        lista = lista.filter(a => {
+          const texto = normalizarTexto((a.textoCompleto || '') + ' ' + (a.anunciante || '') + ' ' + (a.urlDestino || ''))
+          return !palavras.some(p => texto.includes(p))
+        })
+      }
+    }
+    if (filtros.segmento === 'nutra') {
+      lista = lista.filter(a => normalizarTexto(a.entregavel || '') === 'nutra')
+    } else if (filtros.segmento === 'info') {
+      lista = lista.filter(a => ['curso', 'pdf', 'mentoria', 'tutorial', 'consultoria'].includes(normalizarTexto(a.entregavel || '')))
+    }
+    if (filtros.ordenacao === 'maior_escala') {
+      lista.sort((a, b) => (b.scoreEscala || 0) - (a.scoreEscala || 0))
+    } else if (filtros.ordenacao === 'maior_tempo') {
+      lista.sort((a, b) => (b.diasAtivo || 0) - (a.diasAtivo || 0))
+    } else {
+      lista.sort((a, b) => new Date(b.dataInicioISO || 0).getTime() - new Date(a.dataInicioISO || 0).getTime())
+    }
+    return lista
+  }, [anuncios, filtros])
+
+  const analise = useMemo(() => {
+    const base = anunciosFiltrados.length ? anunciosFiltrados : anuncios
+    if (!base.length) return null
+    const ativos = base.filter(a => statusAnuncio(a) === 'Ativo').length
+    const altos = base.filter(a => (a.scoreEscala || 0) >= 80).length
+    const medios = base.filter(a => { const s = a.scoreEscala || 0; return s >= 60 && s < 80 }).length
+    const baixos = base.filter(a => (a.scoreEscala || 0) < 60).length
+    const comWhatsApp = base.filter(a => normalizarTexto(a.destino || '').includes('whatsapp')).length
+    const nutraCount = base.filter(a => normalizarTexto(a.entregavel || '') === 'nutra').length
+    const infoCount = base.filter(a => ['curso', 'pdf', 'mentoria', 'tutorial', 'consultoria'].includes(normalizarTexto(a.entregavel || ''))).length
+    const scoreSum = base.reduce((acc, a) => acc + (a.scoreEscala || 0), 0)
+    const top10 = [...base].sort((a, b) => (b.scoreEscala || 0) - (a.scoreEscala || 0)).slice(0, 10)
+    return { total: base.length, ativos, altos, medios, baixos, comWhatsApp, nutraCount, infoCount, scoreMedia: (scoreSum / base.length).toFixed(1), top10 }
+  }, [anuncios, anunciosFiltrados])
+
+  const montarCenariosApi = useCallback((termo: string, pais: string, statusFiltro: string) => {
+    const base: Record<string, string> = {
+      ad_active_status: statusFiltro || 'ACTIVE',
+      limit: '50',
+      locale: 'pt_BR'
+    }
+    const termoSeguro = termo.trim()
+    if (termoSeguro) base.search_terms = termoSeguro
+
+    function montarUrl(params: Record<string, string>) {
+      const p = new URLSearchParams()
+      Object.entries({ ...base, ...params }).forEach(([k, v]) => p.set(k, v))
+      return `${FB_API_BASE}?${p.toString()}`
+    }
+
+    return [
+      { nome: 'ALL + JSON + campos principais', url: montarUrl({ ad_type: 'ALL', ad_reached_countries: JSON.stringify([pais]), fields: CAMPOS_API_PRINCIPAL }) },
+      { nome: 'ALL + colchetes + campos principais', url: montarUrl({ ad_type: 'ALL', ad_reached_countries: `['${pais}']`, fields: CAMPOS_API_PRINCIPAL }) },
+      { nome: 'ALL + JSON + campos fallback', url: montarUrl({ ad_type: 'ALL', ad_reached_countries: JSON.stringify([pais]), fields: CAMPOS_API_FALLBACK }) },
+      { nome: 'ALL + colchetes + campos fallback', url: montarUrl({ ad_type: 'ALL', ad_reached_countries: `['${pais}']`, fields: CAMPOS_API_FALLBACK }) }
+    ]
+  }, [])
+
+  const requisicaoApiComRetry = useCallback(async (url: string, tentativa = 0): Promise<{ data?: Record<string, unknown>[]; error?: { code?: number; message?: string } }> => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_REQUISICAO_API_MS)
+    let resposta: Response
+    try {
+      resposta = await fetch(url, { method: 'GET', signal: controller.signal })
+    } catch (erro) {
+      clearTimeout(timeout)
+      if ((erro as Error)?.name === 'AbortError') throw new Error('Tempo limite da API atingido.')
+      throw erro
+    }
+    clearTimeout(timeout)
+
+    if (resposta.status === 429) {
+      if (tentativa >= 2) throw new Error('Rate limit da API (HTTP 429).')
+      await new Promise(r => setTimeout(r, PAUSA_RATE_LIMIT_MS))
+      return requisicaoApiComRetry(url, tentativa + 1)
+    }
+
+    const json = await resposta.json()
+    if (!resposta.ok || json.error) {
+      const codigo = Number(json?.error?.code || 0)
+      if ((codigo === 4 || codigo === 800) && tentativa < 2) {
+        await new Promise(r => setTimeout(r, PAUSA_RATE_LIMIT_MS))
+        return requisicaoApiComRetry(url, tentativa + 1)
+      }
+      throw new Error(json?.error?.message || `Erro na API (${resposta.status}).`)
+    }
+    return json
+  }, [])
+
+  const buscarDaApi = useCallback(async (termo: string): Promise<Anuncio[]> => {
+    const cenarios = montarCenariosApi(termo, filtros.pais, filtros.statusApi)
+    let ultimoErro: Error | null = null
+
+    for (const cenario of cenarios) {
+      const cacheado = obterCacheApi(cenario.url)
+      if (cacheado) {
+        const dados = (cacheado as { data?: Record<string, unknown>[] }).data || []
+        return dados.map(normalizarAnuncioApi).filter((a): a is Anuncio => a !== null)
+      }
+      try {
+        const json = await requisicaoApiComRetry(cenario.url)
+        salvarCacheApi(cenario.url, json)
+        const dados = json.data || []
+        return dados.map(normalizarAnuncioApi).filter((a): a is Anuncio => a !== null)
+      } catch (erro) {
+        ultimoErro = erro instanceof Error ? erro : new Error(String(erro))
+        const msg = ultimoErro.message.toLowerCase()
+        if (msg.includes('invalid parameter') || msg.includes('param') || msg.includes('ad_reached_countries')) {
+          continue
+        }
+        throw ultimoErro
+      }
+    }
+    throw ultimoErro || new Error('Nenhum cenario de consulta funcionou.')
+  }, [filtros.pais, filtros.statusApi, montarCenariosApi])
+
+  async function iniciarBusca() {
+    setCarregando(true)
+    setProgresso(10)
+    setMensagem('Analisando ofertas...')
+    setAlerta('')
+    const termo = searchTerm.trim()
+
+    try {
+      setProgresso(30)
+      if (!termo) {
+        setMensagem('Digite um termo de busca')
+        setProgresso(100)
+        setAlerta('Informe um termo de busca.')
+        setCarregando(false)
+        return
+      }
+      setMensagem('Consultando API do Facebook...')
+      const dados = await buscarDaApi(termo)
+      setProgresso(80)
+      setAnuncios(dados)
+      setProgresso(100)
+      setMensagem('Busca concluida')
+      setAlerta(`${dados.length} ofertas encontradas!`)
+    } catch (err) {
+      setAlerta(`Erro: ${err instanceof Error ? err.message : 'Falha na busca'}`)
+      setMensagem('Erro na busca')
+    } finally {
+      setCarregando(false)
+      setTimeout(() => { if (!carregando) setAlerta('') }, 4000)
+    }
+  }
+
+  function limparResultados() {
+    setAnuncios([])
+    setProgresso(0)
+    setMensagem('')
+    setAlerta('')
+  }
+
+  return (
+    <div>
+      {user?.plano === 'nenhum' && (
+        <div className="tool-locked">
+          <div className="tool-locked-icon">◉</div>
+          <h3>MetaSpy Ads Intelligence</h3>
+          <p>Esta ferramenta esta disponivel apenas para assinantes.</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+            Assine o plano Mensal ou Anual e tenha acesso ao minerador de anuncios,
+            cloacker, clonador e todas as ferramentas avancadas.
+          </p>
+          <button className="btn btn-primary" onClick={() => navigate('/planos')}>
+            Ver Planos
+          </button>
+        </div>
+      )}
+      {user?.plano !== 'nenhum' && (
+      <div>
+      <div className="tool-header">
+        <h3>◎ MetaSpy Ad Intelligence</h3>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span className={`status on`}>API Online</span>
+          <span className={`status ${anuncios.length ? 'on' : 'off'}`}>
+            {anuncios.length ? `${anunciosFiltrados.length} ofertas` : 'offline'}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Pesquisar anuncios (termo de busca)..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') iniciarBusca() }}
+          style={{ flex: 1, minWidth: 200 }}
+        />
+        <button className="btn btn-primary" onClick={iniciarBusca} disabled={carregando}>
+          {carregando ? 'Buscando...' : 'Iniciar Busca'}
+        </button>
+        <button className="btn btn-secondary" onClick={limparResultados}>
+          Limpar
+        </button>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <button
+          className="btn btn-secondary"
+          onClick={() => setFiltrosExpandidos(!filtrosExpandidos)}
+          style={{ width: '100%', justifyContent: 'flex-start', fontSize: 12 }}
+        >
+          {filtrosExpandidos ? '▾ Filtros e Configuracoes' : '▸ Filtros e Configuracoes'}
+        </button>
+        {filtrosExpandidos && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: 10,
+            padding: 12,
+            marginTop: 8,
+            borderRadius: 'var(--radius-lg)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)'
+          }}>
+            <div className="filter-group">
+              <label>Ordenar por <HelpTooltip text="Define a ordem de exibicao dos resultados: mais recentes primeiro, maior score de escala, ou maior tempo ativo." /></label>
+              <select value={filtros.ordenacao} onChange={e => setFiltros({ ...filtros, ordenacao: e.target.value })}>
+                <option value="mais_recente">Mais recente</option>
+                <option value="maior_escala">Maior escala</option>
+                <option value="maior_tempo">Maior tempo ativo</option>
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Plataforma <HelpTooltip text="Filtrar anuncios por plataforma de exibicao: Facebook, Instagram, ou ambas." /></label>
+              <select value={filtros.plataforma} onChange={e => setFiltros({ ...filtros, plataforma: e.target.value })}>
+                <option value="ambos">Facebook + Instagram</option>
+                <option value="facebook">Somente Facebook</option>
+                <option value="instagram">Somente Instagram</option>
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Pais <HelpTooltip text="Selecionar o pais do anuncio. A API retorna anuncios segmentados para o pais escolhido." /></label>
+              <select value={filtros.pais} onChange={e => setFiltros({ ...filtros, pais: e.target.value })}>
+                <option value="BR">Brasil</option>
+                <option value="US">Estados Unidos</option>
+                <option value="PT">Portugal</option>
+                <option value="MX">Mexico</option>
+                <option value="AR">Argentina</option>
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Status do anuncio <HelpTooltip text="Filtrar por anuncios ativos (exibindo atualmente), inativos (encerrados), ou todos." /></label>
+              <select value={filtros.statusApi} onChange={e => setFiltros({ ...filtros, statusApi: e.target.value })}>
+                <option value="ACTIVE">Somente ativos</option>
+                <option value="INACTIVE">Somente inativos</option>
+                <option value="ALL">Ativos e inativos</option>
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Midia <HelpTooltip text="Tipo de midia do anuncio: imagem, video, carrossel, ou todos." /></label>
+              <select value={filtros.midia} onChange={e => setFiltros({ ...filtros, midia: e.target.value })}>
+                <option value="todos">Todos</option>
+                <option value="imagem">Imagem</option>
+                <option value="video">Video</option>
+                <option value="carrossel">Carrossel</option>
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Score minimo <HelpTooltip text="Filtrar anuncios com score de escala igual ou superior ao valor definido (0-100)." /></label>
+              <input type="number" min={0} max={100} value={filtros.scoreMin} onChange={e => setFiltros({ ...filtros, scoreMin: Number(e.target.value) })} />
+            </div>
+            <div className="filter-group">
+              <label>Dias minimo ativo <HelpTooltip text="Filtrar anuncios com pelo menos X dias em exibicao." /></label>
+              <input type="number" min={0} value={filtros.diasMin} onChange={e => setFiltros({ ...filtros, diasMin: Number(e.target.value) })} />
+            </div>
+            <div className="filter-group">
+              <label>Destino <HelpTooltip text="Filtrar pelo tipo de destino do anuncio: WhatsApp, Pagina de vendas, Instagram." /></label>
+              <select value={filtros.destino} onChange={e => setFiltros({ ...filtros, destino: e.target.value })}>
+                <option value="todos">Todos</option>
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Pagina de vendas">Pagina de vendas</option>
+                <option value="Instagram">Instagram</option>
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Entregavel <HelpTooltip text="Tipo de produto ou conteudo entregue: PDF, Curso, App, Instagram." /></label>
+              <select value={filtros.entregavel} onChange={e => setFiltros({ ...filtros, entregavel: e.target.value })}>
+                <option value="todos">Todos</option>
+                <option value="PDF">PDF</option>
+                <option value="Curso">Curso</option>
+                <option value="App">App</option>
+                <option value="Instagram">Instagram</option>
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Segmento <HelpTooltip text="Categoria de mercado: Nutra (suplementos), Info (cursos/mentorias)." /></label>
+              <select value={filtros.segmento} onChange={e => setFiltros({ ...filtros, segmento: e.target.value })}>
+                <option value="">Todos</option>
+                <option value="nutra">Nutra</option>
+                <option value="info">Info</option>
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Palavras negativas <HelpTooltip text="Excluir resultados que contenham estas palavras (separadas por espaco)." /></label>
+              <input type="text" placeholder="ex: igreja politica" value={filtros.palavrasNegativas} onChange={e => setFiltros({ ...filtros, palavrasNegativas: e.target.value })} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {(carregando || progresso > 0) && (
+        <div className="progresso" style={{ marginBottom: 16 }}>
+          <div className="progresso-label">{mensagem || 'Processando...'}</div>
+          <div className="trilha">
+            <div className="barra" style={{ width: `${progresso}%` }}></div>
+          </div>
+        </div>
+      )}
+
+      {alerta && <div className="alerta" style={{ marginBottom: 16 }}>{alerta}</div>}
+
+      <div className="results-area">
+        <div className="results-header">
+          <span>{anunciosFiltrados.length} resultado(s)</span>
+          <span>Ofertas: {anunciosFiltrados.filter(a => (a.scoreEscala || 0) >= 60).length}</span>
+        </div>
+
+        {carregando ? (
+          <div className="skeleton">
+            {[1,2,3,4].map(i => <div key={i} className="skeleton-card" />)}
+          </div>
+        ) : anunciosFiltrados.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            {anuncios.length === 0 ? 'Clique em "Iniciar Busca" para comecar.' : 'Nenhum resultado com esses filtros.'}
+          </div>
+        ) : (
+          <>
+            <div className="results-grid">
+              {anunciosFiltrados.slice(0, 50).map(a => {
+                const badge = badgeScore(a.scoreEscala || 0)
+                const ehDestaque = badge.texto === 'ALTA ESCALA' || badge.texto === 'ESCALADA'
+                return (
+                  <div key={a.idAnuncio} className={`ad-card${ehDestaque ? ' destaque' : ''}`}>
+                    {ehDestaque && <span className="card-flag">▲ {a.variacoesAtivas}</span>}
+                    <div className="ad-thumb" style={{ display: 'grid', placeItems: 'center', fontSize: 24 }}>
+                      {a.midias?.[0]?.url ? <img className="ad-thumb" src={a.midias[0].url} alt="" /> : '◻'}
+                    </div>
+                    <div className="ad-content">
+                      <h3>{a.anunciante}</h3>
+                      <div className="ad-text">{a.texto?.slice(0, 140) || 'Sem descricao capturada.'}</div>
+                      <div className="ad-badges">
+                        <span className={`badge ${badge.classe}`}>{badge.texto}</span>
+                        <span className={`badge ${statusAnuncio(a) === 'Ativo' ? 'ativo' : 'inativo'}`}>{statusAnuncio(a)}</span>
+                        <span className="badge info">{a.entregavel || 'Indefinido'}</span>
+                      </div>
+                      <div className="ad-card-footer">
+                        <div className="score-wrap" style={{ '--score': `${(a.scoreEscala || 0) * 3.6}deg` } as React.CSSProperties}>
+                          {a.scoreEscala || 0}
+                        </div>
+                        <div className="ad-card-actions">
+                          <button className="btn btn-secondary" onClick={() => setModalAnuncio(a)}>Detalhes</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {anunciosFiltrados.length > 50 && (
+              <div style={{ textAlign: 'center', padding: 12 }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Mostrando 50 de {anunciosFiltrados.length}</span>
+              </div>
+            )}
+          </>
+        )}
+
+        {analise && anuncios.length > 0 && (
+          <details style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-secondary)', overflow: 'hidden' }}>
+            <summary style={{ cursor: 'pointer', padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', userSelect: 'none' }}>
+              Analise Avancada
+            </summary>
+            <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div style={{ padding: 10, borderRadius: 'var(--radius-md)', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                  <h4 style={{ fontSize: 13, color: 'var(--purple-300)', marginBottom: 8, fontWeight: 600 }}>Estatisticas Gerais</h4>
+                  {[{ r: 'Total de ofertas', v: analise.total }, { r: 'Anuncios ativos', v: analise.ativos }, { r: 'Score medio', v: analise.scoreMedia }].map(s => (
+                    <div key={s.r} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12, borderBottom: '1px solid var(--border-subtle)' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>{s.r}</span><span style={{ fontWeight: 600 }}>{s.v}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: 10, borderRadius: 'var(--radius-md)', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                  <h4 style={{ fontSize: 13, color: 'var(--purple-300)', marginBottom: 8, fontWeight: 600 }}>Distribuicao de Score</h4>
+                  {[{ r: 'Alta escala (80+)', v: analise.altos }, { r: 'Escalando (60-79)', v: analise.medios }, { r: 'Testando (<60)', v: analise.baixos }].map(s => (
+                    <div key={s.r} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12, borderBottom: '1px solid var(--border-subtle)' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>{s.r}</span><span style={{ fontWeight: 600 }}>{s.v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {analise.top10.length > 0 && (
+                <div style={{ padding: 10, borderRadius: 'var(--radius-md)', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                  <h4 style={{ fontSize: 13, color: 'var(--purple-300)', marginBottom: 8, fontWeight: 600 }}>Top 10 Melhores Scores</h4>
+                  <div style={{ display: 'grid', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+                    {analise.top10.map((a, i) => (
+                      <div key={a.idAnuncio} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-primary)', border: '1px solid var(--border)', fontSize: 11 }}>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {i + 1}. {a.anunciante || '?'}
+                        </span>
+                        <span style={{ fontWeight: 700, marginLeft: 8, color: (a.scoreEscala || 0) >= 80 ? 'var(--purple-400)' : (a.scoreEscala || 0) >= 60 ? 'var(--purple-200)' : 'var(--warning)' }}>
+                          {a.scoreEscala || 0}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </details>
+        )}
+      </div>
+
+      {modalAnuncio && (
+        <div className="modal-overlay" onClick={() => setModalAnuncio(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{modalAnuncio.anunciante}</h2>
+              <button className="modal-close" onClick={() => setModalAnuncio(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              {modalAnuncio.midias?.[0]?.url && (
+                <div className="modal-media"><img src={modalAnuncio.midias[0].url} alt="" /></div>
+              )}
+              <div className="modal-text">{modalAnuncio.textoCompleto || 'Sem texto disponivel.'}</div>
+              <div className="modal-info">
+                ID: {modalAnuncio.idAnuncio}<br />
+                Inicio: {modalAnuncio.dataInicioISO ? new Date(modalAnuncio.dataInicioISO).toLocaleDateString('pt-BR') : '-'}<br />
+                Tempo ativo: {modalAnuncio.diasAtivo || 0} dia(s)<br />
+                Variacoes: {modalAnuncio.variacoesAtivas || 0}<br />
+                Plataformas: {(modalAnuncio.plataformas || []).join(', ') || '-'}<br />
+                Status: {statusAnuncio(modalAnuncio)}<br />
+                Entregavel: {modalAnuncio.entregavel || 'Indefinido'}<br />
+                Destino: {modalAnuncio.destino || '-'}<br />
+                Score de escala: {modalAnuncio.scoreEscala || 0}<br />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => window.open(modalAnuncio.urlBiblioteca, '_blank')}>
+                Abrir no Meta Ads Library
+              </button>
+              <button className="btn btn-primary" onClick={() => setModalAnuncio(null)}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+    )}
+    </div>
+  )
+}
