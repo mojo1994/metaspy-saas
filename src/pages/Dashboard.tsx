@@ -220,6 +220,7 @@ export default function Dashboard() {
             </div>
             {verifyErr && <div style={{ width: '100%', fontSize: 12, color: 'var(--danger)' }}>{verifyErr}</div>}
             {verifyMsg && <div style={{ width: '100%', fontSize: 12, color: 'var(--success)' }}>{verifyMsg}</div>}
+            {showVerify && !verifyMsg && <div style={{ width: '100%', fontSize: 11, color: 'var(--purple-400)', textAlign: 'center' }}>⚠ Nao encontrou? Verifique sua caixa de spam.</div>}
           </div>
         )}
         <Outlet />

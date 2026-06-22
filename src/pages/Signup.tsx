@@ -116,6 +116,9 @@ export default function Signup() {
                 </Link>
               )}
             </p>
+            <p style={{ fontSize: 11, textAlign: 'center', marginTop: 4, color: 'var(--purple-400)' }}>
+              ⚠ Nao encontrou? Verifique sua caixa de spam.
+            </p>
             <p style={{ fontSize: 12, textAlign: 'center', marginTop: 4 }}>
               <Link to="" onClick={(e) => { e.preventDefault(); setStep('form'); setMsg(''); setErro('') }} style={{ color: 'var(--text-secondary)' }}>
                 Voltar e corrigir dados

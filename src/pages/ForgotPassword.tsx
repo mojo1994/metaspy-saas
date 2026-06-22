@@ -108,6 +108,9 @@ export default function ForgotPassword() {
                 </Link>
               )}
             </p>
+            <p style={{ fontSize: 11, textAlign: 'center', marginTop: 4, color: 'var(--purple-400)' }}>
+              ⚠ Nao encontrou? Verifique sua caixa de spam.
+            </p>
           </form>
         )}
 

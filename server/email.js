@@ -197,6 +197,11 @@ function baseEmail({ code, title, subtitle, extraText, extraLink, extraLinkText 
               Se nao solicitou este email, ignore-o.
             </td>
           </tr>
+          <tr>
+            <td style="text-align:center;padding-top:16px;font-size:11px;color:#a855f7;font-weight:600">
+              ⚠ Nao encontrou? Verifique sua caixa de spam.
+            </td>
+          </tr>
         </table>
       </td>
     </tr>
