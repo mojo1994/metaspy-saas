@@ -1,43 +1,49 @@
-const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-const CUSTOM_FROM = process.env.EMAIL_FROM || ''
-const RESEND_DEV_FROM = 'MetaSpy <onboarding@resend.dev>'
+const MAILEROO_API_KEY = process.env.MAILEROO_API_KEY || ''
+const FROM_EMAIL = process.env.FROM_EMAIL || ''
 
-const RESEND_API = 'https://api.resend.com/emails'
+const MAILEROO_API = 'https://smtp.maileroo.com/api/v2/emails'
 
 async function sendWithFrom({ to, subject, html, from }) {
-  const res = await fetch(RESEND_API, {
+  const res = await fetch(MAILEROO_API, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'X-Api-Key': MAILEROO_API_KEY,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from, to: [to], subject, html }),
+    body: JSON.stringify({
+      from: { address: from.address, display_name: from.name },
+      to: [{ address: to }],
+      subject,
+      html,
+    }),
   })
   if (!res.ok) {
     const err = await res.text()
-    const errMsg = `Resend ${res.status}: ${err.slice(0, 200)}`
-    console.error('Erro Resend:', errMsg)
+    const errMsg = `Maileroo ${res.status}: ${err.slice(0, 200)}`
+    console.error('Erro Maileroo:', errMsg)
     return { error: errMsg }
   }
   return { sent: true }
 }
 
 export async function sendEmail({ to, subject, html }) {
-  if (!RESEND_API_KEY) {
+  if (!MAILEROO_API_KEY) {
     console.log(`[EMAIL SIMULADO] Para: ${to} | Assunto: ${subject}`)
     console.log(`[EMAIL SIMULADO] HTML:`, html.slice(0, 200) + '...')
     return { simulated: true }
   }
 
-  // Tenta com o from customizado primeiro (ex: resend@metaspy.com)
-  if (CUSTOM_FROM) {
-    const result = await sendWithFrom({ to, subject, html, from: CUSTOM_FROM })
-    if (result.sent) return result
-    console.warn('From customizado falhou, usando fallback onboarding@resend.dev')
+  if (!FROM_EMAIL) {
+    console.error('FROM_EMAIL nao configurada. Defina a env var FROM_EMAIL.')
+    return { error: 'FROM_EMAIL nao configurada' }
   }
 
-  // Fallback: sender padrao do Resend (sempre funciona)
-  return await sendWithFrom({ to, subject, html, from: RESEND_DEV_FROM })
+  return await sendWithFrom({
+    to,
+    subject,
+    html,
+    from: { address: FROM_EMAIL, name: 'MetaSpy' },
+  })
 }
 
 const BASE_STYLE = `
