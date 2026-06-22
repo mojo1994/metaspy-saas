@@ -31,7 +31,7 @@ const DEPOIMENTOS = [
 ]
 
 export default function Planos() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, fetchWithAuth } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState<string | null>(null)
 
@@ -39,9 +39,8 @@ export default function Planos() {
     if (!isAuthenticated) { navigate('/signup?redirect=planos'); return }
     setLoading(plan)
     try {
-      const resp = await fetch('/api/subscription/create-checkout', {
+      const resp = await fetchWithAuth('/api/subscription/create-checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan })
       })
       const data = await resp.json()
