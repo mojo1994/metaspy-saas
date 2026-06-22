@@ -2,14 +2,15 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import multer from 'multer'
 import { randomUUID } from 'node:crypto'
-import { join, dirname } from 'node:path'
+import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createReadStream, existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
-import { ZipArchive } from 'archiver'
+import archiver from 'archiver'
 import { initDb, initSchema, one, query, run } from './db.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -83,6 +84,35 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: process.env.NODE_
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, message: { error: 'Muitas requisicoes. Tente novamente mais tarde.' } })
 app.use('/api/auth', authLimiter)
 app.use('/api', apiLimiter)
+
+// ─── File Upload Config ──────────────────────────────────────────
+const CAMO_DIR = join('/tmp', 'metaspy-camouflage')
+if (!existsSync(CAMO_DIR)) mkdirSync(CAMO_DIR, { recursive: true })
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = join(CAMO_DIR, randomUUID())
+    mkdirSync(dir, { recursive: true })
+    req.camoDir = dir
+    cb(null, dir)
+  },
+  filename: (req, file, cb) => {
+    cb(null, `original${extname(file.originalname)}`)
+  }
+})
+const upload = multer({
+  storage,
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const imgTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    const vidTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime']
+    const allowed = [...imgTypes, ...vidTypes]
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Formato de arquivo nao suportado. Aceitamos: JPG, PNG, GIF, WebP, MP4, WebM, OGG, MOV.'))
+    }
+  }
+})
 
 // ─── Auth Routes ─────────────────────────────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
@@ -209,7 +239,7 @@ app.get('/api/clone/deep/:id/download', async (req, res) => {
   const dir = join(CLONES_DIR, req.params.id)
   if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
   try {
-    const archive = new ZipArchive()
+    const archive = archiver('zip', { zlib: { level: 9 } })
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="clone-${req.params.id}.zip"`)
     archive.pipe(res)
@@ -479,6 +509,92 @@ app.post('/api/cloaker/camouflage', authMiddleware, async (req, res) => {
   }
 })
 
+// ─── Upload Camouflage ──────────────────────────────────────────
+app.post('/api/cloaker/upload-camouflage', authMiddleware, (req, res, next) => {
+  const features = PLAN_FEATURES[req.user.plan]
+  if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Anual.' })
+  next()
+}, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ erro: 'Arquivo nao enviado.' })
+    const { safe_url } = req.body
+    const dir = req.camoDir
+    const ext = extname(req.file.originalname)
+    const id = randomUUID()
+    const isVideo = req.file.mimetype.startsWith('video/')
+    const fileSize = req.file.size
+    const sizeLimit = isVideo ? 200 : 30
+    if ((isVideo && fileSize > 200 * 1024 * 1024) || (!isVideo && fileSize > 30 * 1024 * 1024)) {
+      return res.status(400).json({ erro: `Arquivo muito grande. Limite: ${sizeLimit}MB para ${isVideo ? 'video' : 'imagem'}.` })
+    }
+    const safeUrl = safe_url || 'about:blank'
+    const scriptCode = `<script>
+(function(){
+  const isBot = /bot|googlebot|facebookexternalhit|headless|crawler|spider/i.test(navigator.userAgent);
+  const safeUrl = ${JSON.stringify(safeUrl)};
+  if (isBot) {
+    if (safeUrl !== 'about:blank') window.location.href = safeUrl;
+    document.body.innerHTML = '<p>Conteudo protegido.</p>';
+  }
+})();
+</script>`
+    const fileName = `camuflado-${id}.html`
+    let html
+    if (isVideo) {
+      html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Conteudo Camuflado</title>${scriptCode}</head><body>
+<video width="100%" height="auto" controls autoplay muted>
+  <source src="original${ext}" type="${req.file.mimetype}">
+  Seu navegador nao suporta video.
+</video>
+<p style="font-family:sans-serif;color:#666;font-size:12px">Conteudo protegido por MetaSpy Camuflagem</p>
+</body></html>`
+    } else {
+      const b64 = readFileSync(join(dir, req.file.filename)).toString('base64')
+      const dataUri = `data:${req.file.mimetype};base64,${b64}`
+      html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Conteudo Camuflado</title>${scriptCode}</head><body>
+<img src="${dataUri}" alt="Conteudo camuflado" style="max-width:100%;height:auto">
+<p style="font-family:sans-serif;color:#666;font-size:12px">Conteudo protegido por MetaSpy Camuflagem</p>
+</body></html>`
+    }
+    writeFileSync(join(dir, fileName), html, 'utf-8')
+    res.json({
+      id,
+      fileName,
+      script: scriptCode,
+      downloadUrl: `/api/cloaker/camouflage-download/${id}`,
+      embedHtml: html,
+      isVideo,
+      tamanho: fileSize
+    })
+  } catch (erro) {
+    console.error('Erro no upload camouflage:', erro)
+    res.status(500).json({ erro: 'Erro ao processar arquivo.' })
+  }
+})
+
+app.get('/api/cloaker/camouflage-download/:id', async (req, res) => {
+  try {
+    const dir = join(CAMO_DIR, req.params.id)
+    if (!existsSync(dir)) return res.status(404).json({ erro: 'Arquivo nao encontrado ou expirado.' })
+    const files = readdirSync(dir)
+    const htmlFile = files.find(f => f.endsWith('.html'))
+    const mediaFile = files.find(f => f !== htmlFile)
+    if (!htmlFile) return res.status(404).json({ erro: 'Arquivo nao encontrado.' })
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="camuflado-${req.params.id}.zip"`)
+    const archive = archiver('zip', { zlib: { level: 9 } })
+    archive.pipe(res)
+    archive.file(join(dir, htmlFile), { name: htmlFile })
+    if (mediaFile) archive.file(join(dir, mediaFile), { name: mediaFile })
+    await archive.finalize()
+    setTimeout(() => {
+      try { for (const f of files) unlinkSync(join(dir, f)); unlinkSync(dir) } catch {}
+    }, 60000)
+  } catch {
+    res.status(500).json({ erro: 'Erro ao gerar download.' })
+  }
+})
+
 // ─── User Routes ─────────────────────────────────────────────────
 app.get('/api/user/profile', authMiddleware, (req, res) => {
   res.json({ user: req.user })
@@ -562,6 +678,14 @@ app.get('/api/debug/webhooks', (req, res) => {
 // ─── Health ───────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', online: !!FB_TOKEN, db: 'postgresql' })
+})
+
+// ─── Error Handler ────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+  if (err?.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ erro: 'Arquivo muito grande. Maximo: 200MB.' })
+  if (err?.message?.includes('formato')) return res.status(400).json({ erro: err.message })
+  console.error('Erro nao tratado:', err)
+  next(err)
 })
 
 // ─── Start ───────────────────────────────────────────────────────

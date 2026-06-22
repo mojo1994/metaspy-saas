@@ -1,453 +1,925 @@
-PROMPT TÉCNICO: IMPLEMENTAÇÃO DE QUEBRA DE CLOACKER E CAMUFLAGEM DE CRIATIVOS
-1. OBJETIVO GERAL
-Adicionar duas novas ferramentas no módulo Cloacker do MetaSpy:
+TECHNICAL PROMPT: METADATA CLEANER TOOL (PROFESSIONAL EDITION)
 
-Quebra de Cloacker (Cloak Detector): ferramenta que analisa uma URL enviando requisições com User-Agents distintos (humano x robô) e exibe as diferenças nas respostas (código HTTP, cabeçalhos, redirecionamentos e corpo HTML), indicando se há cloaking ativo.
+Objective
+Add a high-performance, enterprise-grade Metadata Cleaner module to the MetaSpy platform. This tool allows users to upload ad creatives (images and videos), strip all EXIF, XMP, IPTC, GPS, and proprietary metadata using industry-standard forensic tools, and download the sanitized file. The module must enforce strict size limits (30 MB for images, 200 MB for videos), provide real-time upload progress, maintain a historical log of cleaned assets, and be restricted to Annual plan subscribers.
 
-Camuflagem de Criativos (Creative Camouflage): ferramenta que gera scripts/HTML prontos para ofuscar textos, imagens e CTAs em uma landing page, impedindo que os robôs de revisão do Meta identifiquem o conteúdo publicitário, enquanto usuários reais veem o conteúdo normal.
+1. BACKEND IMPLEMENTATION (Node.js + Express + ESM)
+1.1. Dependencies Installation
+Add the following packages to server/package.json:
 
-Ambas as funcionalidades devem ser liberadas exclusivamente para usuários com plano anual.
+json
+"dependencies": {
+  "multer": "^1.4.5",
+  "exiftool-vendored": "^24.0.0",
+  "fluent-ffmpeg": "^2.1.3",
+  "mime-types": "^2.1.35"
+}
+Run: npm install multer exiftool-vendored fluent-ffmpeg mime-types
 
-2. BACKEND (NODE.JS + EXPRESS)
-2.1. Novo endpoint: /api/cloaker/detect
-Arquivo: server/index.js
+1.2. Environment Variables
+Add to .env (Render):
 
-Descrição: Recebe uma URL, faz duas requisições paralelas (ou sequenciais) com User-Agent de humano e de robô. Retorna um objeto comparativo.
-
-Script necessário:
+text
+MAX_IMAGE_SIZE_MB=30
+MAX_VIDEO_SIZE_MB=200
+TEMP_UPLOAD_DIR=/tmp/metaspy_cleaner
+1.3. Feature Flag Update (server/index.js or config)
+Extend the PLAN_FEATURES constant:
 
 javascript
-// server/index.js — adicionar após as outras rotas do cloaker
-
-// Lista de User-Agents para teste
-const USER_AGENTS = {
-  humano: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  bot_google: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-  bot_facebook: 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+const PLAN_FEATURES = {
+  nenhum: { clone: false, minerador: false, cloaker: false, pagevault: false, analise: false, cleaner: false },
+  mensal: { clone: true,  minerador: true,  cloaker: false, pagevault: true,  analise: false, cleaner: false },
+  anual:  { clone: true,  minerador: true,  cloaker: true,  pagevault: true,  analise: true,  cleaner: true }
 };
+1.4. Database Schema Update (server/db.js – inside initSchema)
+Add the cleaned_assets table to store processed file records:
 
-// Rota de detecção
-app.post('/api/cloaker/detect', authMiddleware, async (req, res) => {
-  try {
-    // 1. Verifica plano anual
-    const features = PLAN_FEATURES[req.user.plan];
-    if (!features?.cloaker) {
-      return res.status(403).json({ erro: 'Funcionalidade disponível apenas no plano Anual.' });
-    }
+sql
+CREATE TABLE IF NOT EXISTS cleaned_assets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  original_name TEXT NOT NULL,
+  file_size_bytes INTEGER NOT NULL,
+  mime_type TEXT NOT NULL,
+  cleaned_file_path TEXT NOT NULL,      -- Path inside /tmp or persistent storage
+  metadata_before JSONB,                -- Original metadata snapshot (optional)
+  metadata_after JSONB,                 -- Remaining metadata after cleaning
+  created_at TEXT NOT NULL
+);
+Note: Render's /tmp is ephemeral. If persistence is needed, integrate S3/Cloudinary later. For MVP, we serve the file from /tmp and rely on cleanup routines.
 
-    const { url } = req.body;
-    if (!url) {
-      return res.status(400).json({ erro: 'URL é obrigatória.' });
-    }
+1.5. Multer Configuration & Route: POST /api/cleaner/upload
+Create a new middleware and route in server/index.js:
 
-    // 2. Executa requisições para cada User-Agent
-    const resultados = {};
-    for (const [tipo, ua] of Object.entries(USER_AGENTS)) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+javascript
+import multer from 'multer';
+import { exiftool } from 'exiftool-vendored';
+import ffmpeg from 'fluent-ffmpeg';
+import fs from 'fs/promises';
+import path from 'path';
+import { randomUUID } from 'crypto';
 
-      try {
-        const resposta = await fetch(url, {
-          headers: { 'User-Agent': ua },
-          redirect: 'manual',          // captura redirecionamentos
-          signal: controller.signal
-        });
+// --- Multer Setup ---
+const TEMP_DIR = process.env.TEMP_UPLOAD_DIR || '/tmp/metaspy_cleaner';
+await fs.mkdir(TEMP_DIR, { recursive: true });
 
-        clearTimeout(timeout);
-
-        // Lê o corpo (limitado a 50kb para não sobrecarregar)
-        const corpoBuffer = await resposta.arrayBuffer();
-        const corpo = Buffer.from(corpoBuffer).toString('utf-8').slice(0, 50000);
-
-        resultados[tipo] = {
-          status: resposta.status,
-          statusText: resposta.statusText,
-          urlFinal: resposta.url,
-          headers: Object.fromEntries(resposta.headers.entries()),
-          corpo: corpo,
-          tamanho: corpo.length
-        };
-      } catch (erro) {
-        clearTimeout(timeout);
-        resultados[tipo] = {
-          erro: erro.message || 'Falha na requisição'
-        };
-      }
-    }
-
-    // 3. Compara os resultados para identificar cloaking
-    const temCloaking = (
-      resultados.humano?.status !== resultados.bot_google?.status ||
-      resultados.humano?.urlFinal !== resultados.bot_google?.urlFinal ||
-      resultados.humano?.corpo?.length !== resultados.bot_google?.corpo?.length
-    );
-
-    // 4. Salva histórico no banco (opcional, mas recomendado)
-    await run(
-      `INSERT INTO cloak_detections (id, user_id, url, tem_cloaking, resultado_json, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        crypto.randomUUID(),
-        req.user.id,
-        url,
-        temCloaking,
-        JSON.stringify(resultados),
-        new Date().toISOString()
-      ]
-    );
-
-    res.json({
-      url,
-      temCloaking,
-      comparacao: resultados,
-      resumo: temCloaking
-        ? '⚠️ Cloaking detectado! A página entrega conteúdo diferente para robôs e humanos.'
-        : '✅ Nenhum cloaking significativo detectado.'
-    });
-
-  } catch (erro) {
-    console.error('Erro no detect cloaker:', erro);
-    res.status(500).json({ erro: 'Erro interno ao analisar a URL.' });
+const storage = multer.diskStorage({
+  destination: TEMP_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext);
+    cb(null, `${base}-${Date.now()}${ext}`);
   }
 });
-2.2. Novo endpoint: /api/cloaker/camouflage
-Arquivo: server/index.js
 
-Descrição: Gera um script de camuflagem personalizado com base nos parâmetros do usuário (texto a esconder, URL de destino, palavras-chave).
-
-Script necessário:
-
-javascript
-// server/index.js — adicionar após a rota de detect
-
-app.post('/api/cloaker/camouflage', authMiddleware, async (req, res) => {
-  try {
-    const features = PLAN_FEATURES[req.user.plan];
-    if (!features?.cloaker) {
-      return res.status(403).json({ erro: 'Disponível apenas no plano Anual.' });
-    }
-
-    const { texto_original, url_destino, palavras_sensiveis } = req.body;
-    if (!texto_original || !url_destino) {
-      return res.status(400).json({ erro: 'Texto original e URL destino são obrigatórios.' });
-    }
-
-    // Estratégias de camuflagem:
-    // 1. Ofuscação de texto com CSS (display:none para bots, visível para humanos)
-    // 2. Substituição de caracteres por Unicode similares (ex: "A" por "А" cirílico)
-    // 3. Embaralhamento de tags HTML com data-attributes
-    // 4. Link duplo: redirecionamento via JS para humanos, link estático para bots
-
-    const scriptCamuflado = `
-<!-- SCRIPT DE CAMUFLAGEM DE CRIATIVOS - METASPY -->
-<script>
-(function() {
-  const isBot = /bot|googlebot|facebookexternalhit|headless/i.test(navigator.userAgent);
-  const textoOriginal = ${JSON.stringify(texto_original)};
-  const urlDestino = ${JSON.stringify(url_destino)};
-
-  if (isBot) {
-    // Para robôs: exibe texto genérico ou substitui palavras sensíveis
-    const palavras = ${JSON.stringify(palavras_sensiveis || [])};
-    let textoMascarado = textoOriginal;
-    palavras.forEach(palavra => {
-      const regex = new RegExp(palavra, 'gi');
-      textoMascarado = textoMascarado.replace(regex, '●●●●●');
-    });
-    document.body.innerHTML = document.body.innerHTML.replace(textoOriginal, textoMascarado);
-    
-    // Remove links de rastreio
-    document.querySelectorAll('a[href]').forEach(el => {
-      if (el.href.includes(urlDestino)) {
-        el.href = '#';
-        el.style.textDecoration = 'none';
-        el.style.color = 'inherit';
-      }
-    });
+const fileFilter = (req, file, cb) => {
+  const allowedImage = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  const allowedVideo = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'];
+  if (allowedImage.includes(file.mimetype) || allowedVideo.includes(file.mimetype)) {
+    cb(null, true);
   } else {
-    // Para humanos: garante que o conteúdo original seja exibido
-    // (já vem no HTML, mas garante a visibilidade)
-    document.querySelectorAll('.camuflado').forEach(el => el.style.display = 'block');
+    cb(new Error('Unsupported file type. Only images (JPEG, PNG, WebP, GIF) and videos (MP4, MOV, AVI, WebM) are allowed.'));
   }
-})();
-</script>
-<!-- FIM DO SCRIPT -->
-    `;
+};
 
-    // Salva no banco (opcional)
-    const id = crypto.randomUUID();
-    await run(
-      `INSERT INTO camouflage_scripts (id, user_id, url_destino, script_code, created_at)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [id, req.user.id, url_destino, scriptCamuflado, new Date().toISOString()]
-    );
-
-    res.json({
-      id,
-      script: scriptCamuflado,
-      instrucoes: 'Copie e cole este script no <head> da sua landing page. O script detectará automaticamente se o visitante é humano ou robô.'
-    });
-
-  } catch (erro) {
-    console.error('Erro ao gerar camuflagem:', erro);
-    res.status(500).json({ erro: 'Erro ao gerar script de camuflagem.' });
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 200 * 1024 * 1024 // Global limit, we check specific later
   }
 });
-2.3. Atualização do esquema do banco
-Arquivo: server/db.js (dentro da função initSchema)
 
-Adicionar as novas tabelas para histórico:
+// --- Core Processing Function ---
+async function cleanMetadata(filePath, mimeType) {
+  const isVideo = mimeType.startsWith('video/');
+  const outputPath = `${filePath}_cleaned${path.extname(filePath)}`;
+
+  if (isVideo) {
+    // Video: Use ffmpeg to strip all metadata without re-encoding (copy codec)
+    await new Promise((resolve, reject) => {
+      ffmpeg(filePath)
+        .outputOptions([
+          '-map_metadata', '-1',           // Remove all global metadata
+          '-c', 'copy',                    // Stream copy (no re-encode)
+          '-map', '0'                      // Include all streams
+        ])
+        .on('end', resolve)
+        .on('error', reject)
+        .save(outputPath);
+    });
+    // Additionally, run exiftool on the video to remove embedded thumbnails/comments
+    await exiftool.write(outputPath, { All: '', overwrite_original: true });
+  } else {
+    // Image: Use exiftool to erase ALL metadata groups
+    await exiftool.write(filePath, { 
+      All: '', 
+      overwrite_original: true,
+      GPS: '', 
+      EXIF: '', 
+      IPTC: '', 
+      XMP: '', 
+      Comment: '', 
+      Artist: '', 
+      Copyright: '' 
+    });
+    // Rename since exiftool modifies in-place
+    await fs.rename(filePath, outputPath);
+  }
+
+  // --- Read remaining metadata (forensic check) ---
+  const remainingMeta = await exiftool.read(outputPath);
+  
+  return {
+    cleanedPath: outputPath,
+    remainingMeta
+  };
+}
+
+// --- Route Handler ---
+app.post('/api/cleaner/upload', authMiddleware, async (req, res) => {
+  try {
+    const features = PLAN_FEATURES[req.user.plan];
+    if (!features?.cleaner) {
+      return res.status(403).json({ error: 'Professional Metadata Cleaner is only available in the Annual plan.' });
+    }
+
+    // Use multer single file upload
+    upload.single('file')(req, res, async (err) => {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded.' });
+      }
+
+      const file = req.file;
+      const isVideo = file.mimetype.startsWith('video/');
+      const maxSize = isVideo ? 200 * 1024 * 1024 : 30 * 1024 * 1024;
+
+      if (file.size > maxSize) {
+        await fs.unlink(file.path).catch(() => {});
+        return res.status(413).json({ 
+          error: `File exceeds size limit. ${isVideo ? 'Videos' : 'Images'} max: ${maxSize / (1024*1024)} MB.` 
+        });
+      }
+
+      // --- Read original metadata before cleaning (for logging) ---
+      const originalMeta = await exiftool.read(file.path).catch(() => ({}));
+
+      // --- Execute cleaning ---
+      const { cleanedPath, remainingMeta } = await cleanMetadata(file.path, file.mimetype);
+
+      // --- Store in database ---
+      const assetId = randomUUID();
+      await run(
+        `INSERT INTO cleaned_assets (id, user_id, original_name, file_size_bytes, mime_type, cleaned_file_path, metadata_before, metadata_after, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          assetId,
+          req.user.id,
+          file.originalname,
+          file.size,
+          file.mimetype,
+          cleanedPath,
+          JSON.stringify(originalMeta),
+          JSON.stringify(remainingMeta),
+          new Date().toISOString()
+        ]
+      );
+
+      // --- Return response with temporary download link ---
+      res.status(200).json({
+        id: assetId,
+        originalName: file.originalname,
+        cleanedSize: (await fs.stat(cleanedPath)).size,
+        downloadUrl: `/api/cleaner/download/${assetId}`,
+        metadataRemoved: Object.keys(originalMeta).length - Object.keys(remainingMeta).length
+      });
+    });
+  } catch (error) {
+    console.error('Cleaner error:', error);
+    res.status(500).json({ error: 'Internal server error during metadata cleaning.' });
+  }
+});
+1.6. Download Route: GET /api/cleaner/download/:id
+javascript
+app.get('/api/cleaner/download/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await one(
+      `SELECT * FROM cleaned_assets WHERE id = $1 AND user_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (!result) {
+      return res.status(404).json({ error: 'Asset not found or access denied.' });
+    }
+
+    // Check if file exists on disk
+    try {
+      await fs.access(result.cleaned_file_path);
+    } catch {
+      return res.status(410).json({ error: 'Cleaned file has expired or been removed from temporary storage.' });
+    }
+
+    const mimeType = result.mime_type;
+    const originalName = result.original_name.replace(/\.[^.]+$/, '') + '_cleaned' + path.extname(result.original_name);
+
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalName)}"`);
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Length', (await fs.stat(result.cleaned_file_path)).size);
+
+    // Stream the file
+    const readStream = fs.createReadStream(result.cleaned_file_path);
+    readStream.pipe(res);
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Error downloading cleaned file.' });
+  }
+});
+1.7. Cleanup Cron (Optional but recommended)
+Add a scheduled cleanup (e.g., using setInterval every hour) to delete files older than 1 hour from TEMP_DIR to prevent disk exhaustion on Render:
 
 javascript
-// server/db.js — dentro de initSchema()
-
-await run(`
-  CREATE TABLE IF NOT EXISTS cloak_detections (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    url TEXT NOT NULL,
-    tem_cloaking BOOLEAN NOT NULL,
-    resultado_json TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  )
-`);
-
-await run(`
-  CREATE TABLE IF NOT EXISTS camouflage_scripts (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    url_destino TEXT NOT NULL,
-    script_code TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  )
-`);
-3. FRONTEND (REACT + TYPESCRIPT)
-3.1. Novo componente: CloakDetector.tsx
-Arquivo: src/pages/dashboard/CloakDetector.tsx
-
-Descrição: Página com campo de URL, botão "Analisar" e exibição dos resultados (comparação lado a lado).
-
-Script necessário:
+const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
+setInterval(async () => {
+  const now = Date.now();
+  const files = await fs.readdir(TEMP_DIR);
+  for (const file of files) {
+    const filePath = path.join(TEMP_DIR, file);
+    const stats = await fs.stat(filePath);
+    if (now - stats.mtimeMs > CLEANUP_INTERVAL) {
+      await fs.unlink(filePath).catch(() => {});
+    }
+  }
+}, CLEANUP_INTERVAL);
+2. FRONTEND IMPLEMENTATION (React + TypeScript)
+2.1. New Page Component: MetadataCleaner.tsx
+Location: src/pages/dashboard/MetadataCleaner.tsx
 
 tsx
-// src/pages/dashboard/CloakDetector.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
-const CloakDetector: React.FC = () => {
+const MetadataCleaner: React.FC = () => {
   const { fetchWithAuth } = useAuth();
-  const [url, setUrl] = useState('');
-  const [carregando, setCarregando] = useState(false);
-  const [resultado, setResultado] = useState<any>(null);
-  const [erro, setErro] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'done' | 'error'>('idle');
+  const [result, setResult] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDetectar = async () => {
-    if (!url) return;
-    setCarregando(true);
-    setErro('');
-    try {
-      const res = await fetchWithAuth('/api/cloaker/detect', {
-        method: 'POST',
-        body: JSON.stringify({ url })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro || 'Falha na análise');
-      setResultado(data);
-    } catch (err: any) {
-      setErro(err.message);
-    } finally {
-      setCarregando(false);
+  const isVideo = (mime: string) => mime.startsWith('video/');
+  const isImage = (mime: string) => mime.startsWith('image/');
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (!selected) return;
+
+    const maxSize = isVideo(selected.type) ? 200 * 1024 * 1024 : 30 * 1024 * 1024;
+    if (selected.size > maxSize) {
+      setErrorMsg(`File too large. Max size: ${maxSize / (1024 * 1024)} MB.`);
+      setFile(null);
+      return;
     }
+    setErrorMsg('');
+    setFile(selected);
+    setStatus('idle');
+    setResult(null);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+
+    setStatus('uploading');
+    setUploadProgress(0);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Use XMLHttpRequest for upload progress tracking
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/cleaner/upload', true);
+    xhr.setRequestHeader('Authorization', `Bearer ${localStorage.getItem('metaspy_access_token')}`);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const progress = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(progress);
+      }
+    };
+
+    xhr.onload = async () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const data = JSON.parse(xhr.responseText);
+        setResult(data);
+        setStatus('done');
+        setUploadProgress(100);
+      } else {
+        try {
+          const err = JSON.parse(xhr.responseText);
+          setErrorMsg(err.error || 'Upload failed.');
+        } catch {
+          setErrorMsg('Upload failed with status: ' + xhr.status);
+        }
+        setStatus('error');
+      }
+    };
+
+    xhr.onerror = () => {
+      setErrorMsg('Network error during upload.');
+      setStatus('error');
+    };
+
+    xhr.send(formData);
+  };
+
+  const handleDownload = async (url: string, filename: string) => {
+    const response = await fetchWithAuth(url);
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  };
+
+  const handleReset = () => {
+    setFile(null);
+    setResult(null);
+    setStatus('idle');
+    setUploadProgress(0);
+    setErrorMsg('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
-    <div className="cloak-detector">
-      <h2>🕵️ Quebra de Cloacker</h2>
-      <p>Descubra se uma página está usando cloaking. Comparamos a resposta para humanos e robôs.</p>
+    <div className="metadata-cleaner">
+      <h2>🧹 Metadata Cleaner (Professional)</h2>
+      <p>
+        Upload your ad creative (image or video) to strip all hidden metadata:
+        GPS coordinates, camera specs, editing software, timestamps, and tracking tags.
+      </p>
 
-      <div className="input-group">
-        <input
-          type="url"
-          placeholder="https://exemplo.com/pagina"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-        />
-        <button onClick={handleDetectar} disabled={carregando}>
-          {carregando ? 'Analisando...' : '🔍 Analisar'}
-        </button>
-      </div>
-
-      {erro && <div className="erro">{erro}</div>}
-
-      {resultado && (
-        <div className="resultado">
-          <div className="resumo" style={{ background: resultado.temCloaking ? '#ffdddd' : '#ddffdd' }}>
-            {resultado.resumo}
-          </div>
-
-          <div className="comparacao-grid">
-            <div className="coluna humano">
-              <h3>👤 Visão Humana</h3>
-              <pre>{JSON.stringify(resultado.comparacao.humano, null, 2)}</pre>
-            </div>
-            <div className="coluna bot">
-              <h3>🤖 Visão do Robô (Googlebot)</h3>
-              <pre>{JSON.stringify(resultado.comparacao.bot_google, null, 2)}</pre>
-            </div>
-          </div>
-
-          <details>
-            <summary>📄 Ver corpo HTML completo (humano)</summary>
-            <div className="html-preview" dangerouslySetInnerHTML={{ __html: resultado.comparacao.humano?.corpo || 'Sem conteúdo' }} />
-          </details>
+      <div className="cleaner-upload-area">
+        <div 
+          className="drop-zone"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const dropped = e.dataTransfer.files[0];
+            if (dropped) {
+              const event = { target: { files: [dropped] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+              handleFileChange(event);
+            }
+          }}
+        >
+          <input 
+            type="file" 
+            ref={fileInputRef}
+            onChange={handleFileChange} 
+            accept="image/*,video/*" 
+            disabled={status === 'uploading' || status === 'processing'}
+          />
+          <p>Drag & drop or click to select</p>
+          <small>Supported: JPEG, PNG, WebP, GIF, MP4, MOV, AVI, WebM</small>
         </div>
-      )}
-    </div>
-  );
-};
 
-export default CloakDetector;
-3.2. Novo componente: CreativeCamouflage.tsx
-Arquivo: src/pages/dashboard/CreativeCamouflage.tsx
+        {file && (
+          <div className="file-info">
+            <span>📎 {file.name} ({(file.size / (1024 * 1024)).toFixed(2)} MB)</span>
+            <button onClick={handleUpload} disabled={status === 'uploading' || status === 'processing'}>
+              {status === 'uploading' ? `Uploading ${uploadProgress}%` : '🚀 Clean & Upload'}
+            </button>
+            <button onClick={handleReset} disabled={status === 'uploading'}>🗑️ Remove</button>
+          </div>
+        )}
 
-Descrição: Formulário para gerar script de camuflagem com campos: texto original, URL destino e palavras sensíveis (separadas por vírgula).
-
-Script necessário:
-
-tsx
-// src/pages/dashboard/CreativeCamouflage.tsx
-import React, { useState } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-
-const CreativeCamouflage: React.FC = () => {
-  const { fetchWithAuth } = useAuth();
-  const [textoOriginal, setTextoOriginal] = useState('');
-  const [urlDestino, setUrlDestino] = useState('');
-  const [palavrasSensiveis, setPalavrasSensiveis] = useState('');
-  const [scriptGerado, setScriptGerado] = useState('');
-  const [copiado, setCopiado] = useState(false);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState('');
-
-  const handleGerar = async () => {
-    if (!textoOriginal || !urlDestino) return;
-    setCarregando(true);
-    setErro('');
-    try {
-      const res = await fetchWithAuth('/api/cloaker/camouflage', {
-        method: 'POST',
-        body: JSON.stringify({
-          texto_original: textoOriginal,
-          url_destino: urlDestino,
-          palavras_sensiveis: palavrasSensiveis.split(',').map(p => p.trim()).filter(Boolean)
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro || 'Falha ao gerar');
-      setScriptGerado(data.script);
-    } catch (err: any) {
-      setErro(err.message);
-    } finally {
-      setCarregando(false);
-    }
-  };
-
-  const handleCopiar = () => {
-    navigator.clipboard.writeText(scriptGerado);
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 3000);
-  };
-
-  return (
-    <div className="creative-camouflage">
-      <h2>🎭 Camuflagem de Criativos</h2>
-      <p>Gere um script que oculta textos e links sensíveis dos robôs de revisão, mantendo-os visíveis para humanos.</p>
-
-      <div className="form-camouflage">
-        <label>
-          Texto original (o que será exibido para humanos)
-          <input
-            type="text"
-            value={textoOriginal}
-            onChange={(e) => setTextoOriginal(e.target.value)}
-            placeholder="Ex: Compre agora com 50% de desconto"
-          />
-        </label>
-
-        <label>
-          URL de destino (link da oferta)
-          <input
-            type="url"
-            value={urlDestino}
-            onChange={(e) => setUrlDestino(e.target.value)}
-            placeholder="https://exemplo.com/oferta"
-          />
-        </label>
-
-        <label>
-          Palavras sensíveis (separadas por vírgula)
-          <input
-            type="text"
-            value={palavrasSensiveis}
-            onChange={(e) => setPalavrasSensiveis(e.target.value)}
-            placeholder="comprar, desconto, oferta, grátis"
-          />
-          <small>Essas palavras serão substituídas por "●●●●●" para robôs.</small>
-        </label>
-
-        <button onClick={handleGerar} disabled={carregando}>
-          {carregando ? 'Gerando...' : '⚙️ Gerar Script de Camuflagem'}
-        </button>
+        {status === 'uploading' && (
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
+          </div>
+        )}
       </div>
 
-      {erro && <div className="erro">{erro}</div>}
+      {errorMsg && <div className="error-box">{errorMsg}</div>}
 
-      {scriptGerado && (
-        <div className="script-resultado">
-          <h3>✅ Script gerado com sucesso!</h3>
-          <div className="script-box">
-            <pre>{scriptGerado}</pre>
-          </div>
-          <button onClick={handleCopiar}>
-            {copiado ? '✅ Copiado!' : '📋 Copiar script'}
+      {status === 'done' && result && (
+        <div className="result-panel">
+          <h3>✅ Cleaning Successful!</h3>
+          <ul>
+            <li><strong>Original:</strong> {result.originalName}</li>
+            <li><strong>Cleaned Size:</strong> {(result.cleanedSize / 1024).toFixed(0)} KB</li>
+            <li><strong>Metadata Tags Removed:</strong> {result.metadataRemoved}</li>
+          </ul>
+          <button 
+            className="download-btn" 
+            onClick={() => handleDownload(result.downloadUrl, result.originalName.replace(/\.[^.]+$/, '') + '_cleaned' + result.originalName.substring(result.originalName.lastIndexOf('.')))}
+          >
+            ⬇️ Download Cleaned File
           </button>
-          <p className="instrucao">
-            💡 Cole este script dentro da tag <code>&lt;head&gt;</code> da sua página.
-          </p>
+          <button className="reset-btn" onClick={handleReset}>🔄 Clean Another File</button>
         </div>
       )}
     </div>
   );
 };
 
-export default CreativeCamouflage;
-3.3. Atualização do roteador (App.tsx)
-Adicionar as novas rotas dentro do <Dashboard />:
+export default MetadataCleaner;
+2.2. Styles (Add to src/index.css or relevant CSS module)
+css
+/* Metadata Cleaner Styles */
+.metadata-cleaner { padding: 2rem; max-width: 800px; margin: 0 auto; }
+.cleaner-upload-area { background: var(--bg-secondary); border-radius: 12px; padding: 2rem; margin: 1.5rem 0; border: 2px dashed var(--border-color); }
+.drop-zone { text-align: center; cursor: pointer; }
+.drop-zone input[type="file"] { display: none; }
+.file-info { display: flex; gap: 1rem; align-items: center; justify-content: center; margin-top: 1rem; flex-wrap: wrap; }
+.progress-bar { width: 100%; height: 8px; background: var(--bg-tertiary); border-radius: 4px; margin-top: 1rem; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent-color); transition: width 0.3s ease; }
+.result-panel { background: var(--bg-secondary); border-radius: 12px; padding: 1.5rem; margin-top: 1.5rem; border-left: 4px solid #4CAF50; }
+.result-panel ul { list-style: none; padding: 0; }
+.result-panel li { padding: 0.25rem 0; }
+.download-btn { background: #4CAF50; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: bold; margin-right: 1rem; }
+.error-box { background: #ffebee; color: #c62828; padding: 1rem; border-radius: 8px; margin: 1rem 0; border: 1px solid #ef9a9a; }
+2.3. Route Integration (src/App.tsx)
+Add the route inside the Dashboard layout:
 
 tsx
-// src/App.tsx — dentro do elemento <Dashboard>
-<Route path="cloacker/detector" element={<CloakDetector />} />
-<Route path="cloacker/camouflage" element={<CreativeCamouflage />} />
-3.4. Atualização do menu lateral (Dashboard.tsx)
-Adicionar os novos itens no submenu do Cloacker (se houver) ou criar um dropdown. Exemplo:
+<Route path="dashboard/cleaner" element={<MetadataCleaner />} />
+2.4. Sidebar Navigation (src/pages/Dashboard.tsx)
+Update the sidebar to include the new tool. If you have a "Ferramentas" section:
 
 tsx
-// src/pages/Dashboard.tsx — dentro da navegação
 <li>
-  <span>🕵️ Cloacker</span>
-  <ul>
-    <li><Link to="/dashboard/cloacker">Gerar Script</Link></li>
-    <li><Link to="/dashboard/cloacker/detector">Quebra de Cloacker</Link></li>
-    <li><Link to="/dashboard/cloacker/camouflage">Camuflagem de Criativos</Link></li>
-  </ul>
+  <Link to="/dashboard/cleaner">🧹 Cleaner (Metadata)</Link>
 </li>
-4. CONSIDERAÇÕES FINAIS
-Permissões: Ambas as rotas backend verificam features.cloaker, garantindo que apenas planos anual tenham acesso.
+Optional: Add a beautiful icon from Lucide or FontAwesome.
 
-Histórico: As tabelas cloak_detections e camouflage_scripts armazenam o histórico do usuário, permitindo futuramente listar as análises e scripts gerados.
+3. SECURITY & PERFORMANCE CONSIDERATIONS
+Authentication: All routes use authMiddleware. The download route verifies user_id ownership.
 
-UX: Os componentes exibem feedbacks claros (carregando, erro, sucesso) e os resultados são apresentados de forma comparativa.
+Authorization: Only anual plan users can access upload/download.
 
-Segurança: O corpo HTML retornado é exibido com dangerouslySetInnerHTML apenas para visualização; em produção, recomenda-se sanitizar (ex: DOMPurify) para evitar XSS.
+File Validation: multer filters MIME types. Additional magic-number validation can be added (e.g., checking file signatures) for enhanced security.
 
-Este prompt fornece toda a implementação necessária, em português, com os scripts essenciais e alinhada à sua arquitetura existente.
+Storage Limits: Render's /tmp has a soft limit (usually ~512MB). The cleanup cron ensures old files are removed. In production, recommend replacing /tmp with a Cloud Storage bucket (e.g., AWS S3, Cloudinary, or R2) to handle larger volumes.
+
+Rate Limiting: The default express-rate-limit applies. Consider adding a stricter limit (e.g., 10 uploads per hour per user) to prevent abuse.
+
+Metadata Extraction: exiftool-vendored is a Node.js wrapper for the native Perl exiftool. Render's environment supports it, but it must be installed. The exiftool-vendored package bundles it automatically for Linux x64. Ensure the Render instance uses amd64 architecture.
+
+Batch Processing: Upload up to 10 files simultaneously (images/videos/documents) with real-time individual progress.
+
+Expanded Format Support: Add PDF, DOCX, XLSX, PPTX (via exiftool).
+
+Visual Metadata Preview: Side-by-side comparison of EXIF/XMP/IPTC data before and after cleaning, with a JSON diff viewer.
+
+Page Vault Integration: Automatically detect and clean all media assets (images, videos) inside a cloned page, rewriting the HTML to use sanitized versions.
+
+Persistent Cloud Storage (S3): Store cleaned files in AWS S3 (or compatible) with pre-signed URLs for secure, scalable downloads.
+
+2. ENVIRONMENT VARIABLES (Add to .env / Render)
+env
+# S3 / Cloud Storage
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=metaspy-clean-assets
+S3_PRESIGNED_EXPIRY=3600  # seconds (1 hour)
+
+# Limits
+MAX_BATCH_FILES=10
+CLEANER_TEMP_DIR=/tmp/metaspy_cleaner
+3. BACKEND UPDATES
+3.1. Database Schema Migration
+Add new columns to cleaned_assets and a batch_id field to support grouping. Create a new clean_jobs table for batch tracking.
+
+sql
+-- Add columns to cleaned_assets
+ALTER TABLE cleaned_assets ADD COLUMN batch_id TEXT;
+ALTER TABLE cleaned_assets ADD COLUMN s3_key TEXT;
+ALTER TABLE cleaned_assets ADD COLUMN s3_bucket TEXT;
+ALTER TABLE cleaned_assets ADD COLUMN is_archived BOOLEAN DEFAULT FALSE;
+
+-- Create batch jobs table
+CREATE TABLE IF NOT EXISTS clean_jobs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,  -- 'processing', 'completed', 'failed'
+  total_files INTEGER NOT NULL,
+  completed_files INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+3.2. Install New Dependencies
+json
+"dependencies": {
+  "@aws-sdk/client-s3": "^3.600.0",
+  "@aws-sdk/s3-request-presigner": "^3.600.0",
+  "cheerio": "^1.0.0",
+  "mime-types": "^2.1.35",
+  "multer": "^1.4.5",
+  "exiftool-vendored": "^24.0.0",
+  "fluent-ffmpeg": "^2.1.3"
+}
+3.3. S3 Service Module (server/s3Service.js)
+Create a dedicated service for S3 operations.
+
+javascript
+// server/s3Service.js
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import fs from 'fs/promises';
+import path from 'path';
+
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
+
+export const uploadToS3 = async (filePath, key, bucket = process.env.S3_BUCKET_NAME) => {
+  const fileContent = await fs.readFile(filePath);
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: fileContent,
+    ContentType: mime.lookup(filePath) || 'application/octet-stream',
+  });
+  await s3Client.send(command);
+  return { bucket, key };
+};
+
+export const generatePresignedUrl = async (key, bucket = process.env.S3_BUCKET_NAME, expiresIn = 3600) => {
+  const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+  return await getSignedUrl(s3Client, command, { expiresIn });
+};
+
+export const deleteFromS3 = async (key, bucket = process.env.S3_BUCKET_NAME) => {
+  const command = new DeleteObjectCommand({ Bucket: bucket, Key: key });
+  await s3Client.send(command);
+};
+3.4. Enhanced Core Cleaner Function
+Extend cleanMetadata to support PDF/DOCX and return structured data.
+
+javascript
+// server/index.js — replace previous cleanMetadata with this version
+async function cleanMetadata(filePath, mimeType) {
+  const isVideo = mimeType.startsWith('video/');
+  const isDocument = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'].includes(mimeType);
+  const outputPath = `${filePath}_cleaned${path.extname(filePath)}`;
+
+  // 1. Read original metadata
+  const originalMeta = await exiftool.read(filePath).catch(() => ({}));
+
+  if (isVideo) {
+    // Video: ffmpeg copy + exiftool cleanup
+    await new Promise((resolve, reject) => {
+      ffmpeg(filePath)
+        .outputOptions(['-map_metadata', '-1', '-c', 'copy', '-map', '0'])
+        .on('end', resolve)
+        .on('error', reject)
+        .save(outputPath);
+    });
+    await exiftool.write(outputPath, { All: '', overwrite_original: true });
+  } else {
+    // Image OR Document (PDF, DOCX, etc.) — exiftool handles both
+    // For documents, we copy the file first to avoid in-place issues
+    await fs.copyFile(filePath, outputPath);
+    await exiftool.write(outputPath, {
+      All: '',
+      overwrite_original: true,
+      GPS: '',
+      EXIF: '',
+      IPTC: '',
+      XMP: '',
+      Comment: '',
+      Artist: '',
+      Author: '',
+      Creator: '',
+      Producer: '',
+      Company: '',
+      Manager: ''
+    });
+  }
+
+  // 3. Read remaining metadata
+  const remainingMeta = await exiftool.read(outputPath).catch(() => ({}));
+
+  return {
+    cleanedPath: outputPath,
+    originalMeta,
+    remainingMeta,
+    tagsRemoved: Object.keys(originalMeta).length - Object.keys(remainingMeta).length
+  };
+}
+3.5. Batch Upload Route: POST /api/cleaner/batch
+javascript
+import { randomUUID } from 'crypto';
+
+app.post('/api/cleaner/batch', authMiddleware, async (req, res) => {
+  try {
+    const features = PLAN_FEATURES[req.user.plan];
+    if (!features?.cleaner) {
+      return res.status(403).json({ error: 'Annual plan required.' });
+    }
+
+    upload.array('files', parseInt(process.env.MAX_BATCH_FILES) || 10)(req, res, async (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ error: 'No files uploaded.' });
+      }
+
+      const batchId = randomUUID();
+      await run(
+        `INSERT INTO clean_jobs (id, user_id, status, total_files, created_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [batchId, req.user.id, 'processing', req.files.length, new Date().toISOString()]
+      );
+
+      // Process files with concurrency limit (3)
+      const concurrency = 3;
+      const results = [];
+      const processingQueue = [...req.files];
+
+      const processFile = async (file) => {
+        const isVideo = file.mimetype.startsWith('video/');
+        const isDoc = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'].includes(file.mimetype);
+        const maxSize = isVideo ? 200 * 1024 * 1024 : 30 * 1024 * 1024;
+
+        if (file.size > maxSize) {
+          return { file: file.originalname, error: `Size exceeds ${maxSize / (1024*1024)} MB limit.`, status: 'skipped' };
+        }
+
+        try {
+          const { cleanedPath, originalMeta, remainingMeta, tagsRemoved } = await cleanMetadata(file.path, file.mimetype);
+
+          // Upload to S3
+          const s3Key = `cleaned/${req.user.id}/${batchId}/${path.basename(cleanedPath)}`;
+          await uploadToS3(cleanedPath, s3Key);
+
+          // Save to DB
+          const assetId = randomUUID();
+          await run(
+            `INSERT INTO cleaned_assets (id, user_id, original_name, file_size_bytes, mime_type, s3_key, s3_bucket, batch_id, metadata_before, metadata_after, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [assetId, req.user.id, file.originalname, file.size, file.mimetype, s3Key, process.env.S3_BUCKET_NAME, batchId, JSON.stringify(originalMeta), JSON.stringify(remainingMeta), new Date().toISOString()]
+          );
+
+          // Clean local temp
+          await fs.unlink(file.path).catch(() => {});
+          await fs.unlink(cleanedPath).catch(() => {});
+
+          return {
+            id: assetId,
+            originalName: file.originalname,
+            cleanedSize: file.size, // S3 handles it
+            tagsRemoved,
+            status: 'completed'
+          };
+        } catch (err) {
+          return { file: file.originalname, error: err.message, status: 'failed' };
+        }
+      };
+
+      // Process in parallel with concurrency limit
+      const chunks = [];
+      for (let i = 0; i < processingQueue.length; i += concurrency) {
+        chunks.push(processingQueue.slice(i, i + concurrency));
+      }
+
+      for (const chunk of chunks) {
+        const chunkResults = await Promise.all(chunk.map(processFile));
+        results.push(...chunkResults);
+        // Update job progress
+        const completed = results.filter(r => r.status === 'completed' || r.status === 'failed').length;
+        await run(
+          `UPDATE clean_jobs SET completed_files = $1, status = $2 WHERE id = $3`,
+          [completed, completed === processingQueue.length ? 'completed' : 'processing', batchId]
+        );
+      }
+
+      res.json({
+        batchId,
+        total: req.files.length,
+        processed: results.length,
+        results
+      });
+    });
+  } catch (error) {
+    console.error('Batch error:', error);
+    res.status(500).json({ error: 'Batch processing failed.' });
+  }
+});
+3.6. Download Route (Now S3 Presigned)
+Replace the local file streaming route with an S3 presigned URL.
+
+javascript
+app.get('/api/cleaner/download/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const asset = await one(
+      `SELECT * FROM cleaned_assets WHERE id = $1 AND user_id = $2`,
+      [id, req.user.id]
+    );
+    if (!asset) return res.status(404).json({ error: 'Asset not found.' });
+
+    // Generate presigned URL
+    const presignedUrl = await generatePresignedUrl(asset.s3_key, asset.s3_bucket, parseInt(process.env.S3_PRESIGNED_EXPIRY) || 3600);
+
+    res.json({ downloadUrl: presignedUrl, originalName: asset.original_name });
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Failed to generate download link.' });
+  }
+});
+3.7. Preview Route: GET /api/cleaner/preview/:id
+Returns the metadata diff for visual comparison.
+
+javascript
+app.get('/api/cleaner/preview/:id', authMiddleware, async (req, res) => {
+  const asset = await one(
+    `SELECT metadata_before, metadata_after FROM cleaned_assets WHERE id = $1 AND user_id = $2`,
+    [req.params.id, req.user.id]
+  );
+  if (!asset) return res.status(404).json({ error: 'Asset not found.' });
+  res.json({
+    before: JSON.parse(asset.metadata_before || '{}'),
+    after: JSON.parse(asset.metadata_after || '{}')
+  });
+});
+3.8. Page Vault Integration (server/clone.js)
+Modify the clone engine to accept a sanitize flag. Parse HTML with Cheerio, extract media URLs, clean them via the metadata pipeline, and rewrite the HTML.
+
+Add to server/clone.js:
+
+javascript
+import cheerio from 'cheerio';
+import { cleanMetadata, uploadToS3, generatePresignedUrl } from './index.js'; // refactor exports
+
+export async function clonePage(url, options = {}) {
+  const { sanitizeMedia = false, userId = null } = options;
+  // ... existing fetch logic ...
+
+  if (sanitizeMedia && userId) {
+    const $ = cheerio.load(html);
+    const mediaSelectors = 'img[src], video[src], source[src], a[href$=".jpg"], a[href$=".png"], a[href$=".mp4"]';
+    const elements = $(mediaSelectors);
+
+    for (const el of elements) {
+      const src = $(el).attr('src') || $(el).attr('href');
+      if (!src) continue;
+      try {
+        // Download media to temp
+        const mediaResponse = await fetch(new URL(src, url).toString());
+        const buffer = await mediaResponse.arrayBuffer();
+        const tempPath = `/tmp/${Date.now()}_${path.basename(src)}`;
+        await fs.writeFile(tempPath, Buffer.from(buffer));
+
+        const mime = mediaResponse.headers.get('content-type') || 'image/jpeg';
+        const { cleanedPath } = await cleanMetadata(tempPath, mime);
+
+        // Upload cleaned media to S3
+        const s3Key = `pagevault/${userId}/${Date.now()}_${path.basename(src)}`;
+        await uploadToS3(cleanedPath, s3Key);
+        const publicUrl = await generatePresignedUrl(s3Key, process.env.S3_BUCKET_NAME, 86400); // 24h
+
+        // Rewrite HTML attribute
+        $(el).attr('src', publicUrl);
+        $(el).attr('href', publicUrl);
+
+        // Cleanup
+        await fs.unlink(tempPath).catch(() => {});
+        await fs.unlink(cleanedPath).catch(() => {});
+      } catch (err) {
+        console.warn(`Failed to sanitize ${src}:`, err.message);
+      }
+    }
+    html = $.html();
+  }
+
+  return { html, url };
+}
+Then expose a new endpoint: POST /api/clone/deep with an optional sanitizeMedia boolean in the body.
+
+4. FRONTEND UPDATES
+4.1. Enhanced MetadataCleaner.tsx (Batch + Preview)
+Update the component to support multiple file selection, display a batch progress list, and a metadata preview modal.
+
+tsx
+// src/pages/dashboard/MetadataCleaner.tsx — key additions
+
+const [files, setFiles] = useState<File[]>([]);
+const [batchResults, setBatchResults] = useState<any[]>([]);
+const [previewData, setPreviewData] = useState<any>(null);
+const [showPreviewModal, setShowPreviewModal] = useState(false);
+
+const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  if (e.target.files) {
+    setFiles(Array.from(e.target.files));
+  }
+};
+
+const handleBatchUpload = async () => {
+  if (files.length === 0) return;
+  const formData = new FormData();
+  files.forEach(f => formData.append('files', f));
+
+  // Use XHR with progress tracking per file (simplified: track overall)
+  setStatus('uploading');
+  // ... similar XHR logic but for /api/cleaner/batch
+};
+
+// Fetch preview
+const handlePreview = async (id: string) => {
+  const res = await fetchWithAuth(`/api/cleaner/preview/${id}`);
+  const data = await res.json();
+  setPreviewData(data);
+  setShowPreviewModal(true);
+};
+
+// Render a list of uploaded files with their status
+// Use a JSON diff viewer library (e.g., react-json-diff) or custom diff display in the modal.
+Add modal JSX:
+
+tsx
+{showPreviewModal && previewData && (
+  <div className="preview-modal">
+    <div className="modal-content">
+      <h3>Metadata Diff</h3>
+      <div className="diff-container">
+        <div className="before">
+          <h4>Before</h4>
+          <pre>{JSON.stringify(previewData.before, null, 2)}</pre>
+        </div>
+        <div className="after">
+          <h4>After</h4>
+          <pre>{JSON.stringify(previewData.after, null, 2)}</pre>
+        </div>
+      </div>
+      <button onClick={() => setShowPreviewModal(false)}>Close</button>
+    </div>
+  </div>
+)}
+4.2. Page Vault Integration (src/pages/dashboard/PageVaultTool.tsx)
+Add a toggle switch inside the clone form.
+
+tsx
+const [sanitizeMedia, setSanitizeMedia] = useState(false);
+
+// In the clone handler:
+const response = await fetchWithAuth('/api/clone/deep', {
+  method: 'POST',
+  body: JSON.stringify({
+    url,
+    sanitizeMedia, // Pass the toggle value
+    // ... other params
+  })
+});
+
+// Add UI toggle:
+<label>
+  <input type="checkbox" checked={sanitizeMedia} onChange={(e) => setSanitizeMedia(e.target.checked)} />
+  🧹 Automatically sanitize images & videos (remove tracking metadata)
+</label>
+4.3. CSS Additions
+Add styles for batch list, progress indicators, and the diff modal.
+
+css
+.batch-list { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0; }
+.batch-item { display: flex; justify-content: space-between; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; }
+.preview-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-content { background: white; max-width: 90vw; max-height: 90vh; overflow: auto; padding: 2rem; border-radius: 8px; }
+.diff-container { display: flex; gap: 2rem; }
+.before, .after { flex: 1; background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow: auto; max-height: 400px; }
+5. ADMIN / MONITORING (Optional)
+Add a new admin endpoint to view all clean jobs and asset usage per user.
+
+javascript
+app.get('/api/admin/cleaner/stats', adminMiddleware, async (req, res) => {
+  const stats = await query(
+    `SELECT user_id, COUNT(*) as total_cleaned FROM cleaned_assets GROUP BY user_id`
+  );
+  res.json(stats);
+});
+6. DEPLOYMENT & VALIDATION CHECKLIST
+Add AWS S3 bucket with CORS policy allowing GET from your frontend domain.
+
+Set Render environment variables for AWS credentials.
+
+Increase Render memory if processing large videos (recommend at least 2GB RAM for video ffmpeg).
+
+Test batch upload with 10 files simultaneously.
+
+Verify PDF/DOCX metadata stripping using exiftool.
+
+Confirm Page Vault clone successfully replaces media URLs with sanitized S3 presigned URLs.
+
+Ensure temp cleanup cron runs effectively.
+

@@ -1432,3 +1432,30 @@ select {
 .tool-page {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* ─── CAMOUFLAGE UPLOAD ─── */
+.camouflage-upload-area {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  transition: all var(--transition);
+  cursor: pointer;
+}
+.camouflage-upload-area.dragover {
+  border-color: var(--purple-500);
+  background: rgba(168,85,247,0.04);
+  box-shadow: var(--shadow-glow);
+}
+.camouflage-upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border-radius: var(--radius-md);
+  transition: background var(--transition);
+  user-select: none;
+}
+.camouflage-upload-placeholder:hover {
+  background: var(--bg-card-hover);
+}

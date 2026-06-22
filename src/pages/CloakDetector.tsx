@@ -30,7 +30,7 @@ export default function CloakDetector() {
   return (
     <div className="tool-page">
       <div className="tool-header">
-        <h3>🕵️ Quebra de Cloacker</h3>
+        <h3>Quebra de Cloacker</h3>
       </div>
       <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: 13 }}>
         Descubra se uma pagina esta usando cloaking. Comparamos a resposta para humanos e robos.
@@ -45,7 +45,7 @@ export default function CloakDetector() {
           onKeyDown={e => e.key === 'Enter' && handleDetectar()}
         />
         <button className="btn btn-gradient" onClick={handleDetectar} disabled={carregando || !url}>
-          {carregando ? 'Analisando...' : '🔍 Analisar'}
+          {carregando ? 'Analisando...' : 'Analisar'}
         </button>
       </div>
 
@@ -65,7 +65,7 @@ export default function CloakDetector() {
               fontWeight: 600,
             }}
           >
-            {resultado.temCloaking ? '⚠️ ' : '✅ '}{resultado.resumo}
+            {resultado.temCloaking ? '! ' : 'ok '}{resultado.resumo}
           </div>
 
           <div className="detector-grid">
