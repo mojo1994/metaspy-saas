@@ -106,6 +106,9 @@ export default function Dashboard() {
           <NavLink to="/dashboard/paginas" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             Paginas
           </NavLink>
+          <NavLink to="/dashboard/hospedar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            Hospedar
+          </NavLink>
         </nav>
 
         <div className="sidebar-section-label">Conta</div>

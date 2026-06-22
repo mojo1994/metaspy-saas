@@ -13,6 +13,7 @@ import rateLimit from 'express-rate-limit'
 import { Archiver } from 'archiver'
 import { exiftool } from 'exiftool-vendored'
 import mime from 'mime-types'
+import AdmZip from 'adm-zip'
 import { initDb, initSchema, one, query, run } from './db.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -41,6 +42,14 @@ await initSchema()
 // ─── Helpers ─────────────────────────────────────────────────────
 const CLONES_DIR = join(DATA_DIR, '..', 'clones')
 if (!existsSync(CLONES_DIR)) mkdirSync(CLONES_DIR, { recursive: true })
+
+const PAGES_DIR = join(DATA_DIR, 'pages')
+if (!existsSync(PAGES_DIR)) mkdirSync(PAGES_DIR, { recursive: true })
+
+const uploadPage = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024 },
+})
 
 const PLAN_CONFIG = {
   mensal: { price: 49.90, days: 30, kirvanoPlan: 'mensal' },
@@ -1020,13 +1029,85 @@ app.delete('/api/pages/:id', authMiddleware, async (req, res) => {
   }
 })
 
-// Public route: serve page HTML by slug (no auth)
+// Upload zip page
+app.post('/api/pages/upload', authMiddleware, uploadPage.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Arquivo ZIP obrigatorio.' })
+    const zip = new AdmZip(req.file.buffer)
+    const entries = zip.getEntries()
+    const hasIndex = entries.some(e => e.entryName === 'index.html' || e.entryName.endsWith('/index.html'))
+    if (!hasIndex) return res.status(400).json({ error: 'O ZIP deve conter um arquivo index.html na raiz.' })
+
+    const title = req.body.title || req.file.originalname.replace(/\.zip$/i, '') || 'Pagina hospedada'
+    const id = randomUUID()
+    const baseSlug = slugify(title)
+    let slug = baseSlug
+    let exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+    let counter = 1
+    while (exists) {
+      slug = `${baseSlug}-${counter}`
+      exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+      counter++
+    }
+
+    const pageDir = join(PAGES_DIR, slug)
+    mkdirSync(pageDir, { recursive: true })
+
+    for (const entry of entries) {
+      if (entry.isDirectory) continue
+      const filePath = join(pageDir, entry.entryName)
+      mkdirSync(dirname(filePath), { recursive: true })
+      writeFileSync(filePath, entry.getData())
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [id, req.user.id, slug, title, '', 'hosted', 1, now, now])
+
+    res.status(201).json({ id, slug, title, url: `https://centralspyads.netlify.app/p/${slug}` })
+  } catch (err) {
+    console.error('Erro upload pagina:', err)
+    res.status(500).json({ error: 'Erro ao fazer upload da pagina.' })
+  }
+})
+
+// Public routes: serve page by slug (no auth)
+app.get('/api/page/:slug/:path(*)', async (req, res) => {
+  try {
+    const { slug, path } = req.params
+    const page = await one('SELECT id, type, published FROM pages WHERE slug = $1 AND published = 1', [slug.toLowerCase()])
+    if (!page) return res.status(404).send('Pagina nao encontrada.')
+
+    if (page.type === 'hosted') {
+      const filePath = join(PAGES_DIR, slug, path)
+      if (!existsSync(filePath)) return res.status(404).send('Arquivo nao encontrado.')
+      const mimeType = mime.lookup(filePath) || 'application/octet-stream'
+      res.set('Content-Type', mimeType)
+      res.sendFile(filePath)
+    } else {
+      const p = await one('SELECT html FROM pages WHERE id = $1', [page.id])
+      res.set('Content-Type', mime.lookup(path) || 'application/octet-stream')
+      res.send(p?.html || '')
+    }
+  } catch {
+    res.status(500).send('Erro ao carregar pagina.')
+  }
+})
+
 app.get('/api/page/:slug', async (req, res) => {
   try {
-    const page = await one('SELECT html, title FROM pages WHERE slug = $1 AND published = 1', [req.params.slug.toLowerCase()])
+    const page = await one('SELECT html, type, title FROM pages WHERE slug = $1 AND published = 1', [req.params.slug.toLowerCase()])
     if (!page) return res.status(404).send('Pagina nao encontrada.')
-    res.set('Content-Type', 'text/html; charset=utf-8')
-    res.send(page.html)
+
+    if (page.type === 'hosted') {
+      const indexPath = join(PAGES_DIR, req.params.slug, 'index.html')
+      if (!existsSync(indexPath)) return res.status(404).send('index.html nao encontrado.')
+      res.set('Content-Type', 'text/html; charset=utf-8')
+      res.sendFile(indexPath)
+    } else {
+      res.set('Content-Type', 'text/html; charset=utf-8')
+      res.send(page.html)
+    }
   } catch {
     res.status(500).send('Erro ao carregar pagina.')
   }
