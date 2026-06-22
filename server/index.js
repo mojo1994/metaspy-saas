@@ -214,7 +214,7 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 })
 
 // ─── Email / Recovery Routes ──────────────────────────────────────
-import { sendEmail, recoveryEmailHtml, verificationEmailHtml } from './email.js'
+import { sendEmail, recoveryEmailHtml, verificationEmailHtml, purchaseConfirmationEmailHtml } from './email.js'
 
 function generateCode() {
   return String(Math.floor(100000 + Math.random() * 900000))
@@ -459,6 +459,20 @@ app.post('/api/subscription/webhook', async (req, res) => {
           const expiryStr = expiry.toISOString().replace('T', ' ').slice(0, 19)
           await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4, pending_plan = NULL WHERE id = $5',
             ['active', event.id || event.subscription_id || '', expiryStr, plan, userId])
+
+          // Send purchase confirmation email
+          try {
+            const userInfo = await one('SELECT name, email FROM users WHERE id = $1', [userId])
+            if (userInfo) {
+              await sendEmail({
+                to: userInfo.email,
+                subject: 'MetaSpy - Pagamento confirmado!',
+                html: purchaseConfirmationEmailHtml({ name: userInfo.name, plan, days: config.days }),
+              })
+            }
+          } catch (emailErr) {
+            console.error('Erro ao enviar email de confirmacao:', emailErr)
+          }
         }
       }
     }

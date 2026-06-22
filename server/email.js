@@ -225,3 +225,103 @@ export function recoveryEmailHtml(code) {
     extraText: 'Se nao solicitou a recuperacao, ignore este email.',
   })
 }
+
+export function purchaseConfirmationEmailHtml({ name, plan, days }) {
+  const planLabel = plan === 'anual' ? 'Anual' : 'Mensal'
+  return emailLayout(`
+    <tr><td height="16"></td></tr>
+
+    <tr>
+      <td align="center" style="padding-bottom:24px">
+        <table role="presentation" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="width:52px;height:52px;background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:14px;font-size:26px;line-height:52px;color:#fff;font-weight:700">M</td>
+            <td style="padding-left:12px;font-size:22px;font-weight:700;color:#fff;letter-spacing:-0.5px">MetaSpy</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background:#12121e;border:1px solid #1e1e32;border-radius:16px;padding:36px 32px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="font-size:24px;padding-bottom:16px">🎉</td>
+          </tr>
+          <tr>
+            <td align="center" style="font-size:20px;font-weight:700;color:#fff;padding-bottom:6px">Parabens, ${name}!</td>
+          </tr>
+          <tr>
+            <td align="center" style="font-size:14px;color:#8484a0;line-height:1.6;padding-bottom:24px">
+              Sua assinatura <strong style="color:#c084fc">${planLabel}</strong> foi confirmada.<br>
+              Sua conta ja esta disponivel para uso.
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background:#0a0a14;border:1px solid #1a1a2e;border-radius:12px;padding:20px 24px;margin-bottom:24px">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:13px;color:#8484a0;padding-bottom:6px">Plano</td>
+                  <td align="right" style="font-size:13px;color:#fff;font-weight:600">${planLabel}</td>
+                </tr>
+                <tr>
+                  <td style="font-size:13px;color:#8484a0;padding-bottom:6px">Dias de acesso</td>
+                  <td align="right" style="font-size:13px;color:#fff;font-weight:600">${days} dias</td>
+                </tr>
+                <tr>
+                  <td style="font-size:13px;color:#8484a0">Status</td>
+                  <td align="right" style="font-size:13px;color:#16a34a;font-weight:600">Ativo</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-bottom:8px">
+              <a href="https://centralspyads.netlify.app/dashboard" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 36px;border-radius:8px">
+                Acessar MetaSpy
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="font-size:12px;color:#5c5c78">
+              Clique no botao acima para comecar a usar
+            </td>
+          </tr>
+
+          <tr>
+            <td style="height:1px;background:linear-gradient(90deg,transparent,#2a2a44,transparent);padding:0 40px"><div style="height:1px"></div></td>
+          </tr>
+
+          <tr>
+            <td align="center" style="font-size:13px;color:#6c6c88;line-height:1.5;padding-top:20px">
+              Qualquer duvida, responda a este email ou entre em contato pelo site.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:24px 16px 0">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding-bottom:8px;text-align:center;font-size:11px;color:#42425a">
+              MetaSpy &mdash; Todos os direitos reservados
+            </td>
+          </tr>
+          <tr>
+            <td style="text-align:center;font-size:11px;color:#3a3a50">
+              <a href="https://centralspyads.netlify.app/termos" style="color:#6c6c88;text-decoration:none">Termos de Uso</a>
+              &nbsp;&bull;&nbsp;
+              <a href="https://centralspyads.netlify.app/privacidade" style="color:#6c6c88;text-decoration:none">Privacidade</a>
+              &nbsp;&bull;&nbsp;
+              <a href="https://centralspyads.netlify.app/contato" style="color:#6c6c88;text-decoration:none">Contato</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  `)
+}
