@@ -4,11 +4,13 @@ const { Pool } = pkg
 let pool
 
 export function initDb(connectionString) {
+  const isRender = process.env.RENDER || process.env.NODE_ENV === 'production'
   pool = new Pool({
     connectionString,
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
+    connectionTimeoutMillis: 15000,
+    ssl: isRender ? { rejectUnauthorized: false } : false,
   })
   pool.on('error', err => console.error('PostgreSQL pool error:', err.message))
   return pool
