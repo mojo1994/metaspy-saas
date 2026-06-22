@@ -480,8 +480,37 @@ select {
 }
 .feature-card h3 { font-size: 16px; font-weight: 600; }
 .feature-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+.feature-card {
+  animation: cardFadeUp 0.5s ease-out both;
+  animation-delay: calc(var(--i, 0) * 100ms);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.feature-card:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 32px rgba(168,85,247,0.1);
+}
 .feature-card.locked { opacity: 0.6; border-color: var(--warning); }
-.feature-card.locked:hover { opacity: 0.8; border-color: var(--warning); box-shadow: 0 0 10px rgba(255,170,0,0.15); }
+.feature-card.locked:hover { opacity: 0.85; border-color: var(--warning); box-shadow: 0 0 20px rgba(245,158,11,0.12); transform: translateY(-2px); }
+.feature-action {
+  margin-top: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--purple-300);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.25s ease;
+  opacity: 0.6;
+}
+.feature-card:hover .feature-action {
+  opacity: 1;
+  gap: 8px;
+}
+.feature-card.locked .feature-action {
+  color: var(--warning);
+}
 .landing-footer {
   text-align: center;
   padding: 24px 36px;
@@ -537,6 +566,43 @@ select {
   margin-bottom: 24px;
 }
 .dashboard-header h2 { font-size: 24px; font-weight: 700; }
+.dashboard-greeting-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+.clock-display {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  user-select: none;
+}
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.pulse-dot.active {
+  background: var(--success);
+  animation: pulse-ring 2s cubic-bezier(0.4,0,0.2,1) infinite;
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+}
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -551,13 +617,51 @@ select {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  animation: cardFadeUp 0.5s ease-out both;
+  animation-delay: calc(var(--i, 0) * 80ms);
 }
-.stat-card .value { font-size: 28px; font-weight: 700; color: var(--purple-300); }
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 32px rgba(168,85,247,0.15);
+  border-color: rgba(168,85,247,0.3);
+}
+.stat-card .value { font-size: 28px; font-weight: 700; color: var(--purple-300); transition: color 0.3s; }
+.stat-card:hover .value { color: var(--purple-200); }
 .stat-card .label {
   font-size: 11px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+.stat-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  font-size: 16px;
+  margin-bottom: 6px;
+  transition: all 0.3s ease;
+}
+.stat-card:hover .stat-card-icon {
+  background: rgba(168,85,247,0.22);
+  transform: scale(1.08);
+}
+@keyframes cardFadeUp {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.dashboard-home {
+  animation: fadeIn 0.3s ease-out;
 }
 
 /* ─── META SPY TOOL ─── */
