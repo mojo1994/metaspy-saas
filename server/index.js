@@ -391,6 +391,94 @@ app.delete('/api/cloaker/scripts/:id', authMiddleware, async (req, res) => {
   res.json({ ok: true })
 })
 
+// ─── Cloak Detector ──────────────────────────────────────────────
+const USER_AGENTS = {
+  humano: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  bot_google: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+  bot_facebook: 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+}
+
+app.post('/api/cloaker/detect', authMiddleware, async (req, res) => {
+  try {
+    const features = PLAN_FEATURES[req.user.plan]
+    if (!features?.cloaker) return res.status(403).json({ erro: 'Funcionalidade disponivel apenas no plano Anual.' })
+    const { url } = req.body
+    if (!url) return res.status(400).json({ erro: 'URL e obrigatoria.' })
+    const resultados = {}
+    for (const [tipo, ua] of Object.entries(USER_AGENTS)) {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 8000)
+      try {
+        const resposta = await fetch(url, { headers: { 'User-Agent': ua }, redirect: 'manual', signal: controller.signal })
+        clearTimeout(timeout)
+        const corpoBuffer = await resposta.arrayBuffer()
+        const corpo = Buffer.from(corpoBuffer).toString('utf-8').slice(0, 50000)
+        resultados[tipo] = { status: resposta.status, statusText: resposta.statusText, urlFinal: resposta.url, headers: Object.fromEntries(resposta.headers.entries()), corpo, tamanho: corpo.length }
+      } catch (erro) {
+        clearTimeout(timeout)
+        resultados[tipo] = { erro: erro.message || 'Falha na requisicao' }
+      }
+    }
+    const temCloaking = (
+      resultados.humano?.status !== resultados.bot_google?.status ||
+      resultados.humano?.urlFinal !== resultados.bot_google?.urlFinal ||
+      resultados.humano?.corpo?.length !== resultados.bot_google?.corpo?.length
+    )
+    const id = randomUUID()
+    await run(`INSERT INTO cloak_detections (id, user_id, url, tem_cloaking, resultado_json, created_at) VALUES ($1, $2, $3, $4, $5, $6)`, [id, req.user.id, url, temCloaking, JSON.stringify(resultados), new Date().toISOString()])
+    res.json({
+      url, temCloaking, comparacao: resultados,
+      resumo: temCloaking ? 'Cloaking detectado! A pagina entrega conteudo diferente para robos e humanos.' : 'Nenhum cloaking significativo detectado.'
+    })
+  } catch (erro) {
+    console.error('Erro no detect cloaker:', erro)
+    res.status(500).json({ erro: 'Erro interno ao analisar a URL.' })
+  }
+})
+
+// ─── Creative Camouflage ─────────────────────────────────────────
+app.post('/api/cloaker/camouflage', authMiddleware, async (req, res) => {
+  try {
+    const features = PLAN_FEATURES[req.user.plan]
+    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Anual.' })
+    const { texto_original, url_destino, palavras_sensiveis } = req.body
+    if (!texto_original || !url_destino) return res.status(400).json({ erro: 'Texto original e URL destino sao obrigatorios.' })
+    const scriptCamuflado = `<!-- SCRIPT DE CAMUFLAGEM DE CRIATIVOS - METASPY -->
+<script>
+(function() {
+  const isBot = /bot|googlebot|facebookexternalhit|headless/i.test(navigator.userAgent);
+  const textoOriginal = ${JSON.stringify(texto_original)};
+  const urlDestino = ${JSON.stringify(url_destino)};
+  if (isBot) {
+    const palavras = ${JSON.stringify(palavras_sensiveis || [])};
+    let textoMascarado = textoOriginal;
+    palavras.forEach(palavra => {
+      const regex = new RegExp(palavra, 'gi');
+      textoMascarado = textoMascarado.replace(regex, '•••••');
+    });
+    document.body.innerHTML = document.body.innerHTML.replace(textoOriginal, textoMascarado);
+    document.querySelectorAll('a[href]').forEach(el => {
+      if (el.href.includes(urlDestino)) {
+        el.href = '#';
+        el.style.textDecoration = 'none';
+        el.style.color = 'inherit';
+      }
+    });
+  } else {
+    document.querySelectorAll('.camuflado').forEach(el => el.style.display = 'block');
+  }
+})();
+</script>
+<!-- FIM DO SCRIPT -->`
+    const id = randomUUID()
+    await run(`INSERT INTO camouflage_scripts (id, user_id, url_destino, script_code, created_at) VALUES ($1, $2, $3, $4, $5)`, [id, req.user.id, url_destino, scriptCamuflado, new Date().toISOString()])
+    res.json({ id, script: scriptCamuflado, instrucoes: 'Copie e cole este script no <head> da sua landing page. O script detectara automaticamente se o visitante e humano ou robo.' })
+  } catch (erro) {
+    console.error('Erro ao gerar camuflagem:', erro)
+    res.status(500).json({ erro: 'Erro ao gerar script de camuflagem.' })
+  }
+})
+
 // ─── User Routes ─────────────────────────────────────────────────
 app.get('/api/user/profile', authMiddleware, (req, res) => {
   res.json({ user: req.user })

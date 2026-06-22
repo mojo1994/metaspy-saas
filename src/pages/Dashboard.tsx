@@ -1,12 +1,13 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 export default function Dashboard() {
   const { user, logout, isAuthenticated } = useAuth()
   const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login', { replace: true })
@@ -16,6 +17,13 @@ export default function Dashboard() {
     logout()
     navigate('/')
   }
+
+  const isCloackerSub = location.pathname.startsWith('/dashboard/cloacker')
+  const [cloackerOpen, setCloackerOpen] = useState(isCloackerSub)
+
+  useEffect(() => {
+    if (isCloackerSub) setCloackerOpen(true)
+  }, [isCloackerSub])
 
   return (
     <div className="app-layout">
@@ -35,9 +43,26 @@ export default function Dashboard() {
           <NavLink to="/dashboard/pagevault" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             Clonador
           </NavLink>
-          <NavLink to="/dashboard/cloacker" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            Cloacker
-          </NavLink>
+          <div className="sidebar-group">
+            <button
+              className={`sidebar-link sidebar-group-toggle${location.pathname.startsWith('/dashboard/cloacker') ? ' active' : ''}`}
+              onClick={() => setCloackerOpen(!cloackerOpen)}
+            >
+              <span>Cloacker</span>
+              <span className="sidebar-arrow" data-open={cloackerOpen}>›</span>
+            </button>
+            <div className={`sidebar-subnav${cloackerOpen ? ' open' : ''}`}>
+              <NavLink to="/dashboard/cloacker" end className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Gerar Script
+              </NavLink>
+              <NavLink to="/dashboard/cloacker/detector" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Quebra de Cloacker
+              </NavLink>
+              <NavLink to="/dashboard/cloacker/camouflage" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Camuflagem
+              </NavLink>
+            </div>
+          </div>
         </nav>
 
         <div className="sidebar-section-label">Conta</div>

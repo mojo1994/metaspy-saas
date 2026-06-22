@@ -1224,3 +1224,211 @@ select {
 .btn-ativo:hover { opacity: .85; }
 .btn-alta { background: #10b981; color: #fff; }
 .btn-alta:hover { opacity: .85; }
+
+/* ─── SIDEBAR SUBMENU ─── */
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition);
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+.sidebar-group-toggle:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+.sidebar-group-toggle.active {
+  background: var(--accent-soft);
+  color: var(--purple-300);
+  border: 1px solid rgba(168,85,247,0.2);
+}
+.sidebar-arrow {
+  margin-left: auto;
+  font-size: 16px;
+  transition: transform 0.2s ease;
+  line-height: 1;
+}
+.sidebar-arrow[data-open="true"] {
+  transform: rotate(90deg);
+}
+.sidebar-subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 16px;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+  opacity: 0;
+}
+.sidebar-subnav.open {
+  max-height: 200px;
+  opacity: 1;
+}
+.sidebar-sublink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--transition);
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+.sidebar-sublink:hover {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+.sidebar-sublink.active {
+  background: var(--accent-soft);
+  color: var(--purple-300);
+  border: 1px solid rgba(168,85,247,0.2);
+}
+
+/* ─── CLOAK DETECTOR ─── */
+.detector-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.detector-input input {
+  flex: 1;
+  padding: 12px 14px;
+  font-size: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  transition: all var(--transition);
+}
+.detector-input input:focus {
+  border-color: var(--purple-500);
+  box-shadow: 0 0 0 3px rgba(168,85,247,0.12), var(--shadow-glow);
+}
+.detector-input .btn {
+  padding: 12px 24px;
+  font-size: 14px;
+  border-radius: var(--radius-lg);
+}
+.detector-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.detector-col {
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.detector-col-header {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.detector-col-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.detector-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.detector-details {
+  border-top: 1px solid var(--border);
+}
+.detector-details summary {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--transition);
+}
+.detector-details summary:hover { color: var(--text-secondary); }
+.detector-details pre {
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-height: 200px;
+  overflow: auto;
+  margin: 0;
+  background: var(--bg-primary);
+}
+.detector-html {
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-height: 300px;
+  overflow: auto;
+  background: var(--bg-primary);
+}
+.detector-html img { max-width: 100%; height: auto; }
+
+/* ─── CAMOUFLAGE ─── */
+.camouflage-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  max-width: 520px;
+}
+.camouflage-form .btn-gradient {
+  margin-top: 4px;
+}
+.script-box {
+  max-height: 300px;
+  overflow: auto;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ─── TOOL PAGE ─── */
+.tool-page {
+  animation: fadeIn 0.3s ease-out;
+}

@@ -1,530 +1,453 @@
-================================================================================
-  METASPY SAAS — PRODUCT REQUIREMENTS DOCUMENT / TECHNICAL REFERENCE
-================================================================================
-  Version: 3.0.0
-  Last Updated: 2026-06-22
-  Author: Banshee.ads
-  Stack: React 18 + Vite + TypeScript (frontend)
-         Node.js + Express + ESM (backend)
-         PostgreSQL (database)
-         Netlify (frontend host) + Render (backend host)
-================================================================================
-
-TABLE OF CONTENTS
-  1.  Product Overview
-  2.  System Architecture
-  3.  Directory Structure
-  4.  Frontend Architecture
-  5.  Backend Architecture
-  6.  Database Schema
-  7.  Authentication & Authorization
-  8.  Payment / Subscription Flow
-  9.  Features & Feature Flags
-  10. API Endpoints
-  11. Deployment
-  12. Environment Variables
-  13. Data Flow Diagrams
-  14. Admin Panel
-  15. Security Considerations
-  16. Known Limitations & TODOs
-
-================================================================================
-1. PRODUCT OVERVIEW
-================================================================================
-
-MetaSpy is a SaaS platform for digital advertisers (affiliates, media buyers,
-traffic directors) that provides tools to analyze, clone, and optimize ad
-campaigns on Meta Ads (Facebook/Instagram).
-
-Core value propositions:
-  - Spy on competitor ads via the Meta Ads Library API
-  - Clone landing pages (full offline HTML download)
-  - Edit cloned pages visually with a WYSIWYG canvas editor
-  - Cloak pages to evade ad review bots
-  - Bypass security layers (Cloudflare, etc.) for page analysis
-
-Plans (no free tier):
-  - Mensal (monthly):  R$ 49,90/month  — clone + minerador + page vault
-  - Anual  (yearly):   R$ 110,90/year  — all features including cloaker + analysis
-    (renews at R$ 97/year)
-
-================================================================================
-2. SYSTEM ARCHITECTURE
-================================================================================
-
-  [Browser]
-      |
-      v
-  [Netlify CDN]  ───  serves SPA (index.html + JS + CSS)
-      |
-      |  /api/*  (proxy via netlify.toml [[redirects]] / _redirects)
-      v
-  [Render Node.js Server]  ───  Express app on port 3001 (or $PORT)
-      |
-      v
-  [Render PostgreSQL]  ───  managed database via DATABASE_URL
-
-  External services:
-    - Kirvano (payment gateway) — checkout + webhook
-    - Facebook Graph API — Ads Library data (requires FB_TOKEN)
-
-================================================================================
-3. DIRECTORY STRUCTURE
-================================================================================
-
-  metaspy-saas/
-    ├── public/
-    │   └── _redirects          # Netlify SPA fallback + API proxy rules
-    ├── src/
-    │   ├── main.tsx            # React entry point
-    │   ├── App.tsx             # Router (React Router v6)
-    │   ├── index.css           # Global styles (~1100 lines)
-    │   ├── contexts/
-    │   │   ├── AuthContext.tsx  # Auth state, login, signup, fetchWithAuth
-    │   │   └── ThemeContext.tsx # Dark/light/system theme
-    │   ├── pages/
-    │   │   ├── Landing.tsx     # Marketing page with pricing
-    │   │   ├── Login.tsx       # Email/password login
-    │   │   ├── Signup.tsx      # Registration form
-    │   │   ├── Planos.tsx      # Pricing & checkout page
-    │   │   ├── Dashboard.tsx   # Layout shell with sidebar + Outlet
-    │   │   ├── DashboardHome.tsx  # Main dashboard view
-    │   │   ├── MetaSpyTool.tsx # Ad archive miner (FB Ads Library)
-    │   │   ├── PageVaultTool.tsx  # Page cloner (local download)
-    │   │   ├── CloackerTool.tsx   # Cloak script generator
-    │   │   ├── Profile.tsx     # User profile edit
-    │   │   ├── Settings.tsx    # User settings
-    │   │   └── Admin.tsx       # Admin panel (admin only)
-    │   ├── components/
-    │   │   ├── PageEditor.tsx  # WYSIWYG canvas editor for HTML
-    │   │   └── HelpTooltip.tsx # Tooltip component
-    │   ├── bypass/
-    │   │   └── engine.ts      # Multi-strategy bypass engine (client-side)
-    │   └── types/
-    │       └── index.ts       # Shared TypeScript types
-    ├── server/
-    │   ├── index.js           # Express server (ESM, ~487 lines)
-    │   ├── clone.js           # Page cloning engine (server-side)
-    │   ├── db.js              # PostgreSQL pool, helpers, schema
-    │   ├── package.json       # Server deps (express, pg, bcryptjs, etc.)
-    │   └── .env               # Local env template
-    ├── netlify.toml           # Netlify build & deploy config
-    ├── LINK KIRVANO.txt       # Kirvano checkout links per plan
-    ├── upd.txt                # FB_TOKEN and Kirvano API key
-    ├── PRD.txt                # THIS FILE
-    └── .gitignore
-
-================================================================================
-4. FRONTEND ARCHITECTURE
-================================================================================
-
-4.1 Tech Stack
-  - React 18.3.1 with TypeScript
-  - React Router DOM 6.26 (client-side routing)
-  - Vite 5.4 (build tool)
-  - No external UI library — all custom CSS (~1100 lines)
-  - No HTTP library — uses native fetch() everywhere
-  - No state management library — React Context + useState
-
-4.2 Routing (App.tsx)
-  /                        → Landing (marketing)
-  /login                   → Login
-  /signup                  → Signup
-  /planos                  → Planos (pricing)
-  /dashboard               → Dashboard layout (protected)
-    /dashboard             → DashboardHome
-    /dashboard/metaspy     → MetaSpyTool (ad miner)
-    /dashboard/pagevault   → PageVaultTool (cloner)
-    /dashboard/cloacker    → CloackerTool
-    /dashboard/perfil      → Profile
-    /dashboard/configuracoes → Settings
-    /dashboard/admin       → Admin panel
-  *                        → Redirect to /
-
-  ProtectedRoute wrapper redirects to /login if not authenticated.
-
-4.3 AuthContext
-  - Stores user object, accessToken, refreshToken in state + localStorage
-  - login() / signup() return string | null (error message or null on success)
-  - fetchWithAuth() wraps fetch() with Bearer token, auto-refreshes on 401
-  - Keys in localStorage: metaspy_session, metaspy_access_token, metaspy_refresh_token
-
-4.4 ThemeContext
-  - Supports 'dark', 'light', 'system' (follows OS preference)
-  - Theme stored in localStorage: theme
-  - CSS custom properties switch via [data-theme] attribute on <html>
-
-4.5 API Call Pattern
-  All API calls use relative paths: /api/auth/signup, /api/clone, etc.
-  In dev, Vite proxy forwards /api/* to localhost:3001.
-  In prod, Netlify rewrite/proxy forwards /api/* to Render server.
-
-================================================================================
-5. BACKEND ARCHITECTURE
-================================================================================
-
-5.1 Tech Stack
-  - Node.js 20+ (ESM — "type": "module" in package.json)
-  - Express 4.x
-  - PostgreSQL via pg (8.x)
-  - JWT via jsonwebtoken
-  - Password hashing via bcryptjs
-  - Rate limiting via express-rate-limit
-  - File system operations via node:fs (sync) / node:fs/promises
-
-5.2 Server Entry (server/index.js)
-  - Top-level await for database initialization
-  - Middleware order: cors → cookieParser → express.json → rateLimiter → routes
-  - Dynamic imports for clone.js (heavy module, lazy-loaded)
-
-5.3 Database Layer (server/db.js)
-  - Pool-based PostgreSQL connection
-  - Exports: initDb(), getPool(), query(), one(), run(), initSchema()
-  - query() returns array of rows
-  - one() returns single row or null
-  - run() returns { changes: rowCount }
-  - initSchema() creates tables if not exist + migration ALTER TABLE
-
-5.4 Error Handling
-  - All async route handlers wrapped in try/catch
-  - Errors return JSON: { error: "message" }
-  - Webhook catches all errors and returns { received: true } to prevent Kirvano retries
-
-================================================================================
-6. DATABASE SCHEMA
-================================================================================
-
-6.1 users
-  id                TEXT PRIMARY KEY (UUID v4)
-  name              TEXT NOT NULL
-  email             TEXT NOT NULL UNIQUE
-  password_hash     TEXT NOT NULL
-  plan              TEXT NOT NULL DEFAULT 'nenhum'  — nenhum|gratuito|mensal|anual
-  subscription_status  TEXT NOT NULL DEFAULT 'inactive' — inactive|active|canceled|expired
-  subscription_id   TEXT (Kirvano transaction ID)
-  subscription_expiry  TEXT (ISO datetime string, e.g. "2026-07-22 01:19:35")
-  pending_plan      TEXT (set before Kirvano redirect, consumed by webhook)
-  clones_used       INTEGER NOT NULL DEFAULT 0
-  created_at        TEXT NOT NULL (ISO datetime)
-
-6.2 cloaker_scripts
-  id                TEXT PRIMARY KEY (UUID v4)
-  user_id           TEXT NOT NULL
-  target_url        TEXT NOT NULL
-  safe_url          TEXT NOT NULL
-  script_code       TEXT NOT NULL (the full <script> tag)
-  created_at        TEXT NOT NULL (ISO datetime)
-
-================================================================================
-7. AUTHENTICATION & AUTHORIZATION
-================================================================================
-
-7.1 Registration (/api/auth/signup)
-  - Validates email, name, password (min 6 chars)
-  - Normalizes email: toLowerCase().trim()
-  - Checks uniqueness (409 Conflict if exists)
-  - Hashes password with bcryptjs (salt rounds: 10)
-  - Creates user with plan='nenhum', status='inactive'
-  - Returns user object + accessToken (7d) + refreshToken (30d)
-
-7.2 Login (/api/auth/login)
-  - Validates credentials
-  - Compares bcrypt hash
-  - Returns user object + tokens
-
-7.3 Token Refresh (/api/auth/refresh)
-  - Validates refresh token (checks type: 'refresh')
-  - Issues new access + refresh tokens
-
-7.4 authMiddleware
-  - Extracts Bearer token from Authorization header
-  - Verifies JWT, loads user from DB
-  - Attaches user object to req.user
-  - Returns 401 if invalid/expired
-
-7.5 adminMiddleware
-  - Same as authMiddleware but also checks email === '09santos.felipe@gmail.com'
-  - Returns 403 if not admin
-
-================================================================================
-8. PAYMENT / SUBSCRIPTION FLOW
-================================================================================
-
-8.1 Checkout Creation
-  User clicks "Assinar Agora" on a plan:
-    1. Frontend: POST /api/subscription/create-checkout { plan: 'mensal'|'anual' }
-    2. Server authMiddleware validates user
-    3. Server sets pending_plan = plan on the user row
-    4. Server returns static Kirvano checkout URL from KIRVANO_STATIC_LINKS map
-
-8.2 Kirvano Checkout Links (from LINK KIRVANO.txt)
-  mensal  → https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd  (R$49,90)
-  anual   → https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad  (R$97,00)
-
-8.3 Webhook Processing
-  Kirvano sends POST to /api/subscription/webhook:
-    1. Logs event to in-memory WEBHOOK_LOG (last 20)
-    2. On payment.approved / subscription.approved:
-       a. Extract userId from event.metadata.user_id (API-created checkouts)
-       b. Fallback: match by event.customer.email
-       c. Read user's pending_plan
-       d. Calculate expiry: now + config.days (30 for mensal, 365 for anual)
-       e. UPDATE: plan=pending_plan, status=active, clear pending_plan
-    3. On subscription.canceled / payment.refunded: set plan=nenhum, status=canceled
-    4. All errors return { received: true } (no retries)
-
-8.4 Plan Config
-  mensal: { price: 49.90, days: 30 }
-  anual:  { price: 110.90, days: 365, renewal: 97 }
-
-================================================================================
-9. FEATURES & FEATURE FLAGS
-================================================================================
-
-PLAN_FEATURES map controls feature access per plan:
-
-  nenhum:  clone:false, minerador:false, cloaker:false, pagevault:false, analise:false
-  mensal:  clone:true,  minerador:true,  cloaker:false, pagevault:true,  analise:false
-  anual:   clone:true,  minerador:true,  cloaker:true,  pagevault:true,  analise:true
-
-Feature checks in route handlers:
-  - /api/clone: if (!features?.clone) return 403
-  - /api/cloaker/generate: if (!features?.cloaker) return 403 ("Plano anual necessario")
-  - Frontend badges show plan name and "Ilimitado" for mensal/anual
-
-9.1 MetaSpy Miner (MetaSpyTool.tsx)
-  - Queries Facebook Ads Library API endpoint
-  - Search by term, advertiser, or URL
-  - Filters: platform (facebook/instagram), ad type, media type, date range
-  - Results show ad creative, copy, CTA, landing page
-  - FB_API_BASE = '/api/ads-archive' → server proxies to Facebook Graph API
-
-9.2 Page Cloner (PageVaultTool.tsx)
-  - Input: URL
-  - Fetches page via /api/page-fetch (CORS bypass proxy)
-  - Saves HTML to local filesystem via File System Access API (showDirectoryPicker)
-  - Fallback: download as .html file
-  - Supports external resources, robots.txt respect, flat mode, rescue/headless mode
-  - History stored in localStorage (pagevault_jobs)
-  - Can open cloned HTML in the visual PageEditor
-
-9.3 Page Editor (PageEditor.tsx)
-  - WYSIWYG canvas editor (iframe-based)
-  - Drag, resize, edit elements
-  - Real-time preview
-  - Export edited HTML as file
-
-9.4 Deep Clone (server-side)
-  - POST /api/clone/deep — full site download with resource extraction
-  - GET /api/clone/deep/:id/files — file tree listing
-  - GET /api/clone/deep/:id/download — ZIP download
-  - Public endpoints (no authMiddleware)
-
-9.5 Cloaker (CloakerTool.tsx)
-  - Generates cloaking script that distinguishes bots from real users
-  - Detection: user-agent patterns, referrer check, iframe detection, webdriver flag,
-    headless Chrome detection, screen resolution anomalies, plugin count
-  - Bot/headless → redirect to safe_url
-  - Real user → redirect to target_url
-  - Script stored in cloaker_scripts table
-
-9.6 Bypass Engine (bypass/engine.ts)
-  - Client-side multi-strategy bypass for accessing blocked pages
-  - Strategies: standard fetch, headless simulation, proxy rotation
-  - Used by PageVaultTool in rescue mode
-
-================================================================================
-10. API ENDPOINTS
-================================================================================
-
-  Auth:
-    POST   /api/auth/signup           — Register
-    POST   /api/auth/login            — Login
-    POST   /api/auth/refresh          — Refresh tokens
-    POST   /api/auth/logout           — Logout (no-op)
-    GET    /api/auth/me               — Get current user (auth)
-
-  Clone:
-    POST   /api/clone                 — Clone page (auth, requires plan)
-    POST   /api/clone/deep            — Deep clone site (public)
-    GET    /api/clone/deep/:id/files  — List files (public)
-    GET    /api/clone/deep/:id/download — Download ZIP (public)
-
-  Page Fetch (CORS bypass):
-    GET    /api/page-fetch?url=       — Fetches and returns HTML
-
-  Subscription:
-    POST   /api/subscription/create-checkout  — Get Kirvano checkout URL (auth)
-    POST   /api/subscription/webhook           — Kirvano webhook receiver
-    GET    /api/subscription/status            — Get current plan status (auth)
-
-  Cloaker:
-    POST   /api/cloaker/generate     — Generate cloaking script (auth, anual)
-    GET    /api/cloaker/scripts      — List user's scripts (auth)
-    DELETE /api/cloaker/scripts/:id  — Delete script (auth)
-
-  User:
-    GET    /api/user/profile         — Get profile (auth)
-    PUT    /api/user/profile         — Update profile (auth)
-    PUT    /api/user/password         — Change password (auth)
-
-  Admin:
-    GET    /api/admin/users          — List all users (admin)
-    PUT    /api/admin/users/:id/plan — Set user's plan (admin)
-
-  Debug:
-    GET    /api/debug/user?email=    — Query user by email (public)
-    GET    /api/debug/webhooks       — View recent webhooks (public)
-
-  Health:
-    GET    /api/health               — Server health check
-
-================================================================================
-11. DEPLOYMENT
-================================================================================
-
-11.1 Frontend — Netlify
-  - Auto-deploys from GitHub main branch
-  - Build command: npm run build (defined in netlify.toml)
-  - Publish directory: dist
-  - SPA routing: _redirects file (/* /index.html 200)
-  - API proxy: [[redirects]] /api/* → https://metaspy-saas.onrender.com/api/:splat (200)
-  - No environment variables needed on Netlify (proxy handles everything)
-
-11.2 Backend — Render
-  - Auto-deploys from GitHub main branch
-  - Root directory: server/
-  - Build command: npm install
-  - Start command: node index.js
-  - Node version: 20
-  - Environment variables required (see section 12)
-
-11.3 Deployment Flow
-  git push origin main
-    → GitHub triggers Netlify deploy (frontend)
-    → GitHub triggers Render deploy (backend)
-    → Both auto-deploy within 1-2 minutes
-
-================================================================================
-12. ENVIRONMENT VARIABLES
-================================================================================
-
-  Server (.env on Render):
-
-  DATABASE_URL          PostgreSQL connection string
-                        e.g. postgresql://user:pass@host:5432/metaspy
-
-  FB_TOKEN              Facebook Graph API User Access Token
-                        Requires ads_read permission
-
-  JWT_SECRET            Secret key for JWT signing
-                        Default: metaspy-dev-secret-change-in-prod
-
-  KIRVANO_API_KEY       Kirvano API key for payment processing
-                        Value: metaspyadstoken2026maxaccessaproveanddeniedfiles
-
-  KIRVANO_WEBHOOK_SECRET  (optional) Kirvano webhook verification secret
-
-  FRONTEND_URL          CORS origin for production
-                        https://centralspyads.netlify.app
-
-  KIRVANO_SUCCESS_URL   Redirect after successful payment
-                        https://centralspyads.netlify.app/dashboard
-
-  KIRVANO_CANCEL_URL    Redirect after cancelled payment
-                        https://centralspyads.netlify.app/planos
-
-  PORT                  Server port (Render sets this automatically)
-
-  RENDER                Set by Render automatically (used for IS_RENDER detection)
-  NODE_ENV              production on Render
-
-  Frontend: no env vars needed (API proxy handled by Netlify)
-
-================================================================================
-13. DATA FLOW DIAGRAMS
-================================================================================
-
-13.1 Signup Flow
-  User → [Signup.tsx] → POST /api/auth/signup
-    → Server validates → bcrypt hash → INSERT user
-    → Returns { user, accessToken, refreshToken }
-    → AuthContext stores in state + localStorage
-    → Navigate to /planos
-
-13.2 Purchase Flow
-  User clicks "Assinar Agora Mensal"
-    → Planos.tsx handleCheckout('mensal')
-    → fetchWithAuth POST /api/subscription/create-checkout { plan: 'mensal' }
-    → Server: authMiddleware → set pending_plan='mensal'
-    → Returns { checkoutUrl: 'https://pay.kirvano.com/...' }
-    → window.location.href = checkoutUrl
-    → User pays on Kirvano
-    → Kirvano sends webhook POST /api/subscription/webhook
-    → Server: match user by email → read pending_plan → set plan='mensal', status='active'
-    → User lands on /dashboard (from KIRVANO_SUCCESS_URL)
-    → Dashboard shows active plan, features unlocked
-
-13.3 Clone Flow
-  User enters URL → clicks "Clonar"
-    → POST /api/clone { url }
-    → Server: authMiddleware → check features.clone → import clone.js → clonePage()
-    → Returns { html, url, userId, timestamp }
-    → Also: GET /api/page-fetch?url= (CORS bypass for PageVaultTool)
-    → Frontend saves HTML to local filesystem
-
-================================================================================
-14. ADMIN PANEL
-================================================================================
-
-14.1 Access
-  - URL: /dashboard/admin
-  - Visible in sidebar only if user.email === '09santos.felipe@gmail.com'
-  - All admin API endpoints protected by adminMiddleware
-
-14.2 Features
-  - Live clock (Brazil timezone)
-  - Stats cards: total users, active users, users without plan
-  - Bar chart: user distribution by plan (mensal/anual/nenhum)
-  - Users table: name, email, plan, status, expiry, clones, registration date
-  - Action buttons per row: "Mensal", "Anual", "Remover" — instant plan change
-  - "Atualizar" button to refresh user list
-  - Link to webhook debug endpoint
-
-14.3 API
-  GET  /api/admin/users          → { users: [...] }
-  PUT  /api/admin/users/:id/plan → { plan: 'mensal'|'anual'|'nenhum' }
-
-================================================================================
-15. SECURITY CONSIDERATIONS
-================================================================================
-
-  - Passwords hashed with bcryptjs (10 rounds)
-  - JWT tokens expire: access 7d, refresh 30d
-  - Rate limiting: 20 req/15min on auth routes, 200 req/min on API
-  - CORS restricted to FRONTEND_URL in production
-  - SQL injection prevented via parameterized queries ($1, $2, ...)
-  - Admin routes have separate middleware with hardcoded admin email
-  - Kirvano API key stored in env var, not in code
-  - .env and teste.txt in .gitignore (never committed)
-  - Webhook returns 200 on all events to prevent Kirvano from retrying malformed payloads
-  - No user input is eval'd or used in file paths without validation
-
-================================================================================
-16. KNOWN LIMITATIONS & TODOS
-================================================================================
-
-  - Webhook URL must be manually configured in Kirvano dashboard per checkout link
-  - No email/password recovery flow
-  - No custom domain configured (using Netlify/Render default domains)
-  - FB_TOKEN expires periodically and must be refreshed manually
-  - Deep clone stores files on ephemeral /tmp on Render (lost on restart)
-  - No database backup strategy (Render PostgreSQL free tier has no automated backups)
-  - Cloaker script is client-side only; server-side cloaking not implemented
-  - No PIX/boleto recurring payment support (Kirvano handles this, not implemented
-    in the API integration)
-  - Admin email is hardcoded; should be moved to env var for flexibility
-
-================================================================================
-END OF PRD
-================================================================================
+PROMPT TÉCNICO: IMPLEMENTAÇÃO DE QUEBRA DE CLOACKER E CAMUFLAGEM DE CRIATIVOS
+1. OBJETIVO GERAL
+Adicionar duas novas ferramentas no módulo Cloacker do MetaSpy:
+
+Quebra de Cloacker (Cloak Detector): ferramenta que analisa uma URL enviando requisições com User-Agents distintos (humano x robô) e exibe as diferenças nas respostas (código HTTP, cabeçalhos, redirecionamentos e corpo HTML), indicando se há cloaking ativo.
+
+Camuflagem de Criativos (Creative Camouflage): ferramenta que gera scripts/HTML prontos para ofuscar textos, imagens e CTAs em uma landing page, impedindo que os robôs de revisão do Meta identifiquem o conteúdo publicitário, enquanto usuários reais veem o conteúdo normal.
+
+Ambas as funcionalidades devem ser liberadas exclusivamente para usuários com plano anual.
+
+2. BACKEND (NODE.JS + EXPRESS)
+2.1. Novo endpoint: /api/cloaker/detect
+Arquivo: server/index.js
+
+Descrição: Recebe uma URL, faz duas requisições paralelas (ou sequenciais) com User-Agent de humano e de robô. Retorna um objeto comparativo.
+
+Script necessário:
+
+javascript
+// server/index.js — adicionar após as outras rotas do cloaker
+
+// Lista de User-Agents para teste
+const USER_AGENTS = {
+  humano: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  bot_google: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+  bot_facebook: 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+};
+
+// Rota de detecção
+app.post('/api/cloaker/detect', authMiddleware, async (req, res) => {
+  try {
+    // 1. Verifica plano anual
+    const features = PLAN_FEATURES[req.user.plan];
+    if (!features?.cloaker) {
+      return res.status(403).json({ erro: 'Funcionalidade disponível apenas no plano Anual.' });
+    }
+
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ erro: 'URL é obrigatória.' });
+    }
+
+    // 2. Executa requisições para cada User-Agent
+    const resultados = {};
+    for (const [tipo, ua] of Object.entries(USER_AGENTS)) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const resposta = await fetch(url, {
+          headers: { 'User-Agent': ua },
+          redirect: 'manual',          // captura redirecionamentos
+          signal: controller.signal
+        });
+
+        clearTimeout(timeout);
+
+        // Lê o corpo (limitado a 50kb para não sobrecarregar)
+        const corpoBuffer = await resposta.arrayBuffer();
+        const corpo = Buffer.from(corpoBuffer).toString('utf-8').slice(0, 50000);
+
+        resultados[tipo] = {
+          status: resposta.status,
+          statusText: resposta.statusText,
+          urlFinal: resposta.url,
+          headers: Object.fromEntries(resposta.headers.entries()),
+          corpo: corpo,
+          tamanho: corpo.length
+        };
+      } catch (erro) {
+        clearTimeout(timeout);
+        resultados[tipo] = {
+          erro: erro.message || 'Falha na requisição'
+        };
+      }
+    }
+
+    // 3. Compara os resultados para identificar cloaking
+    const temCloaking = (
+      resultados.humano?.status !== resultados.bot_google?.status ||
+      resultados.humano?.urlFinal !== resultados.bot_google?.urlFinal ||
+      resultados.humano?.corpo?.length !== resultados.bot_google?.corpo?.length
+    );
+
+    // 4. Salva histórico no banco (opcional, mas recomendado)
+    await run(
+      `INSERT INTO cloak_detections (id, user_id, url, tem_cloaking, resultado_json, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        crypto.randomUUID(),
+        req.user.id,
+        url,
+        temCloaking,
+        JSON.stringify(resultados),
+        new Date().toISOString()
+      ]
+    );
+
+    res.json({
+      url,
+      temCloaking,
+      comparacao: resultados,
+      resumo: temCloaking
+        ? '⚠️ Cloaking detectado! A página entrega conteúdo diferente para robôs e humanos.'
+        : '✅ Nenhum cloaking significativo detectado.'
+    });
+
+  } catch (erro) {
+    console.error('Erro no detect cloaker:', erro);
+    res.status(500).json({ erro: 'Erro interno ao analisar a URL.' });
+  }
+});
+2.2. Novo endpoint: /api/cloaker/camouflage
+Arquivo: server/index.js
+
+Descrição: Gera um script de camuflagem personalizado com base nos parâmetros do usuário (texto a esconder, URL de destino, palavras-chave).
+
+Script necessário:
+
+javascript
+// server/index.js — adicionar após a rota de detect
+
+app.post('/api/cloaker/camouflage', authMiddleware, async (req, res) => {
+  try {
+    const features = PLAN_FEATURES[req.user.plan];
+    if (!features?.cloaker) {
+      return res.status(403).json({ erro: 'Disponível apenas no plano Anual.' });
+    }
+
+    const { texto_original, url_destino, palavras_sensiveis } = req.body;
+    if (!texto_original || !url_destino) {
+      return res.status(400).json({ erro: 'Texto original e URL destino são obrigatórios.' });
+    }
+
+    // Estratégias de camuflagem:
+    // 1. Ofuscação de texto com CSS (display:none para bots, visível para humanos)
+    // 2. Substituição de caracteres por Unicode similares (ex: "A" por "А" cirílico)
+    // 3. Embaralhamento de tags HTML com data-attributes
+    // 4. Link duplo: redirecionamento via JS para humanos, link estático para bots
+
+    const scriptCamuflado = `
+<!-- SCRIPT DE CAMUFLAGEM DE CRIATIVOS - METASPY -->
+<script>
+(function() {
+  const isBot = /bot|googlebot|facebookexternalhit|headless/i.test(navigator.userAgent);
+  const textoOriginal = ${JSON.stringify(texto_original)};
+  const urlDestino = ${JSON.stringify(url_destino)};
+
+  if (isBot) {
+    // Para robôs: exibe texto genérico ou substitui palavras sensíveis
+    const palavras = ${JSON.stringify(palavras_sensiveis || [])};
+    let textoMascarado = textoOriginal;
+    palavras.forEach(palavra => {
+      const regex = new RegExp(palavra, 'gi');
+      textoMascarado = textoMascarado.replace(regex, '●●●●●');
+    });
+    document.body.innerHTML = document.body.innerHTML.replace(textoOriginal, textoMascarado);
+    
+    // Remove links de rastreio
+    document.querySelectorAll('a[href]').forEach(el => {
+      if (el.href.includes(urlDestino)) {
+        el.href = '#';
+        el.style.textDecoration = 'none';
+        el.style.color = 'inherit';
+      }
+    });
+  } else {
+    // Para humanos: garante que o conteúdo original seja exibido
+    // (já vem no HTML, mas garante a visibilidade)
+    document.querySelectorAll('.camuflado').forEach(el => el.style.display = 'block');
+  }
+})();
+</script>
+<!-- FIM DO SCRIPT -->
+    `;
+
+    // Salva no banco (opcional)
+    const id = crypto.randomUUID();
+    await run(
+      `INSERT INTO camouflage_scripts (id, user_id, url_destino, script_code, created_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, req.user.id, url_destino, scriptCamuflado, new Date().toISOString()]
+    );
+
+    res.json({
+      id,
+      script: scriptCamuflado,
+      instrucoes: 'Copie e cole este script no <head> da sua landing page. O script detectará automaticamente se o visitante é humano ou robô.'
+    });
+
+  } catch (erro) {
+    console.error('Erro ao gerar camuflagem:', erro);
+    res.status(500).json({ erro: 'Erro ao gerar script de camuflagem.' });
+  }
+});
+2.3. Atualização do esquema do banco
+Arquivo: server/db.js (dentro da função initSchema)
+
+Adicionar as novas tabelas para histórico:
+
+javascript
+// server/db.js — dentro de initSchema()
+
+await run(`
+  CREATE TABLE IF NOT EXISTS cloak_detections (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    tem_cloaking BOOLEAN NOT NULL,
+    resultado_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+`);
+
+await run(`
+  CREATE TABLE IF NOT EXISTS camouflage_scripts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    url_destino TEXT NOT NULL,
+    script_code TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+`);
+3. FRONTEND (REACT + TYPESCRIPT)
+3.1. Novo componente: CloakDetector.tsx
+Arquivo: src/pages/dashboard/CloakDetector.tsx
+
+Descrição: Página com campo de URL, botão "Analisar" e exibição dos resultados (comparação lado a lado).
+
+Script necessário:
+
+tsx
+// src/pages/dashboard/CloakDetector.tsx
+import React, { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+
+const CloakDetector: React.FC = () => {
+  const { fetchWithAuth } = useAuth();
+  const [url, setUrl] = useState('');
+  const [carregando, setCarregando] = useState(false);
+  const [resultado, setResultado] = useState<any>(null);
+  const [erro, setErro] = useState('');
+
+  const handleDetectar = async () => {
+    if (!url) return;
+    setCarregando(true);
+    setErro('');
+    try {
+      const res = await fetchWithAuth('/api/cloaker/detect', {
+        method: 'POST',
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'Falha na análise');
+      setResultado(data);
+    } catch (err: any) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  return (
+    <div className="cloak-detector">
+      <h2>🕵️ Quebra de Cloacker</h2>
+      <p>Descubra se uma página está usando cloaking. Comparamos a resposta para humanos e robôs.</p>
+
+      <div className="input-group">
+        <input
+          type="url"
+          placeholder="https://exemplo.com/pagina"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <button onClick={handleDetectar} disabled={carregando}>
+          {carregando ? 'Analisando...' : '🔍 Analisar'}
+        </button>
+      </div>
+
+      {erro && <div className="erro">{erro}</div>}
+
+      {resultado && (
+        <div className="resultado">
+          <div className="resumo" style={{ background: resultado.temCloaking ? '#ffdddd' : '#ddffdd' }}>
+            {resultado.resumo}
+          </div>
+
+          <div className="comparacao-grid">
+            <div className="coluna humano">
+              <h3>👤 Visão Humana</h3>
+              <pre>{JSON.stringify(resultado.comparacao.humano, null, 2)}</pre>
+            </div>
+            <div className="coluna bot">
+              <h3>🤖 Visão do Robô (Googlebot)</h3>
+              <pre>{JSON.stringify(resultado.comparacao.bot_google, null, 2)}</pre>
+            </div>
+          </div>
+
+          <details>
+            <summary>📄 Ver corpo HTML completo (humano)</summary>
+            <div className="html-preview" dangerouslySetInnerHTML={{ __html: resultado.comparacao.humano?.corpo || 'Sem conteúdo' }} />
+          </details>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default CloakDetector;
+3.2. Novo componente: CreativeCamouflage.tsx
+Arquivo: src/pages/dashboard/CreativeCamouflage.tsx
+
+Descrição: Formulário para gerar script de camuflagem com campos: texto original, URL destino e palavras sensíveis (separadas por vírgula).
+
+Script necessário:
+
+tsx
+// src/pages/dashboard/CreativeCamouflage.tsx
+import React, { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+
+const CreativeCamouflage: React.FC = () => {
+  const { fetchWithAuth } = useAuth();
+  const [textoOriginal, setTextoOriginal] = useState('');
+  const [urlDestino, setUrlDestino] = useState('');
+  const [palavrasSensiveis, setPalavrasSensiveis] = useState('');
+  const [scriptGerado, setScriptGerado] = useState('');
+  const [copiado, setCopiado] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const handleGerar = async () => {
+    if (!textoOriginal || !urlDestino) return;
+    setCarregando(true);
+    setErro('');
+    try {
+      const res = await fetchWithAuth('/api/cloaker/camouflage', {
+        method: 'POST',
+        body: JSON.stringify({
+          texto_original: textoOriginal,
+          url_destino: urlDestino,
+          palavras_sensiveis: palavrasSensiveis.split(',').map(p => p.trim()).filter(Boolean)
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'Falha ao gerar');
+      setScriptGerado(data.script);
+    } catch (err: any) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const handleCopiar = () => {
+    navigator.clipboard.writeText(scriptGerado);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 3000);
+  };
+
+  return (
+    <div className="creative-camouflage">
+      <h2>🎭 Camuflagem de Criativos</h2>
+      <p>Gere um script que oculta textos e links sensíveis dos robôs de revisão, mantendo-os visíveis para humanos.</p>
+
+      <div className="form-camouflage">
+        <label>
+          Texto original (o que será exibido para humanos)
+          <input
+            type="text"
+            value={textoOriginal}
+            onChange={(e) => setTextoOriginal(e.target.value)}
+            placeholder="Ex: Compre agora com 50% de desconto"
+          />
+        </label>
+
+        <label>
+          URL de destino (link da oferta)
+          <input
+            type="url"
+            value={urlDestino}
+            onChange={(e) => setUrlDestino(e.target.value)}
+            placeholder="https://exemplo.com/oferta"
+          />
+        </label>
+
+        <label>
+          Palavras sensíveis (separadas por vírgula)
+          <input
+            type="text"
+            value={palavrasSensiveis}
+            onChange={(e) => setPalavrasSensiveis(e.target.value)}
+            placeholder="comprar, desconto, oferta, grátis"
+          />
+          <small>Essas palavras serão substituídas por "●●●●●" para robôs.</small>
+        </label>
+
+        <button onClick={handleGerar} disabled={carregando}>
+          {carregando ? 'Gerando...' : '⚙️ Gerar Script de Camuflagem'}
+        </button>
+      </div>
+
+      {erro && <div className="erro">{erro}</div>}
+
+      {scriptGerado && (
+        <div className="script-resultado">
+          <h3>✅ Script gerado com sucesso!</h3>
+          <div className="script-box">
+            <pre>{scriptGerado}</pre>
+          </div>
+          <button onClick={handleCopiar}>
+            {copiado ? '✅ Copiado!' : '📋 Copiar script'}
+          </button>
+          <p className="instrucao">
+            💡 Cole este script dentro da tag <code>&lt;head&gt;</code> da sua página.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default CreativeCamouflage;
+3.3. Atualização do roteador (App.tsx)
+Adicionar as novas rotas dentro do <Dashboard />:
+
+tsx
+// src/App.tsx — dentro do elemento <Dashboard>
+<Route path="cloacker/detector" element={<CloakDetector />} />
+<Route path="cloacker/camouflage" element={<CreativeCamouflage />} />
+3.4. Atualização do menu lateral (Dashboard.tsx)
+Adicionar os novos itens no submenu do Cloacker (se houver) ou criar um dropdown. Exemplo:
+
+tsx
+// src/pages/Dashboard.tsx — dentro da navegação
+<li>
+  <span>🕵️ Cloacker</span>
+  <ul>
+    <li><Link to="/dashboard/cloacker">Gerar Script</Link></li>
+    <li><Link to="/dashboard/cloacker/detector">Quebra de Cloacker</Link></li>
+    <li><Link to="/dashboard/cloacker/camouflage">Camuflagem de Criativos</Link></li>
+  </ul>
+</li>
+4. CONSIDERAÇÕES FINAIS
+Permissões: Ambas as rotas backend verificam features.cloaker, garantindo que apenas planos anual tenham acesso.
+
+Histórico: As tabelas cloak_detections e camouflage_scripts armazenam o histórico do usuário, permitindo futuramente listar as análises e scripts gerados.
+
+UX: Os componentes exibem feedbacks claros (carregando, erro, sucesso) e os resultados são apresentados de forma comparativa.
+
+Segurança: O corpo HTML retornado é exibido com dangerouslySetInnerHTML apenas para visualização; em produção, recomenda-se sanitizar (ex: DOMPurify) para evitar XSS.
+
+Este prompt fornece toda a implementação necessária, em português, com os scripts essenciais e alinhada à sua arquitetura existente.

@@ -56,6 +56,21 @@ export async function initSchema() {
       script_code TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS cloak_detections (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      url TEXT NOT NULL,
+      tem_cloaking BOOLEAN NOT NULL,
+      resultado_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS camouflage_scripts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      url_destino TEXT NOT NULL,
+      script_code TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `)
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan TEXT`).catch(() => {})
 }
