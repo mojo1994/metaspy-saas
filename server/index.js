@@ -1029,40 +1029,48 @@ app.delete('/api/pages/:id', authMiddleware, async (req, res) => {
   }
 })
 
-// Upload zip page
-app.post('/api/pages/upload', authMiddleware, uploadPage.single('file'), async (req, res) => {
+// Upload zip or folder page
+app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'Arquivo ZIP obrigatorio.' })
-    const zip = new AdmZip(req.file.buffer)
-    const entries = zip.getEntries()
-    const hasIndex = entries.some(e => e.entryName === 'index.html' || e.entryName.endsWith('/index.html'))
-    if (!hasIndex) return res.status(400).json({ error: 'O ZIP deve conter um arquivo index.html na raiz.' })
+    const files = req.files
+    if (!files || files.length === 0) return res.status(400).json({ error: 'Arquivo(s) obrigatorio(s).' })
 
-    const title = req.body.title || req.file.originalname.replace(/\.zip$/i, '') || 'Pagina hospedada'
-    const id = randomUUID()
-    const baseSlug = slugify(title)
-    let slug = baseSlug
-    let exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
-    let counter = 1
-    while (exists) {
-      slug = `${baseSlug}-${counter}`
-      exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
-      counter++
+    // Single zip file
+    if (files.length === 1 && files[0].originalname.endsWith('.zip')) {
+      const zip = new AdmZip(files[0].buffer)
+      const entries = zip.getEntries()
+      const hasIndex = entries.some(e => e.entryName === 'index.html' || e.entryName.endsWith('/index.html'))
+      if (!hasIndex) return res.status(400).json({ error: 'O ZIP deve conter um arquivo index.html na raiz.' })
+
+      const title = req.body.title || files[0].originalname.replace(/\.zip$/i, '') || 'Pagina hospedada'
+      const { id, slug } = await createPageRecord(req.user.id, title)
+
+      const pageDir = join(PAGES_DIR, slug)
+      mkdirSync(pageDir, { recursive: true })
+      for (const entry of entries) {
+        if (entry.isDirectory) continue
+        const filePath = join(pageDir, entry.entryName)
+        mkdirSync(dirname(filePath), { recursive: true })
+        writeFileSync(filePath, entry.getData())
+      }
+
+      return res.status(201).json({ id, slug, title, url: `https://centralspyads.netlify.app/p/${slug}` })
     }
+
+    // Folder upload (multiple files with relative paths as originalname)
+    const hasIndex = files.some(f => f.originalname === 'index.html' || f.originalname.endsWith('/index.html'))
+    if (!hasIndex) return res.status(400).json({ error: 'A pasta deve conter um arquivo index.html.' })
+
+    const title = req.body.title || files.find(f => f.originalname === 'index.html')?.originalname?.replace('/index.html', '') || 'Pagina hospedada'
+    const { id, slug } = await createPageRecord(req.user.id, title)
 
     const pageDir = join(PAGES_DIR, slug)
     mkdirSync(pageDir, { recursive: true })
-
-    for (const entry of entries) {
-      if (entry.isDirectory) continue
-      const filePath = join(pageDir, entry.entryName)
+    for (const file of files) {
+      const filePath = join(pageDir, file.originalname)
       mkdirSync(dirname(filePath), { recursive: true })
-      writeFileSync(filePath, entry.getData())
+      writeFileSync(filePath, file.buffer)
     }
-
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-    await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      [id, req.user.id, slug, title, '', 'hosted', 1, now, now])
 
     res.status(201).json({ id, slug, title, url: `https://centralspyads.netlify.app/p/${slug}` })
   } catch (err) {
@@ -1070,6 +1078,23 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.single('file'), async (
     res.status(500).json({ error: 'Erro ao fazer upload da pagina.' })
   }
 })
+
+async function createPageRecord(userId, title) {
+  const id = randomUUID()
+  const baseSlug = slugify(title)
+  let slug = baseSlug
+  let exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+  let counter = 1
+  while (exists) {
+    slug = `${baseSlug}-${counter}`
+    exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+    counter++
+  }
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+  await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+    [id, userId, slug, title, '', 'hosted', 1, now, now])
+  return { id, slug }
+}
 
 // Public routes: serve page by slug (no auth)
 app.get('/api/page/:slug/:path(*)', async (req, res) => {

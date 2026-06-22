@@ -2,11 +2,40 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
+function getFilesFromEntry(entry: FileSystemEntry, path = ''): Promise<{ file: File; path: string }[]> {
+  return new Promise(resolve => {
+    if (entry.isFile) {
+      ;(entry as FileSystemFileEntry).file(file => {
+        const name = file.name
+        resolve(path ? [{ file, path: path + '/' + name }] : [{ file, path: name }])
+      })
+    } else if (entry.isDirectory) {
+      const dirReader = (entry as FileSystemDirectoryEntry).createReader()
+      const all: FileSystemEntry[] = []
+      const readBatch = () => {
+        dirReader.readEntries(entries => {
+          if (entries.length === 0) {
+            Promise.all(all.map(e => getFilesFromEntry(e, path ? path + '/' + entry.name : entry.name)))
+              .then(results => resolve(results.flat()))
+          } else {
+            all.push(...entries)
+            readBatch()
+          }
+        })
+      }
+      readBatch()
+    } else {
+      resolve([])
+    }
+  })
+}
+
 export default function HostPage() {
   const { fetchWithAuth } = useAuth()
   const navigate = useNavigate()
   const dropRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const zipInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -19,11 +48,33 @@ export default function HostPage() {
     if (!el) return
     const onDragOver = (e: DragEvent) => { e.preventDefault(); setDragging(true) }
     const onDragLeave = () => setDragging(false)
-    const onDrop = (e: DragEvent) => {
+    const onDrop = async (e: DragEvent) => {
       e.preventDefault()
       setDragging(false)
-      const files = e.dataTransfer?.files
-      if (files?.length) handleFiles(files)
+      setErro('')
+      const items = e.dataTransfer?.items
+      if (!items || items.length === 0) return
+
+      const entries: FileSystemEntry[] = []
+      for (let i = 0; i < items.length; i++) {
+        const entry = items[i].webkitGetAsEntry()
+        if (entry) entries.push(entry)
+      }
+
+      const hasDir = entries.some(e => e.isDirectory)
+      if (hasDir) {
+        const all = await Promise.all(entries.map(e => getFilesFromEntry(e)))
+        const flat = all.flat()
+        if (flat.length === 0) { setErro('Nenhum arquivo encontrado na pasta.'); return }
+        if (!flat.some(f => f.path === 'index.html')) { setErro('A pasta deve conter um arquivo index.html na raiz.'); return }
+        uploadFolder(flat)
+      } else {
+        const file = items[0].getAsFile()
+        if (!file) return
+        if (!file.name.endsWith('.zip')) { setErro('Apenas arquivos .zip sao aceitos.'); return }
+        if (file.size > 200 * 1024 * 1024) { setErro('Arquivo muito grande. Maximo: 200MB.'); return }
+        uploadZip(file)
+      }
     }
     el.addEventListener('dragover', onDragOver)
     el.addEventListener('dragleave', onDragLeave)
@@ -35,32 +86,64 @@ export default function HostPage() {
     }
   }, [])
 
-  function handleFiles(files: FileList) {
+  function handleZipSelect(files: FileList) {
     const file = files[0]
     if (!file) return
     if (!file.name.endsWith('.zip')) { setErro('Apenas arquivos .zip sao aceitos.'); return }
     if (file.size > 200 * 1024 * 1024) { setErro('Arquivo muito grande. Maximo: 200MB.'); return }
     setErro('')
-    uploadFile(file)
+    uploadZip(file)
   }
 
-  async function uploadFile(file: File) {
+  function handleFolderSelect(files: FileList) {
+    if (!files || files.length === 0) return
+    const entries: { file: File; path: string }[] = []
+    let rootName = ''
+    for (const f of files) {
+      rootName = f.webkitRelativePath.split('/')[0]
+      break
+    }
+    for (const f of files) {
+      const parts = f.webkitRelativePath.split('/')
+      parts.shift()
+      entries.push({ file: f, path: parts.join('/') })
+    }
+    if (!entries.some(e => e.path === 'index.html')) { setErro('A pasta deve conter um arquivo index.html na raiz.'); return }
+    uploadFolder(entries)
+  }
+
+  async function uploadZip(file: File) {
     setUploading(true)
     setResult(null)
     setProgress('Enviando arquivo...')
     const form = new FormData()
-    form.append('file', file)
+    form.append('files', file)
     form.append('title', file.name.replace(/\.zip$/i, ''))
-
     try {
       const res = await fetchWithAuth('/api/pages/upload', { method: 'POST', body: form })
       const data = await res.json()
       if (!res.ok) { setErro(data.error || 'Erro no upload.'); setUploading(false); return }
       setResult(data)
-      setProgress('')
-    } catch {
-      setErro('Erro de conexao com o servidor.')
+    } catch { setErro('Erro de conexao com o servidor.') }
+    setUploading(false)
+  }
+
+  async function uploadFolder(files: { file: File; path: string }[]) {
+    setUploading(true)
+    setResult(null)
+    setProgress('Enviando pasta...')
+    const form = new FormData()
+    for (const { file, path } of files) {
+      form.append('files', file, path)
     }
+    const title = files.find(f => f.path === 'index.html')?.file.name?.replace('/index.html', '') || 'Pagina hospedada'
+    form.append('title', title)
+    try {
+      const res = await fetchWithAuth('/api/pages/upload', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) { setErro(data.error || 'Erro no upload.'); setUploading(false); return }
+      setResult(data)
+    } catch { setErro('Erro de conexao com o servidor.') }
     setUploading(false)
   }
 
@@ -82,7 +165,6 @@ export default function HostPage() {
       {!result ? (
         <div
           ref={dropRef}
-          onClick={() => inputRef.current?.click()}
           style={{
             border: `2px dashed ${dragging ? 'var(--purple-400)' : 'var(--border)'}`,
             borderRadius: 'var(--radius-md)',
@@ -94,14 +176,22 @@ export default function HostPage() {
             marginTop: 20,
           }}
         >
-          <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.6 }}>📦</div>
           <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
-            {uploading ? progress : dragging ? 'Solte o arquivo aqui' : 'Arraste seu ZIP ou clique para selecionar'}
+            {uploading ? progress : dragging ? 'Solte a pasta aqui' : 'Arraste sua pasta ou arquivo .zip'}
           </p>
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            A pasta deve conter um <strong>index.html</strong> e seus assets (CSS, JS, imagens)
+            Deve conter um <strong>index.html</strong> e seus assets (CSS, JS, imagens)
           </p>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Maximo: 200MB</p>
+
+          <div style={{ marginTop: 20, display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click() }} style={{ fontSize: 12 }}>
+              Selecionar Pasta
+            </button>
+            <button className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); zipInputRef.current?.click() }} style={{ fontSize: 12 }}>
+              Selecionar .zip
+            </button>
+          </div>
 
           {uploading && (
             <div style={{
@@ -123,11 +213,20 @@ export default function HostPage() {
           )}
 
           <input
-            ref={inputRef}
+            ref={zipInputRef}
             type="file"
             accept=".zip"
             style={{ display: 'none' }}
-            onChange={e => e.target.files?.length && handleFiles(e.target.files)}
+            onChange={e => e.target.files?.length && handleZipSelect(e.target.files)}
+          />
+          <input
+            ref={folderInputRef}
+            type="file"
+            // @ts-ignore
+            webkitdirectory=""
+            multiple
+            style={{ display: 'none' }}
+            onChange={e => e.target.files?.length && handleFolderSelect(e.target.files)}
           />
         </div>
       ) : (
@@ -185,8 +284,7 @@ export default function HostPage() {
           <li>Crie sua pagina de vendas ou quiz em qualquer ferramenta</li>
           <li>Exporte os arquivos (HTML, CSS, JS, imagens) em uma pasta</li>
           <li>Certifique-se de que o arquivo principal se chama <strong style={{ color: 'var(--text-primary)' }}>index.html</strong></li>
-          <li>Compacte a pasta em um arquivo <strong style={{ color: 'var(--text-primary)' }}>.zip</strong></li>
-          <li>Arraste o ZIP aqui ou clique para fazer upload</li>
+          <li>Arraste a pasta aqui, clique em <strong style={{ color: 'var(--text-primary)' }}>Selecionar Pasta</strong> ou envie um <strong style={{ color: 'var(--text-primary)' }}>.zip</strong></li>
         </ol>
       </div>
     </div>

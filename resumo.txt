@@ -1,0 +1,128 @@
+# MetaSpy SaaS - Resumo do Projeto
+
+## Stack
+- **Frontend**: React + TypeScript + Vite, hospedado no Netlify (centralspyads.netlify.app)
+- **Backend**: Node.js + Express (ESM), hospedado no Render (metaspy-saas.onrender.com)
+- **Banco**: PostgreSQL (Render)
+- **Email**: Maileroo (free tier, 3000/mês, domínio compartilhado: 9f92bbda64b9ecca.maileroo.org)
+- **Pagamentos**: Kirvano webhooks
+- **GitHub**: mojo1994/metaspy-saas (main auto-deploy)
+
+## URLs Importantes
+- Frontend: https://centralspyads.netlify.app
+- Backend API: https://metaspy-saas.onrender.com
+- Pages hospedadas: https://centralspyads.netlify.app/p/{slug}
+
+## Estrutura
+- `/server/index.js` → todas as rotas Express (auth, email, subscription, pages, public hosting, camouflage)
+- `/server/email.js` → templates HTML + envio Maileroo
+- `/server/db.js` → pool PostgreSQL + schema init
+- `/server/package.json` → dependências Node
+- `/src/` → frontend React (páginas, componentes, contexto)
+- `/netlify.toml` → redirects: `/api/*` e `/p/*` → Render
+
+## O que já foi implementado
+
+### 1. Autenticação
+- Signup com verificação de email (código de 6 dígitos via Maileroo)
+- Login com JWT
+- Recuperação de senha (email com link mágico + token JWT)
+- Middleware `authMiddleware` que decodifica JWT e anexa `req.user`
+
+### 2. Planos e Pagamentos (Kirvano)
+- Tabela `users` com `plano` (nenhum/mensal/anual), `plano_expira` (data), `email_verified`
+- Checkout: `POST /api/checkout` gera link Kirvano + salva `pending_checkout` com trigger de 15min
+- Webhook `POST /api/kirvano-webhook`:
+  - `checkout.expired` → limpa pending_checkout
+  - `payment.approved` / `subscription.approved` → ativa plano, salva comprovante, envia **email de confirmação**
+  - Valida IP (144.22.128.0/17) + `x-kirvano-signature` HMAC-SHA256
+- Comprovantes salvos em `comprovantes/` no Render
+
+### 3. Email (Maileroo)
+- Templates: verificação, recuperação de senha, confirmação de compra, pending checkout
+- Todos templates incluem: "⚠ Não encontrou? Verifique sua caixa de spam."
+- Banner de spam warning no frontend: Signup, ForgotPassword, Dashboard
+- Endpoint `POST /api/send-email` para disparos programáticos
+
+### 4. Páginas / Hospedagem
+- **Paginas** (`DashboardPages.tsx` + `PageEditor.tsx`): criar/editar HTML puro com textarea + preview ao vivo
+- **Hospedar** (`HostPage.tsx`): upload de pasta `.zip` com arrastar-e-soltar (200MB, requer `index.html`)
+- Tabela `pages` (id, user_id, slug, title, html, type, published, timestamps)
+- Servidas em `centralspyads.netlify.app/p/{slug}` via redirect do Netlify + Render
+- Assets servidos com MIME type correto
+- `type='hosted'` para páginas com arquivos extraídos em `/tmp/metaspy/pages/{slug}/`
+- `type='page'` para páginas com HTML colado no banco
+
+### 5. Ferramentas
+- Metadata Cleaner (remover metadados de fotos)
+- Cloacker Detector e Camuflagem
+- Page Vault Tool
+- MetaSpy Tool (gerador de pixel)
+
+### 6. UI/UX
+- Sidebar: links organizados, "Remover Metadados", "Paginas", "Hospedar"
+- DashboardHome: somente saudação + "Acesso rápido" (sem stats cards)
+- Sessão expira → login, mas dashboard público ainda acessível
+
+### 7. Infra
+- Render: `ssl: { rejectUnauthorized: false }` na conexão PG, `app.set('trust proxy', 1)` para rate limiter
+- Netlify redirects: `/api/*` e `/p/*` → Render
+- Render free tier dorme após 15min (cold start ~30-60s)
+
+## Schema do Banco
+```sql
+CREATE TABLE users (
+  id TEXT PRIMARY KEY, nome TEXT, email TEXT UNIQUE, senha TEXT,
+  plano TEXT DEFAULT 'nenhum', plano_expira TIMESTAMP,
+  email_verified INTEGER DEFAULT 0, created_at TIMESTAMP, updated_at TIMESTAMP
+);
+CREATE TABLE email_codes (
+  id SERIAL PRIMARY KEY, email TEXT, code TEXT, type TEXT, expires_at TIMESTAMP
+);
+CREATE TABLE pages (
+  id TEXT PRIMARY KEY, user_id TEXT, slug TEXT, title TEXT, html TEXT,
+  type TEXT DEFAULT 'page', published INTEGER DEFAULT 1,
+  created_at TIMESTAMP, updated_at TIMESTAMP
+);
+```
+
+## Variáveis de Ambiente (Render)
+- `DATABASE_URL` (PostgreSQL)
+- `JWT_SECRET`
+- `MAILEROO_API_KEY`
+- `MAILEROO_FROM` (9f92bbda64b9ecca.maileroo.org)
+- `FRONTEND_URL` (https://centralspyads.netlify.app)
+- `KIRVANO_TOKEN` + `KIRVANO_SECRET`
+
+## O que falta / próximos passos
+### Pendências
+- [ ] Testar upload zip → assets (CSS/JS/imagens) carregam corretamente
+- [ ] Verificar se emails Maileroo caem na caixa de entrada (domínio compartilhado pode ir pra spam)
+- [ ] Verificar domínio `metaspy.com` no Maileroo para custom sender
+
+### Melhorias desejadas
+- [ ] Quiz builder (ferramenta de quiz)
+- [ ] Upload de pasta via `webkitdirectory` como alternativa ao ZIP
+- [ ] Persistência de arquivos das páginas (fora do `/tmp/`)
+- [ ] Dashboard admin com listagem de usuários
+- [ ] Custom domain nas páginas hospedadas
+
+### Manutenção
+- Render reinicia a cada deploy → arquivos em `/tmp/` são perdidos (aceitável para MVP)
+- Lembrar de setar env vars no painel do Render ao adicionar novas
+- Netlify deploy automático no push para main
+- Kirvano webhook precisa estar configurado no painel Kirvano apontando para `https://metaspy-saas.onrender.com/api/kirvano-webhook`
+
+## Arquivos Relevantes
+- `server/index.js` (rotas principais)
+- `server/email.js` (templates de email)
+- `server/db.js` (banco + schema)
+- `server/package.json` (dependências)
+- `src/pages/DashboardHome.tsx` (dashboard)
+- `src/pages/Dashboard.tsx` (sidebar + layout)
+- `src/pages/HostPage.tsx` (upload zip)
+- `src/pages/DashboardPages.tsx` (lista páginas)
+- `src/pages/PageEditor.tsx` (editor HTML)
+- `src/pages/MetadataCleaner.tsx`
+- `src/App.tsx` (rotas)
+- `netlify.toml` (redirects)
