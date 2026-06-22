@@ -42,6 +42,17 @@ export default function HostPage() {
   const [result, setResult] = useState<{ slug: string; url: string; title: string } | null>(null)
   const [erro, setErro] = useState('')
   const [progress, setProgress] = useState('')
+  const [pageSlug, setPageSlug] = useState('')
+
+  function slugify(text: string) {
+    return text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim()
+      .slice(0, 60)
+  }
 
   useEffect(() => {
     const el = dropRef.current
@@ -119,6 +130,7 @@ export default function HostPage() {
     const form = new FormData()
     form.append('files', file)
     form.append('title', file.name.replace(/\.zip$/i, ''))
+    if (pageSlug.trim()) form.append('slug', slugify(pageSlug))
     try {
       const res = await fetchWithAuth('/api/pages/upload', { method: 'POST', body: form })
       const data = await res.json()
@@ -136,8 +148,9 @@ export default function HostPage() {
     for (const { file, path } of files) {
       form.append('files', file, path)
     }
-    const title = files.find(f => f.path === 'index.html')?.file.name?.replace('/index.html', '') || 'Pagina hospedada'
+    const title = pageSlug.trim() || files.find(f => f.path === 'index.html')?.file.name?.replace('/index.html', '') || 'Pagina hospedada'
     form.append('title', title)
+    if (pageSlug.trim()) form.append('slug', slugify(pageSlug))
     try {
       const res = await fetchWithAuth('/api/pages/upload', { method: 'POST', body: form })
       const data = await res.json()
@@ -163,7 +176,41 @@ export default function HostPage() {
       {erro && <div className="auth-error">{erro}</div>}
 
       {!result ? (
-        <div
+        <>
+          <div style={{
+            marginTop: 16,
+            marginBottom: 16,
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '14px 16px',
+          }}>
+            <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+              Nome da pagina (personalize a URL)
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'var(--text-muted)' }}>
+              <span>centralspyads.netlify.app/p/</span>
+              <input
+                type="text"
+                value={pageSlug}
+                onChange={e => setPageSlug(slugify(e.target.value))}
+                placeholder="minha-pagina"
+                style={{
+                  flex: 1,
+                  padding: '6px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  minWidth: 120,
+                }}
+              />
+            </div>
+          </div>
+
+          <div
           ref={dropRef}
           style={{
             border: `2px dashed ${dragging ? 'var(--purple-400)' : 'var(--border)'}`,
@@ -229,6 +276,7 @@ export default function HostPage() {
             onChange={e => e.target.files?.length && handleFolderSelect(e.target.files)}
           />
         </div>
+        </>
       ) : (
         <div style={{
           marginTop: 20,

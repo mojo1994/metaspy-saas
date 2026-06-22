@@ -1043,7 +1043,7 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
       if (!hasIndex) return res.status(400).json({ error: 'O ZIP deve conter um arquivo index.html na raiz.' })
 
       const title = req.body.title || files[0].originalname.replace(/\.zip$/i, '') || 'Pagina hospedada'
-      const { id, slug } = await createPageRecord(req.user.id, title)
+      const { id, slug } = await createPageRecord(req.user.id, title, req.body.slug)
 
       const pageDir = join(PAGES_DIR, slug)
       mkdirSync(pageDir, { recursive: true })
@@ -1062,7 +1062,7 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
     if (!hasIndex) return res.status(400).json({ error: 'A pasta deve conter um arquivo index.html.' })
 
     const title = req.body.title || files.find(f => f.originalname === 'index.html')?.originalname?.replace('/index.html', '') || 'Pagina hospedada'
-    const { id, slug } = await createPageRecord(req.user.id, title)
+    const { id, slug } = await createPageRecord(req.user.id, title, req.body.slug)
 
     const pageDir = join(PAGES_DIR, slug)
     mkdirSync(pageDir, { recursive: true })
@@ -1074,19 +1074,27 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
 
     res.status(201).json({ id, slug, title, url: `https://centralspyads.netlify.app/p/${slug}` })
   } catch (err) {
+    if (err.message === 'slug-exists') return res.status(409).json({ error: 'Este nome de pagina ja esta em uso. Escolha outro.' })
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Arquivo muito grande. Maximo: 200MB.' })
     console.error('Erro upload pagina:', err)
     res.status(500).json({ error: 'Erro ao fazer upload da pagina.' })
   }
 })
 
-async function createPageRecord(userId, title) {
+async function createPageRecord(userId, title, customSlug) {
   const id = randomUUID()
-  const baseSlug = slugify(title)
-  let slug = baseSlug
+  let slug
+  if (customSlug) {
+    slug = slugify(customSlug)
+    const exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+    if (exists) throw new Error('slug-exists')
+  } else {
+    slug = slugify(title)
+  }
   let exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
   let counter = 1
   while (exists) {
-    slug = `${baseSlug}-${counter}`
+    slug = customSlug ? `${slug}-${counter}` : `${slugify(title)}-${counter}`
     exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
     counter++
   }
