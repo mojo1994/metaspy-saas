@@ -67,7 +67,7 @@ async function authMiddleware(req, res, next) {
   const token = authHeader.slice(7)
   try {
     const decoded = jwt.verify(token, JWT_SECRET)
-    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, created_at FROM users WHERE id = $1', [decoded.userId])
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [decoded.userId])
     if (!user) return res.status(401).json({ error: 'Usuario nao encontrado' })
     req.user = user
     next()
@@ -157,11 +157,11 @@ app.post('/api/auth/verify-signup', async (req, res) => {
     const metadata = JSON.parse(record.metadata || '{}')
     const id = randomUUID()
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-    await run('INSERT INTO users (id, name, email, password_hash, plan, subscription_status, clones_used, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [id, metadata.name, emailLower, metadata.password_hash, 'nenhum', 'inactive', 0, now])
+    await run('INSERT INTO users (id, name, email, password_hash, plan, subscription_status, email_verified, clones_used, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [id, metadata.name, emailLower, metadata.password_hash, 'nenhum', 'inactive', 1, 0, now])
     await run('UPDATE email_codes SET used = 1 WHERE id = $1', [record.id])
 
-    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, created_at FROM users WHERE id = $1', [id])
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [id])
     const accessToken = generateToken(id)
     const refreshToken = generateRefreshToken(id)
     res.json({ user, accessToken, refreshToken })
@@ -267,14 +267,18 @@ app.post('/api/auth/reset-password', async (req, res) => {
 app.post('/api/auth/send-verification', authMiddleware, async (req, res) => {
   try {
     const user = req.user
+    if (user.email_verified) return res.status(400).json({ error: 'Email ja verificado.' })
+
+    await run('UPDATE email_codes SET used = 1 WHERE user_id = $1 AND type = $2 AND used = 0', [user.id, 'verification'])
+
     const code = generateCode()
     const now = new Date()
-    const expires = new Date(now.getTime() + 15 * 60 * 1000)
+    const expires = new Date(now.getTime() + 5 * 60 * 1000)
     const id = randomUUID()
     await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [id, user.id, user.email, code, 'verification', expires.toISOString(), now.toISOString()])
 
-    await sendEmail({ to: user.email, subject: 'MetaSpy - Codigo de Confirmacao', html: verificationEmailHtml(code) })
+    await sendEmail({ to: user.email, subject: 'MetaSpy - Confirme seu Email', html: verificationEmailHtml(code) })
     res.json({ ok: true, message: 'Codigo enviado para seu email.' })
   } catch (err) {
     console.error('Erro send-verification:', err)
@@ -290,6 +294,7 @@ app.post('/api/auth/verify-code', authMiddleware, async (req, res) => {
       [req.user.id, code.toString(), 'verification', new Date().toISOString()])
     if (!record) return res.status(400).json({ error: 'Codigo invalido ou expirado.' })
     await run('UPDATE email_codes SET used = 1 WHERE id = $1', [record.id])
+    await run('UPDATE users SET email_verified = 1 WHERE id = $1', [req.user.id])
     res.json({ ok: true, message: 'Email verificado com sucesso.' })
   } catch (err) {
     console.error('Erro verify-code:', err)

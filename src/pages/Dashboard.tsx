@@ -4,10 +4,16 @@ import { useTheme } from '../contexts/ThemeContext'
 import { useEffect, useState } from 'react'
 
 export default function Dashboard() {
-  const { user, logout, isAuthenticated } = useAuth()
+  const { user, logout, isAuthenticated, fetchWithAuth, updateUser } = useAuth()
   const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+
+  const [showVerify, setShowVerify] = useState(false)
+  const [verifyCode, setVerifyCode] = useState('')
+  const [verifyMsg, setVerifyMsg] = useState('')
+  const [verifyErr, setVerifyErr] = useState('')
+  const [verifyLoading, setVerifyLoading] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login', { replace: true })
@@ -16,6 +22,37 @@ export default function Dashboard() {
   function handleLogout() {
     logout()
     navigate('/')
+  }
+
+  async function sendVerification() {
+    setVerifyErr(''); setVerifyMsg('')
+    setVerifyLoading(true)
+    try {
+      const res = await fetchWithAuth('/api/auth/send-verification', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { setVerifyErr(data.error || 'Erro'); setVerifyLoading(false); return }
+      setVerifyMsg('Codigo enviado para seu email!')
+      setShowVerify(true)
+    } catch { setVerifyErr('Erro de conexao.') }
+    setVerifyLoading(false)
+  }
+
+  async function confirmVerification() {
+    setVerifyErr(''); setVerifyMsg('')
+    if (!verifyCode || verifyCode.length !== 6) { setVerifyErr('Digite o codigo de 6 digitos.'); return }
+    setVerifyLoading(true)
+    try {
+      const res = await fetchWithAuth('/api/auth/verify-code', {
+        method: 'POST',
+        body: JSON.stringify({ code: verifyCode })
+      })
+      const data = await res.json()
+      if (!res.ok) { setVerifyErr(data.error || 'Erro'); setVerifyLoading(false); return }
+      updateUser({ email_verified: 1 })
+      setShowVerify(false)
+      setVerifyMsg('')
+    } catch { setVerifyErr('Erro de conexao.') }
+    setVerifyLoading(false)
   }
 
   const isCloackerSub = location.pathname.startsWith('/dashboard/cloacker')
@@ -124,6 +161,67 @@ export default function Dashboard() {
         </div>
       </aside>
       <main className="main-area">
+        {user && !user.email_verified && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(168,85,247,0.12), rgba(124,58,237,0.08))',
+            border: '1px solid rgba(168,85,247,0.25)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 16,
+            padding: '14px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ fontSize: 13, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16 }}>◉</span>
+              <span>
+                <strong>Conta nao confirmada.</strong>{' '}
+                {!showVerify
+                  ? 'Clique aqui para enviar um codigo de confirmacao para seu email.'
+                  : 'Digite o codigo enviado para seu email.'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {!showVerify ? (
+                <button className="btn btn-accent" onClick={sendVerification} disabled={verifyLoading} style={{ fontSize: 12, padding: '6px 14px', whiteSpace: 'nowrap' }}>
+                  {verifyLoading ? 'Enviando...' : 'Enviar Codigo'}
+                </button>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={verifyCode}
+                    onChange={e => setVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    maxLength={6}
+                    style={{
+                      width: 100,
+                      textAlign: 'center',
+                      fontSize: 18,
+                      letterSpacing: 6,
+                      fontFamily: 'monospace',
+                      padding: '6px 8px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                  <button className="btn btn-gradient" onClick={confirmVerification} disabled={verifyLoading} style={{ fontSize: 12, padding: '6px 14px', whiteSpace: 'nowrap' }}>
+                    {verifyLoading ? '...' : 'Confirmar'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => { setShowVerify(false); setVerifyCode(''); setVerifyErr(''); setVerifyMsg('') }} style={{ fontSize: 12, padding: '6px 10px' }}>
+                    Cancelar
+                  </button>
+                </>
+              )}
+            </div>
+            {verifyErr && <div style={{ width: '100%', fontSize: 12, color: 'var(--danger)' }}>{verifyErr}</div>}
+            {verifyMsg && <div style={{ width: '100%', fontSize: 12, color: 'var(--success)' }}>{verifyMsg}</div>}
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

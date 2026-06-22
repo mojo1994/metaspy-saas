@@ -8,6 +8,7 @@ interface User {
   subscription_status: string
   subscription_expiry: string | null
   clones_used: number
+  email_verified: number
 }
 
 interface AuthContextType {
@@ -64,7 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         plano: data.user.plan || 'nenhum',
         subscription_status: data.user.subscription_status || 'inactive',
         subscription_expiry: data.user.subscription_expiry || null,
-        clones_used: data.user.clones_used || 0
+        clones_used: data.user.clones_used || 0,
+        email_verified: data.user.email_verified || 0
       }
       setUser(u)
       setAccessToken(data.accessToken)
@@ -114,7 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         plano: data.user.plan || 'nenhum',
         subscription_status: data.user.subscription_status || 'inactive',
         subscription_expiry: data.user.subscription_expiry || null,
-        clones_used: data.user.clones_used || 0
+        clones_used: data.user.clones_used || 0,
+        email_verified: data.user.email_verified || 0
       }
       setUser(u)
       setAccessToken(data.accessToken)
