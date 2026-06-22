@@ -5,13 +5,12 @@ import cookieParser from 'cookie-parser'
 import { randomUUID } from 'node:crypto'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createReadStream, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
-import { readdir, stat } from 'node:fs/promises'
-import Database from 'better-sqlite3'
+import { createReadStream, existsSync, mkdirSync, readdirSync } from 'node:fs'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
 import { ZipArchive } from 'archiver'
+import { initDb, initSchema, one, query, run } from './db.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3001
@@ -22,51 +21,19 @@ const KIRVANO_WEBHOOK_SECRET = process.env.KIRVANO_WEBHOOK_SECRET || ''
 const KIRVANO_SUCCESS_URL = process.env.KIRVANO_SUCCESS_URL || 'https://metaspy.app/dashboard'
 const KIRVANO_CANCEL_URL = process.env.KIRVANO_CANCEL_URL || 'https://metaspy.app/upgrade'
 const IS_RENDER = !!process.env.RENDER || process.env.NODE_ENV === 'production'
+const DATABASE_URL = process.env.DATABASE_URL
+
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL nao definida. Configure a variavel de ambiente com a URL do PostgreSQL.')
+  process.exit(1)
+}
 
 // ─── Database ───────────────────────────────────────────────────
 const DATA_DIR = IS_RENDER ? '/tmp/metaspy' : __dirname
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
 
-const db = new Database(join(DATA_DIR, 'metaspy.db'))
-db.pragma('journal_mode = WAL')
-db.pragma('foreign_keys = ON')
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    plan TEXT NOT NULL DEFAULT 'nenhum',
-    subscription_status TEXT NOT NULL DEFAULT 'inactive',
-    subscription_id TEXT,
-    subscription_expiry TEXT,
-    clones_used INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS cloaker_scripts (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    target_url TEXT NOT NULL,
-    safe_url TEXT NOT NULL,
-    script_code TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-`)
-
-const queries = {
-  findUserByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
-  findUserById: db.prepare('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, created_at FROM users WHERE id = ?'),
-  createUser: db.prepare('INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)'),
-  updateUser: db.prepare('UPDATE users SET name = ?, email = ? WHERE id = ?'),
-  updatePassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
-  updateSubscription: db.prepare('UPDATE users SET subscription_status = ?, subscription_id = ?, subscription_expiry = ?, plan = ? WHERE id = ?'),
-  incrementClones: db.prepare('UPDATE users SET clones_used = clones_used + 1 WHERE id = ?'),
-  insertScript: db.prepare('INSERT INTO cloaker_scripts (id, user_id, target_url, safe_url, script_code) VALUES (?, ?, ?, ?, ?)'),
-  listScripts: db.prepare('SELECT id, target_url, safe_url, created_at FROM cloaker_scripts WHERE user_id = ? ORDER BY created_at DESC'),
-  findScript: db.prepare('SELECT * FROM cloaker_scripts WHERE id = ? AND user_id = ?'),
-  deleteScript: db.prepare('DELETE FROM cloaker_scripts WHERE id = ? AND user_id = ?'),
-}
+initDb(DATABASE_URL)
+await initSchema()
 
 // ─── Helpers ─────────────────────────────────────────────────────
 const CLONES_DIR = join(DATA_DIR, '..', 'clones')
@@ -91,13 +58,13 @@ function generateRefreshToken(userId) {
   return jwt.sign({ userId, type: 'refresh' }, JWT_SECRET, { expiresIn: '30d' })
 }
 
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token nao fornecido' })
   const token = authHeader.slice(7)
   try {
     const decoded = jwt.verify(token, JWT_SECRET)
-    const user = queries.findUserById.get(decoded.userId)
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, created_at FROM users WHERE id = $1', [decoded.userId])
     if (!user) return res.status(401).json({ error: 'Usuario nao encontrado' })
     req.user = user
     next()
@@ -112,7 +79,6 @@ app.use(cors({ origin: process.env.FRONTEND_URL || '*', credentials: true }))
 app.use(cookieParser())
 app.use(express.json({ limit: '10mb' }))
 
-// Rate limiting
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: process.env.NODE_ENV === 'production' ? 20 : 100, message: { error: 'Muitas tentativas. Tente novamente mais tarde.' } })
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, message: { error: 'Muitas requisicoes. Tente novamente mais tarde.' } })
 app.use('/api/auth', authLimiter)
@@ -123,14 +89,14 @@ app.post('/api/auth/signup', async (req, res) => {
   try {
     const { email, name, password } = req.body
     if (!email || !name || !password) return res.status(400).json({ error: 'Preencha todos os campos' })
-    const existing = queries.findUserByEmail.get(email.toLowerCase().trim())
+    const existing = await one('SELECT id FROM users WHERE email = $1', [email.toLowerCase().trim()])
     if (existing) return res.status(409).json({ error: 'Email ja cadastrado' })
     const hash = await bcrypt.hash(password, 10)
     const id = randomUUID()
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-    queries.createUser.run(id, name.trim(), email.toLowerCase().trim(), hash)
-    await db.prepare('UPDATE users SET plan = ?, subscription_status = ? WHERE id = ?').run('nenhum', 'inactive', id)
-    const user = queries.findUserById.get(id)
+    await run('INSERT INTO users (id, name, email, password_hash, plan, subscription_status, clones_used, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, name.trim(), email.toLowerCase().trim(), hash, 'nenhum', 'inactive', 0, now])
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, created_at FROM users WHERE id = $1', [id])
     const accessToken = generateToken(id)
     const refreshToken = generateRefreshToken(id)
     res.json({ user, accessToken, refreshToken })
@@ -143,7 +109,7 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body
     if (!email || !password) return res.status(400).json({ error: 'Preencha todos os campos' })
-    const user = queries.findUserByEmail.get(email.toLowerCase().trim())
+    const user = await one('SELECT * FROM users WHERE email = $1', [email.toLowerCase().trim()])
     if (!user) return res.status(401).json({ error: 'Credenciais invalidas' })
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) return res.status(401).json({ error: 'Credenciais invalidas' })
@@ -156,13 +122,13 @@ app.post('/api/auth/login', async (req, res) => {
   }
 })
 
-app.post('/api/auth/refresh', (req, res) => {
+app.post('/api/auth/refresh', async (req, res) => {
   const { refreshToken } = req.body
   if (!refreshToken) return res.status(401).json({ error: 'Refresh token nao fornecido' })
   try {
     const decoded = jwt.verify(refreshToken, JWT_SECRET)
     if (decoded.type !== 'refresh') return res.status(401).json({ error: 'Token invalido' })
-    const user = queries.findUserById.get(decoded.userId)
+    const user = await one('SELECT id FROM users WHERE id = $1', [decoded.userId])
     if (!user) return res.status(401).json({ error: 'Usuario nao encontrado' })
     const newAccessToken = generateToken(user.id)
     const newRefreshToken = generateRefreshToken(user.id)
@@ -189,19 +155,14 @@ app.post('/api/clone', authMiddleware, async (req, res) => {
   try {
     const { default: clonePage } = await import('./clone.js')
     const result = await clonePage(url, { fbToken: FB_TOKEN, userId: req.user.id })
-    queries.incrementClones.run(req.user.id)
+    await run('UPDATE users SET clones_used = clones_used + 1 WHERE id = $1', [req.user.id])
     res.json(result)
   } catch (err) {
     res.status(500).json({ error: 'Erro ao clonar pagina' })
   }
 })
 
-app.get('/api/clone/history', authMiddleware, (req, res) => {
-  const clones = db.prepare('SELECT * FROM clones WHERE user_id = ? ORDER BY created_at DESC LIMIT 50').all(req.user.id)
-  res.json(clones)
-})
-
-// ─── Deep Clone (no auth - public for file tree) ────────────────
+// ─── Deep Clone ─────────────────────────────────────────────────
 app.post('/api/clone/deep', async (req, res) => {
   try {
     const { url } = req.body
@@ -222,6 +183,7 @@ app.get('/api/clone/deep/:id/files', async (req, res) => {
   if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
   try {
     async function buildTree(dirPath) {
+      const { readdir, stat } = await import('node:fs/promises')
       const entries = await readdir(dirPath, { withFileTypes: true })
       const items = []
       for (const entry of entries) {
@@ -333,7 +295,8 @@ app.post('/api/subscription/webhook', async (req, res) => {
           const now = new Date()
           const expiry = new Date(now.getTime() + config.days * 24 * 60 * 60 * 1000)
           const expiryStr = expiry.toISOString().replace('T', ' ').slice(0, 19)
-          queries.updateSubscription.run('active', event.id || event.subscription_id || '', expiryStr, plan, userId)
+          await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4 WHERE id = $5',
+            ['active', event.id || event.subscription_id || '', expiryStr, plan, userId])
         }
       }
     }
@@ -341,7 +304,8 @@ app.post('/api/subscription/webhook', async (req, res) => {
       const metadata = event.metadata || {}
       const userId = metadata.user_id
       if (userId) {
-        queries.updateSubscription.run('canceled', '', null, 'nenhum', userId)
+        await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4 WHERE id = $5',
+          ['canceled', '', null, 'nenhum', userId])
       }
     }
     res.json({ received: true })
@@ -350,7 +314,7 @@ app.post('/api/subscription/webhook', async (req, res) => {
   }
 })
 
-app.get('/api/subscription/status', authMiddleware, (req, res) => {
+app.get('/api/subscription/status', authMiddleware, async (req, res) => {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
   const isExpired = req.user.subscription_expiry && req.user.subscription_expiry < now
   res.json({
@@ -371,7 +335,8 @@ app.post('/api/cloaker/generate', authMiddleware, async (req, res) => {
     const id = randomUUID()
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
     const scriptCode = generateCloakerScript(target_url, safe_url, id)
-    queries.insertScript.run(id, req.user.id, target_url, safe_url, scriptCode)
+    await run('INSERT INTO cloaker_scripts (id, user_id, target_url, safe_url, script_code, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, req.user.id, target_url, safe_url, scriptCode, now])
     res.json({ id, target_url, safe_url, script_code: scriptCode, created_at: now })
   } catch {
     res.status(500).json({ error: 'Erro ao gerar script' })
@@ -410,13 +375,13 @@ function generateCloakerScript(targetUrl, safeUrl, scriptId) {
 </script>`
 }
 
-app.get('/api/cloaker/scripts', authMiddleware, (req, res) => {
-  const scripts = queries.listScripts.all(req.user.id)
+app.get('/api/cloaker/scripts', authMiddleware, async (req, res) => {
+  const scripts = await query('SELECT id, target_url, safe_url, created_at FROM cloaker_scripts WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id])
   res.json(scripts)
 })
 
-app.delete('/api/cloaker/scripts/:id', authMiddleware, (req, res) => {
-  const result = queries.deleteScript.run(req.params.id, req.user.id)
+app.delete('/api/cloaker/scripts/:id', authMiddleware, async (req, res) => {
+  const result = await run('DELETE FROM cloaker_scripts WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
   if (result.changes === 0) return res.status(404).json({ error: 'Script nao encontrado' })
   res.json({ ok: true })
 })
@@ -426,11 +391,11 @@ app.get('/api/user/profile', authMiddleware, (req, res) => {
   res.json({ user: req.user })
 })
 
-app.put('/api/user/profile', authMiddleware, (req, res) => {
+app.put('/api/user/profile', authMiddleware, async (req, res) => {
   const { name, email } = req.body
   if (!name || !email) return res.status(400).json({ error: 'Nome e email sao obrigatorios' })
-  queries.updateUser.run(name.trim(), email.toLowerCase().trim(), req.user.id)
-  const user = queries.findUserById.get(req.user.id)
+  await run('UPDATE users SET name = $1, email = $2 WHERE id = $3', [name.trim(), email.toLowerCase().trim(), req.user.id])
+  const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, created_at FROM users WHERE id = $1', [req.user.id])
   res.json({ user })
 })
 
@@ -438,11 +403,11 @@ app.put('/api/user/password', authMiddleware, async (req, res) => {
   try {
     const { current_password, new_password } = req.body
     if (!current_password || !new_password) return res.status(400).json({ error: 'Senha atual e nova senha sao obrigatorias' })
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)
+    const user = await one('SELECT * FROM users WHERE id = $1', [req.user.id])
     const valid = await bcrypt.compare(current_password, user.password_hash)
     if (!valid) return res.status(401).json({ error: 'Senha atual incorreta' })
     const hash = await bcrypt.hash(new_password, 10)
-    queries.updatePassword.run(hash, req.user.id)
+    await run('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.id])
     res.json({ ok: true })
   } catch {
     res.status(500).json({ error: 'Erro ao alterar senha' })
@@ -451,7 +416,7 @@ app.put('/api/user/password', authMiddleware, async (req, res) => {
 
 // ─── Health ───────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', online: !!FB_TOKEN, db: 'sqlite' })
+  res.json({ status: 'ok', online: !!FB_TOKEN, db: 'postgresql' })
 })
 
 // ─── Start ───────────────────────────────────────────────────────
@@ -460,6 +425,6 @@ app.listen(PORT, () => {
   console.log(`Frontend URL: ${process.env.FRONTEND_URL || '*'}`)
   console.log(`Kirvano: ${KIRVANO_API_KEY ? 'configurado' : 'NÃO configurado'}`)
   console.log(`Facebook: ${FB_TOKEN ? 'configurado' : 'NÃO configurado'}`)
-  console.log(`Database: SQLite (${join(DATA_DIR, 'metaspy.db')})`)
+  console.log(`Database: PostgreSQL`)
   console.log(`Environment: ${IS_RENDER ? 'Render (production)' : 'development'}`)
 })
