@@ -101,7 +101,7 @@ export default function Dashboard() {
             </div>
           </div>
           <NavLink to="/dashboard/cleaner" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            Metadata Cleaner
+            Remover Metadados
           </NavLink>
         </nav>
 
@@ -175,7 +175,6 @@ export default function Dashboard() {
             flexWrap: 'wrap'
           }}>
             <div style={{ fontSize: 13, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 16 }}>◉</span>
               <span>
                 <strong>Conta nao confirmada.</strong>{' '}
                 {!showVerify

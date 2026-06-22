@@ -93,7 +93,7 @@ export default function MetadataCleaner() {
   return (
     <div className="tool-page">
       <div className="tool-header">
-        <h3>Metadata Cleaner</h3>
+        <h3>Remover Metadados</h3>
       </div>
       <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: 13 }}>
         Remova metadados ocultos de imagens e videos: GPS, dados de camera, software de edicao,

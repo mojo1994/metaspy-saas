@@ -426,7 +426,7 @@ export default function MetaSpyTool() {
       {user?.plano !== 'nenhum' && (
       <div>
       <div className="tool-header">
-        <h3>◎ MetaSpy Ad Intelligence</h3>
+        <h3>MetaSpy Ad Intelligence</h3>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span className={`status on`}>API Online</span>
           <span className={`status ${anuncios.length ? 'on' : 'off'}`}>

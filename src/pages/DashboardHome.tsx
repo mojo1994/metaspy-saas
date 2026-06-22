@@ -2,32 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
-function AnimatedCounter({ value, suffix = '' }: { value: number; suffix?: string }) {
-  const [display, setDisplay] = useState(0)
-
-  useEffect(() => {
-    setDisplay(0)
-    const from = 0
-    const to = value
-    const duration = 1000
-    const start = performance.now()
-    let frame: number
-
-    function update(now: number) {
-      const elapsed = now - start
-      const progress = Math.min(elapsed / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setDisplay(Math.floor(from + (to - from) * eased))
-      if (progress < 1) frame = requestAnimationFrame(update)
-    }
-
-    frame = requestAnimationFrame(update)
-    return () => cancelAnimationFrame(frame)
-  }, [value])
-
-  return <>{display}{suffix}</>
-}
-
 export default function DashboardHome() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -43,18 +17,6 @@ export default function DashboardHome() {
 
   const isAtivo = user?.plano === 'mensal' || user?.plano === 'anual'
 
-  const clonesTotal = (() => {
-    try { return JSON.parse(localStorage.getItem('pagevault_jobs') || '[]').length } catch { return 0 }
-  })()
-
-  const scriptsTotal = (() => {
-    try { return JSON.parse(localStorage.getItem('cloacker_scripts') || '[]').length } catch { return 0 }
-  })()
-
-  const anunciosTotal = (() => {
-    try { return JSON.parse(localStorage.getItem('metaspy_results') || '[]').length } catch { return 0 }
-  })()
-
   return (
     <div className="dashboard-home">
       <div className="dashboard-header">
@@ -62,46 +24,9 @@ export default function DashboardHome() {
           <h2>
             {greeting}, {user?.nome?.split(' ')[0] || 'Usuario'}
           </h2>
-          <div className="dashboard-greeting-sub">
-            <span className={`pulse-dot ${isAtivo ? 'active' : ''}`} />
-            <span>
-              {isAtivo
-                ? user?.plano === 'anual'
-                  ? 'Plano Anual — recursos liberados'
-                  : 'Plano Mensal — recursos liberados'
-                : 'Sem plano ativo'}
-            </span>
-          </div>
         </div>
         <div className="clock-display">
           {time.toLocaleTimeString('pt-BR')}
-        </div>
-      </div>
-
-      <div className="dashboard-grid">
-        <div className="stat-card" style={{ '--i': 0 } as React.CSSProperties}>
-          <div className="stat-card-icon">◎</div>
-          <div className="value"><AnimatedCounter value={anunciosTotal} /></div>
-          <div className="label">Anuncios analisados</div>
-        </div>
-        <div className="stat-card" style={{ '--i': 1 } as React.CSSProperties}>
-          <div className="stat-card-icon">◈</div>
-          <div className="value"><AnimatedCounter value={clonesTotal} /></div>
-          <div className="label">Paginas clonadas</div>
-        </div>
-        <div className="stat-card" style={{ '--i': 2 } as React.CSSProperties}>
-          <div className="stat-card-icon">⊘</div>
-          <div className="value"><AnimatedCounter value={scriptsTotal} /></div>
-          <div className="label">Scripts de cloaking</div>
-        </div>
-        <div className="stat-card" style={{ '--i': 3 } as React.CSSProperties}>
-          <div className="stat-card-icon">◉</div>
-          <div className="value">
-            {isAtivo
-              ? <span style={{ fontSize: 24, lineHeight: 1 }}>∞</span>
-              : <AnimatedCounter value={0} />}
-          </div>
-          <div className="label">Clones restantes</div>
         </div>
       </div>
 
