@@ -40,14 +40,12 @@ const CLONES_DIR = join(DATA_DIR, '..', 'clones')
 if (!existsSync(CLONES_DIR)) mkdirSync(CLONES_DIR, { recursive: true })
 
 const PLAN_CONFIG = {
-  gratuito: { price: 0, days: 7, kirvanoPlan: 'gratuito' },
   mensal: { price: 49.90, days: 30, kirvanoPlan: 'mensal' },
   anual: { price: 110.90, days: 365, renewal: 97, kirvanoPlan: 'anual' },
 }
 
 const PLAN_FEATURES = {
   nenhum: { clone: false, minerador: false, cloaker: false, pagevault: false, analise: false },
-  gratuito: { clone: true, minerador: true, cloaker: false, pagevault: true, analise: false },
   mensal: { clone: true, minerador: true, cloaker: false, pagevault: true, analise: false },
   anual: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true },
 }
@@ -239,13 +237,11 @@ app.get('/api/clone/deep/:id/download', async (req, res) => {
 const KIRVANO_API = 'https://api.kirvano.com'
 
 const KIRVANO_STATIC_LINKS = {
-  gratuito: 'https://pay.kirvano.com/94aa8ec8-bb4a-4921-bb43-a3a7646d397c',
   mensal: 'https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd',
   anual: 'https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad',
 }
 
 const KIRVANO_CHECKOUT_UUIDS = {
-  '94aa8ec8-bb4a-4921-bb43-a3a7646d397c': 'gratuito',
   '879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd': 'mensal',
   '2498bd06-c4e9-412f-ab0d-bd9cededb5ad': 'anual',
 }

@@ -75,10 +75,10 @@ export default function Planos() {
         <h1>Escolha seu Arsenal de Guerra</h1>
         <p className="planos-subtitle">
           As ferramentas que os top players usam para escalar ofertas no Meta Ads. <br />
-          Teste grátis agora. Sem cartão. Resultado do primeiro dia.
+          Sem plano free. Sem enrolação. Resultado do primeiro dia.
         </p>
-        <button className="btn btn-gradient planos-hero-cta" onClick={() => handleCheckout('gratuito')}>
-          TESTAR GRÁTIS
+        <button className="btn btn-gradient planos-hero-cta" onClick={() => handleCheckout('mensal')}>
+          COMEÇAR AGORA
         </button>
       </section>
 
@@ -189,8 +189,8 @@ export default function Planos() {
       <section className="planos-cta-bottom">
         <h2>Pronto para escalar?</h2>
         <p>Junte-se a centenas de profissionais que já usam o MetaSpy para dominar o Meta Ads.</p>
-        <button className="btn btn-gradient" style={{ padding: '14px 40px', fontSize: 16 }} onClick={() => handleCheckout('gratuito')}>
-          TESTAR GRÁTIS
+        <button className="btn btn-gradient" style={{ padding: '14px 40px', fontSize: 16 }} onClick={() => handleCheckout('mensal')}>
+          COMEÇAR AGORA
         </button>
       </section>
 
