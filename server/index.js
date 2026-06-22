@@ -21,9 +21,13 @@ const KIRVANO_API_KEY = process.env.KIRVANO_API_KEY || ''
 const KIRVANO_WEBHOOK_SECRET = process.env.KIRVANO_WEBHOOK_SECRET || ''
 const KIRVANO_SUCCESS_URL = process.env.KIRVANO_SUCCESS_URL || 'https://metaspy.app/dashboard'
 const KIRVANO_CANCEL_URL = process.env.KIRVANO_CANCEL_URL || 'https://metaspy.app/upgrade'
+const IS_RENDER = !!process.env.RENDER || process.env.NODE_ENV === 'production'
 
 // ─── Database ───────────────────────────────────────────────────
-const db = new Database(join(__dirname, 'metaspy.db'))
+const DATA_DIR = IS_RENDER ? '/tmp/metaspy' : __dirname
+if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
+
+const db = new Database(join(DATA_DIR, 'metaspy.db'))
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 
@@ -65,7 +69,7 @@ const queries = {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
-const CLONES_DIR = join(__dirname, '..', 'clones')
+const CLONES_DIR = join(DATA_DIR, '..', 'clones')
 if (!existsSync(CLONES_DIR)) mkdirSync(CLONES_DIR, { recursive: true })
 
 const PLAN_CONFIG = {
@@ -456,5 +460,6 @@ app.listen(PORT, () => {
   console.log(`Frontend URL: ${process.env.FRONTEND_URL || '*'}`)
   console.log(`Kirvano: ${KIRVANO_API_KEY ? 'configurado' : 'NÃO configurado'}`)
   console.log(`Facebook: ${FB_TOKEN ? 'configurado' : 'NÃO configurado'}`)
-  console.log(`Database: SQLite (metaspy.db)`)
+  console.log(`Database: SQLite (${join(DATA_DIR, 'metaspy.db')})`)
+  console.log(`Environment: ${IS_RENDER ? 'Render (production)' : 'development'}`)
 })
