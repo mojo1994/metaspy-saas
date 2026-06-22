@@ -44,6 +44,7 @@ export async function initSchema() {
       subscription_status TEXT NOT NULL DEFAULT 'inactive',
       subscription_id TEXT,
       subscription_expiry TEXT,
+      pending_plan TEXT,
       clones_used INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
@@ -56,4 +57,5 @@ export async function initSchema() {
       created_at TEXT NOT NULL
     );
   `)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan TEXT`).catch(() => {})
 }

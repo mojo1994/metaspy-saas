@@ -257,6 +257,7 @@ app.post('/api/subscription/create-checkout', authMiddleware, async (req, res) =
     if (!config) return res.status(400).json({ error: 'Plano invalido' })
     const checkoutUrl = KIRVANO_STATIC_LINKS[plan]
     if (!checkoutUrl) return res.status(500).json({ error: 'Link nao configurado' })
+    await run('UPDATE users SET pending_plan = $1 WHERE id = $2', [plan, req.user.id])
     res.json({ checkoutUrl })
   } catch {
     res.status(500).json({ error: 'Erro ao criar checkout' })
@@ -269,20 +270,19 @@ app.post('/api/subscription/webhook', async (req, res) => {
     if (event.event === 'payment.approved' || event.event === 'subscription.approved') {
       const metadata = event.metadata || {}
       let userId = metadata.user_id
-      const checkoutUrl = event.checkout_url || ''
-      const uuidMatch = checkoutUrl.match(/kirvano\.com\/([a-f0-9-]+)/)
-      const plan = uuidMatch ? (KIRVANO_CHECKOUT_UUIDS[uuidMatch[1]] || 'gratuito') : (metadata.plan || 'gratuito')
       if (!userId && event.customer?.email) {
-        const user = await one('SELECT id FROM users WHERE email = $1', [event.customer.email.toLowerCase().trim()])
+        const user = await one('SELECT id, pending_plan FROM users WHERE email = $1', [event.customer.email.toLowerCase().trim()])
         if (user) userId = user.id
       }
       if (userId) {
+        const user = await one('SELECT pending_plan FROM users WHERE id = $1', [userId])
+        const plan = user?.pending_plan || 'gratuito'
         const config = PLAN_CONFIG[plan]
         if (config) {
           const now = new Date()
           const expiry = new Date(now.getTime() + config.days * 24 * 60 * 60 * 1000)
           const expiryStr = expiry.toISOString().replace('T', ' ').slice(0, 19)
-          await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4 WHERE id = $5',
+          await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4, pending_plan = NULL WHERE id = $5',
             ['active', event.id || event.subscription_id || '', expiryStr, plan, userId])
         }
       }
@@ -399,6 +399,17 @@ app.put('/api/user/password', authMiddleware, async (req, res) => {
   } catch {
     res.status(500).json({ error: 'Erro ao alterar senha' })
   }
+})
+
+// ─── Debug ────────────────────────────────────────────────────────
+app.get('/api/debug/user', async (req, res) => {
+  const { email } = req.query
+  if (!email) return res.status(400).json({ error: '?email= obrigatorio' })
+  try {
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, pending_plan, clones_used FROM users WHERE email = $1', [email.toString().toLowerCase().trim()])
+    if (!user) return res.json({ error: 'Usuario nao encontrado' })
+    res.json({ user })
+  } catch { res.status(500).json({ error: 'Erro' }) }
 })
 
 // ─── Health ───────────────────────────────────────────────────────
