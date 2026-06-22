@@ -66,6 +66,11 @@ export default function Dashboard() {
           <NavLink to="/dashboard/configuracoes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             Configuracoes
           </NavLink>
+          {user?.email === '09santos.felipe@gmail.com' && (
+            <NavLink to="/dashboard/admin" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+              ⚙ PAINEL
+            </NavLink>
+          )}
         </nav>
 
         <div className="sidebar-section-label">Aparencia</div>

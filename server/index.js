@@ -402,6 +402,43 @@ app.put('/api/user/password', authMiddleware, async (req, res) => {
   }
 })
 
+// ─── Admin ────────────────────────────────────────────────────────
+const ADMIN_EMAIL = '09santos.felipe@gmail.com'
+
+async function adminMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token nao fornecido' })
+  try {
+    const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET)
+    const user = await one('SELECT email FROM users WHERE id = $1', [decoded.userId])
+    if (!user || user.email !== ADMIN_EMAIL) return res.status(403).json({ error: 'Acesso negado' })
+    req.adminUser = user
+    next()
+  } catch { return res.status(401).json({ error: 'Token invalido' }) }
+}
+
+app.get('/api/admin/users', adminMiddleware, async (req, res) => {
+  try {
+    const users = await query('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, created_at FROM users ORDER BY created_at DESC')
+    res.json({ users })
+  } catch { res.status(500).json({ error: 'Erro ao listar usuarios' }) }
+})
+
+app.put('/api/admin/users/:id/plan', adminMiddleware, async (req, res) => {
+  try {
+    const { plan } = req.body
+    if (!['nenhum', 'mensal', 'anual'].includes(plan)) return res.status(400).json({ error: 'Plano invalido' })
+    const config = PLAN_CONFIG[plan]
+    if (!config) return res.status(400).json({ error: 'Plano invalido' })
+    const now = new Date()
+    const expiry = plan === 'nenhum' ? null : new Date(now.getTime() + (plan === 'anual' ? 365 : 30) * 24 * 60 * 60 * 1000)
+    const expiryStr = expiry ? expiry.toISOString().replace('T', ' ').slice(0, 19) : null
+    await run('UPDATE users SET plan = $1, subscription_status = $2, subscription_expiry = $3 WHERE id = $4',
+      [plan, plan === 'nenhum' ? 'inactive' : 'active', expiryStr, req.params.id])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro ao atualizar plano' }) }
+})
+
 // ─── Debug ────────────────────────────────────────────────────────
 app.get('/api/debug/user', async (req, res) => {
   const { email } = req.query

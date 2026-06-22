@@ -10,6 +10,7 @@ import PageVaultTool from './pages/PageVaultTool'
 import CloackerTool from './pages/CloackerTool'
 import Profile from './pages/Profile'
 import Settings from './pages/Settings'
+import Admin from './pages/Admin'
 import { useAuth } from './contexts/AuthContext'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="cloacker" element={<CloackerTool />} />
         <Route path="perfil" element={<Profile />} />
         <Route path="configuracoes" element={<Settings />} />
+        <Route path="admin" element={<Admin />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
