@@ -1433,6 +1433,74 @@ select {
   animation: fadeIn 0.3s ease-out;
 }
 
+/* ─── METADATA CLEANER ─── */
+.cleaner-upload-area {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  border: 2px dashed var(--border);
+  transition: all var(--transition);
+}
+.cleaner-upload-area:hover {
+  border-color: var(--border-hover);
+}
+.cleaner-dropzone {
+  cursor: pointer;
+}
+.cleaner-dropzone input[type="file"] { display: none; }
+.cleaner-dropzone-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 16px;
+  border-radius: var(--radius-md);
+  transition: background var(--transition);
+  user-select: none;
+}
+.cleaner-dropzone-placeholder:hover {
+  background: var(--bg-card-hover);
+}
+.cleaner-file-info {
+  padding: 16px;
+}
+.cleaner-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cleaner-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--purple-500), var(--purple-400));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.cleaner-result {
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+}
+.cleaner-result-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cleaner-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.cleaner-stat:last-child { border-bottom: none; }
+.cleaner-stat-label { color: var(--text-muted); }
+.cleaner-stat-value { color: var(--text-primary); font-weight: 600; }
+
 /* ─── CAMOUFLAGE UPLOAD ─── */
 .camouflage-upload-area {
   border: 2px dashed var(--border);

@@ -6,11 +6,13 @@ import multer from 'multer'
 import { randomUUID } from 'node:crypto'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createReadStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync } from 'node:fs'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
 import archiver from 'archiver'
+import { exiftool } from 'exiftool-vendored'
+import mime from 'mime-types'
 import { initDb, initSchema, one, query, run } from './db.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -46,9 +48,9 @@ const PLAN_CONFIG = {
 }
 
 const PLAN_FEATURES = {
-  nenhum: { clone: false, minerador: false, cloaker: false, pagevault: false, analise: false },
-  mensal: { clone: true, minerador: true, cloaker: false, pagevault: true, analise: false },
-  anual: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true },
+  nenhum: { clone: false, minerador: false, cloaker: false, pagevault: false, analise: false, cleaner: false },
+  mensal: { clone: true, minerador: true, cloaker: false, pagevault: true, analise: false, cleaner: false },
+  anual: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: true },
 }
 
 function generateToken(userId) {
@@ -679,6 +681,132 @@ app.get('/api/debug/webhooks', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', online: !!FB_TOKEN, db: 'postgresql' })
 })
+
+// ─── Metadata Cleaner ────────────────────────────────────────────
+const CLEANER_DIR = process.env.TEMP_UPLOAD_DIR || '/tmp/metaspy_cleaner'
+if (!existsSync(CLEANER_DIR)) mkdirSync(CLEANER_DIR, { recursive: true })
+
+const cleanerStorage = multer.diskStorage({
+  destination: CLEANER_DIR,
+  filename: (req, file, cb) => {
+    const ext = extname(file.originalname)
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`)
+  }
+})
+
+const cleanerUpload = multer({
+  storage: cleanerStorage,
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/quicktime','video/x-msvideo','video/webm']
+    if (allowed.includes(file.mimetype)) return cb(null, true)
+    cb(new Error('Formato nao suportado. Aceitamos: JPEG, PNG, WebP, GIF, MP4, MOV, AVI, WebM.'))
+  }
+})
+
+async function cleanMetadata(filePath, mimeType) {
+  const isVideo = mimeType.startsWith('video/')
+  const ext = extname(filePath)
+  const outputPath = filePath.replace(ext, `_cleaned${ext}`)
+
+  const originalMeta = await exiftool.read(filePath).catch(() => ({}))
+
+  if (isVideo) {
+    await exiftool.write(filePath, { All: '', overwrite_original: true })
+    try { renameSync(filePath, outputPath) } catch { copyFileSync(filePath, outputPath) }
+  } else {
+    await exiftool.write(filePath, {
+      All: '', overwrite_original: true,
+      GPS: '', EXIF: '', IPTC: '', XMP: '',
+      Comment: '', Artist: '', Copyright: ''
+    })
+    try { renameSync(filePath, outputPath) } catch { copyFileSync(filePath, outputPath) }
+  }
+
+  const remainingMeta = await exiftool.read(outputPath).catch(() => ({}))
+  return { cleanedPath: outputPath, originalMeta, remainingMeta, tagsRemoved: Object.keys(originalMeta).length - Object.keys(remainingMeta).length }
+}
+
+app.post('/api/cleaner/upload', authMiddleware, async (req, res) => {
+  try {
+    const features = PLAN_FEATURES[req.user.plan]
+    if (!features?.cleaner) return res.status(403).json({ error: 'Disponivel apenas no plano Anual.' })
+
+    cleanerUpload.single('file')(req, res, async (err) => {
+      if (err) return res.status(400).json({ error: err.message })
+      if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' })
+
+      const file = req.file
+      const isVideo = file.mimetype.startsWith('video/')
+      const maxSize = isVideo ? 200 * 1024 * 1024 : 30 * 1024 * 1024
+
+      if (file.size > maxSize) {
+        try { unlinkSync(file.path) } catch {}
+        return res.status(413).json({ error: `Arquivo excede o limite. ${isVideo ? 'Video' : 'Imagem'} max: ${maxSize / (1024*1024)} MB.` })
+      }
+
+      try {
+        const { cleanedPath, originalMeta, remainingMeta, tagsRemoved } = await cleanMetadata(file.path, file.mimetype)
+        const assetId = randomUUID()
+        await run(`INSERT INTO cleaned_assets (id, user_id, original_name, file_size_bytes, mime_type, cleaned_file_path, metadata_before, metadata_after, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [assetId, req.user.id, file.originalname, file.size, file.mimetype, cleanedPath, JSON.stringify(originalMeta), JSON.stringify(remainingMeta), new Date().toISOString()])
+
+        const stat = statSync(cleanedPath)
+        res.json({
+          id: assetId,
+          originalName: file.originalname,
+          cleanedSize: stat.size,
+          downloadUrl: `/api/cleaner/download/${assetId}`,
+          metadataRemoved: tagsRemoved
+        })
+      } catch (cleanErr) {
+        console.error('Clean error:', cleanErr)
+        res.status(500).json({ error: 'Erro ao limpar metadados.' })
+      }
+    })
+  } catch (error) {
+    console.error('Cleaner route error:', error)
+    res.status(500).json({ error: 'Erro interno.' })
+  }
+})
+
+app.get('/api/cleaner/download/:id', authMiddleware, async (req, res) => {
+  try {
+    const asset = await one('SELECT * FROM cleaned_assets WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!asset) return res.status(404).json({ error: 'Arquivo nao encontrado.' })
+    if (!existsSync(asset.cleaned_file_path)) return res.status(410).json({ error: 'Arquivo expirado.' })
+
+    const originalName = asset.original_name.replace(/\.[^.]+$/, '') + '_clean' + extname(asset.original_name)
+    const mimeType = mime.lookup(asset.cleaned_file_path) || asset.mime_type
+
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalName)}"`)
+    res.setHeader('Content-Type', mimeType)
+    res.setHeader('Content-Length', statSync(asset.cleaned_file_path).size)
+
+    const stream = createReadStream(asset.cleaned_file_path)
+    stream.pipe(res)
+  } catch (error) {
+    console.error('Download error:', error)
+    res.status(500).json({ error: 'Erro ao baixar arquivo.' })
+  }
+})
+
+// Cleanup cron: remove files older than 1 hour
+setInterval(async () => {
+  const oneHour = 60 * 60 * 1000
+  const now = Date.now()
+  try {
+    const { readdir, stat, unlink } = await import('node:fs/promises')
+    const files = await readdir(CLEANER_DIR).catch(() => [])
+    for (const file of files) {
+      const filePath = join(CLEANER_DIR, file)
+      try {
+        const stats = await stat(filePath)
+        if (now - stats.mtimeMs > oneHour) await unlink(filePath).catch(() => {})
+      } catch {}
+    }
+  } catch {}
+}, 60 * 60 * 1000)
 
 // ─── Error Handler ────────────────────────────────────────────────
 app.use((err, req, res, next) => {

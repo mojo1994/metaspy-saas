@@ -63,6 +63,9 @@ export default function Dashboard() {
               </NavLink>
             </div>
           </div>
+          <NavLink to="/dashboard/cleaner" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            Metadata Cleaner
+          </NavLink>
         </nav>
 
         <div className="sidebar-section-label">Conta</div>

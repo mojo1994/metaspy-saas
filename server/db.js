@@ -71,6 +71,17 @@ export async function initSchema() {
       script_code TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS cleaned_assets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      file_size_bytes INTEGER NOT NULL,
+      mime_type TEXT NOT NULL,
+      cleaned_file_path TEXT NOT NULL,
+      metadata_before TEXT,
+      metadata_after TEXT,
+      created_at TEXT NOT NULL
+    );
   `)
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan TEXT`).catch(() => {})
 }
