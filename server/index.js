@@ -40,12 +40,14 @@ const CLONES_DIR = join(DATA_DIR, '..', 'clones')
 if (!existsSync(CLONES_DIR)) mkdirSync(CLONES_DIR, { recursive: true })
 
 const PLAN_CONFIG = {
+  gratuito: { price: 0, days: 7, kirvanoPlan: 'gratuito' },
   mensal: { price: 49.90, days: 30, kirvanoPlan: 'mensal' },
   anual: { price: 110.90, days: 365, renewal: 97, kirvanoPlan: 'anual' },
 }
 
 const PLAN_FEATURES = {
   nenhum: { clone: false, minerador: false, cloaker: false, pagevault: false, analise: false },
+  gratuito: { clone: true, minerador: true, cloaker: false, pagevault: true, analise: false },
   mensal: { clone: true, minerador: true, cloaker: false, pagevault: true, analise: false },
   anual: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true },
 }
@@ -287,8 +289,12 @@ app.post('/api/subscription/webhook', async (req, res) => {
     const event = req.body
     if (event.event === 'payment.approved' || event.event === 'subscription.approved') {
       const metadata = event.metadata || {}
-      const userId = metadata.user_id
-      const plan = metadata.plan || 'mensal'
+      let userId = metadata.user_id
+      const plan = metadata.plan || 'gratuito'
+      if (!userId && event.customer?.email) {
+        const user = await one('SELECT id FROM users WHERE email = $1', [event.customer.email.toLowerCase().trim()])
+        if (user) userId = user.id
+      }
       if (userId) {
         const config = PLAN_CONFIG[plan]
         if (config) {
