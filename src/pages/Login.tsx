@@ -41,6 +41,9 @@ export default function Login() {
             Senha
             <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" />
           </label>
+          <div style={{ textAlign: 'right', marginTop: -8 }}>
+            <Link to="/esqueci-senha" style={{ fontSize: 12, color: 'var(--purple-400)' }}>Esqueci a senha</Link>
+          </div>
           <button type="submit" className="btn btn-gradient" disabled={loading} style={{ marginTop: 4 }}>
             {loading ? 'Entrando...' : 'Entrar'}
           </button>

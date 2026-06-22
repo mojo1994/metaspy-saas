@@ -178,6 +178,88 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json({ user: req.user })
 })
 
+// ─── Email / Recovery Routes ──────────────────────────────────────
+import { sendEmail, recoveryEmailHtml, verificationEmailHtml } from './email.js'
+
+function generateCode() {
+  return String(Math.floor(100000 + Math.random() * 900000))
+}
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body
+    if (!email) return res.status(400).json({ error: 'Email obrigatorio.' })
+    const user = await one('SELECT id, email FROM users WHERE email = $1', [email.toLowerCase().trim()])
+    if (!user) return res.json({ ok: true, message: 'Se o email existir, voce recebera um codigo.' })
+
+    const code = generateCode()
+    const now = new Date()
+    const expires = new Date(now.getTime() + 15 * 60 * 1000)
+    const id = randomUUID()
+    await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, user.id, user.email, code, 'recovery', expires.toISOString(), now.toISOString()])
+
+    await sendEmail({ to: user.email, subject: 'MetaSpy - Codigo de Recuperacao', html: recoveryEmailHtml(code) })
+    res.json({ ok: true, message: 'Codigo enviado para seu email.' })
+  } catch (err) {
+    console.error('Erro forgot-password:', err)
+    res.status(500).json({ error: 'Erro ao enviar codigo.' })
+  }
+})
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { email, code, new_password } = req.body
+    if (!email || !code || !new_password) return res.status(400).json({ error: 'Preencha todos os campos.' })
+    if (new_password.length < 6) return res.status(400).json({ error: 'Senha deve ter ao menos 6 caracteres.' })
+
+    const record = await one('SELECT * FROM email_codes WHERE email = $1 AND code = $2 AND type = $3 AND used = 0 AND expires_at > $4',
+      [email.toLowerCase().trim(), code.toString(), 'recovery', new Date().toISOString()])
+    if (!record) return res.status(400).json({ error: 'Codigo invalido ou expirado.' })
+
+    const hash = await bcrypt.hash(new_password, 10)
+    await run('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, record.user_id])
+    await run('UPDATE email_codes SET used = 1 WHERE id = $1', [record.id])
+    res.json({ ok: true, message: 'Senha redefinida com sucesso.' })
+  } catch (err) {
+    console.error('Erro reset-password:', err)
+    res.status(500).json({ error: 'Erro ao redefinir senha.' })
+  }
+})
+
+app.post('/api/auth/send-verification', authMiddleware, async (req, res) => {
+  try {
+    const user = req.user
+    const code = generateCode()
+    const now = new Date()
+    const expires = new Date(now.getTime() + 15 * 60 * 1000)
+    const id = randomUUID()
+    await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, user.id, user.email, code, 'verification', expires.toISOString(), now.toISOString()])
+
+    await sendEmail({ to: user.email, subject: 'MetaSpy - Codigo de Confirmacao', html: verificationEmailHtml(code) })
+    res.json({ ok: true, message: 'Codigo enviado para seu email.' })
+  } catch (err) {
+    console.error('Erro send-verification:', err)
+    res.status(500).json({ error: 'Erro ao enviar codigo.' })
+  }
+})
+
+app.post('/api/auth/verify-code', authMiddleware, async (req, res) => {
+  try {
+    const { code } = req.body
+    if (!code) return res.status(400).json({ error: 'Codigo obrigatorio.' })
+    const record = await one('SELECT * FROM email_codes WHERE user_id = $1 AND code = $2 AND type = $3 AND used = 0 AND expires_at > $4',
+      [req.user.id, code.toString(), 'verification', new Date().toISOString()])
+    if (!record) return res.status(400).json({ error: 'Codigo invalido ou expirado.' })
+    await run('UPDATE email_codes SET used = 1 WHERE id = $1', [record.id])
+    res.json({ ok: true, message: 'Email verificado com sucesso.' })
+  } catch (err) {
+    console.error('Erro verify-code:', err)
+    res.status(500).json({ error: 'Erro ao verificar codigo.' })
+  }
+})
+
 // ─── Clone Routes ────────────────────────────────────────────────
 app.post('/api/clone', authMiddleware, async (req, res) => {
   const { url } = req.body

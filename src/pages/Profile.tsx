@@ -2,36 +2,62 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Profile() {
-  const { user, logout } = useAuth()
+  const { user, fetchWithAuth, updateUser } = useAuth()
   const [nome, setNome] = useState(user?.nome || '')
   const [email, setEmail] = useState(user?.email || '')
-  const [senha, setSenha] = useState('')
+  const [senhaAtual, setSenhaAtual] = useState('')
+  const [novaSenha, setNovaSenha] = useState('')
   const [msg, setMsg] = useState('')
   const [erro, setErro] = useState('')
 
-  function salvarPerfil() {
+  async function salvarPerfil() {
     setErro('')
     setMsg('')
     if (!nome.trim()) { setErro('Nome obrigatorio.'); return }
     if (!email.trim()) { setErro('Email obrigatorio.'); return }
 
-    const users = JSON.parse(localStorage.getItem('metaspy_users') || '[]')
-    const idx = users.findIndex((u: any) => u.email === user?.email)
-    if (idx >= 0) {
-      if (email !== user?.email && users.some((u: any, i: number) => i !== idx && u.email === email)) {
-        setErro('Email ja em uso.')
+    try {
+      const res = await fetchWithAuth('/api/user/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ name: nome.trim(), email: email.trim() })
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setErro(data.error || 'Erro ao atualizar perfil')
         return
       }
-      users[idx] = { ...users[idx], nome: nome.trim(), email: email.trim() }
-      if (senha) users[idx].senha = senha
-      localStorage.setItem('metaspy_users', JSON.stringify(users))
+      const data = await res.json()
+      updateUser({ nome: data.user.name, email: data.user.email })
+      setMsg('Perfil atualizado com sucesso.')
+      setTimeout(() => setMsg(''), 3000)
+    } catch {
+      setErro('Erro de conexao com o servidor')
     }
+  }
 
-    const updated = { email: email.trim(), nome: nome.trim(), plano: user?.plano || 'Free' }
-    localStorage.setItem('metaspy_session', JSON.stringify(updated))
-    setMsg('Perfil atualizado com sucesso.')
-    setSenha('')
-    setTimeout(() => setMsg(''), 3000)
+  async function alterarSenha() {
+    setErro('')
+    setMsg('')
+    if (!senhaAtual) { setErro('Digite sua senha atual.'); return }
+    if (!novaSenha || novaSenha.length < 6) { setErro('Nova senha deve ter ao menos 6 caracteres.'); return }
+
+    try {
+      const res = await fetchWithAuth('/api/user/password', {
+        method: 'PUT',
+        body: JSON.stringify({ current_password: senhaAtual, new_password: novaSenha })
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setErro(data.error || 'Erro ao alterar senha')
+        return
+      }
+      setMsg('Senha alterada com sucesso.')
+      setSenhaAtual('')
+      setNovaSenha('')
+      setTimeout(() => setMsg(''), 3000)
+    } catch {
+      setErro('Erro de conexao com o servidor')
+    }
   }
 
   const clonesTotal = (() => {
@@ -57,24 +83,37 @@ export default function Profile() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
-        <div className="clone-config-section">
-          <div className="clone-config-header">Informacoes Pessoais</div>
-          <div className="clone-config-body" style={{ gap: 12 }}>
-            <div className="filter-group">
-              <label>Nome</label>
-              <input type="text" value={nome} onChange={e => setNome(e.target.value)} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="clone-config-section">
+            <div className="clone-config-header">Informacoes Pessoais</div>
+            <div className="clone-config-body" style={{ gap: 12 }}>
+              <div className="filter-group">
+                <label>Nome</label>
+                <input type="text" value={nome} onChange={e => setNome(e.target.value)} />
+              </div>
+              <div className="filter-group">
+                <label>Email</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
+              </div>
+              {erro && <div className="alerta">{erro}</div>}
+              {msg && <div style={{ fontSize: 12, borderRadius: 'var(--radius-md)', padding: '8px 12px', background: 'var(--success-bg)', border: '1px solid rgba(16,185,129,0.25)', color: 'var(--success)' }}>{msg}</div>}
+              <button className="btn btn-gradient" onClick={salvarPerfil}>Salvar Alteracoes</button>
             </div>
-            <div className="filter-group">
-              <label>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
+          </div>
+
+          <div className="clone-config-section">
+            <div className="clone-config-header">Alterar Senha</div>
+            <div className="clone-config-body" style={{ gap: 12 }}>
+              <div className="filter-group">
+                <label>Senha atual</label>
+                <input type="password" value={senhaAtual} onChange={e => setSenhaAtual(e.target.value)} placeholder="Senha atual" />
+              </div>
+              <div className="filter-group">
+                <label>Nova senha</label>
+                <input type="password" value={novaSenha} onChange={e => setNovaSenha(e.target.value)} placeholder="Minimo 6 caracteres" />
+              </div>
+              <button className="btn btn-secondary" onClick={alterarSenha} style={{ alignSelf: 'flex-start' }}>Alterar Senha</button>
             </div>
-            <div className="filter-group">
-              <label>Nova senha (deixe em branco para manter)</label>
-              <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="Nova senha" />
-            </div>
-            {erro && <div className="alerta">{erro}</div>}
-            {msg && <div style={{ fontSize: 12, borderRadius: 'var(--radius-md)', padding: '8px 12px', background: 'var(--success-bg)', border: '1px solid rgba(16,185,129,0.25)', color: 'var(--success)' }}>{msg}</div>}
-            <button className="btn btn-gradient" onClick={salvarPerfil}>Salvar Alteracoes</button>
           </div>
         </div>
 

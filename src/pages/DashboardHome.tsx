@@ -39,7 +39,7 @@ export default function DashboardHome() {
   }, [])
 
   const hour = time.getHours()
-  const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
+  const greeting = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite'
 
   const isAtivo = user?.plano === 'mensal' || user?.plano === 'anual'
 

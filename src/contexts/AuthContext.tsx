@@ -17,6 +17,7 @@ interface AuthContextType {
   logout: () => void
   isAuthenticated: boolean
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>
+  updateUser: (data: Partial<User>) => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -118,6 +119,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('metaspy_refresh_token')
   }
 
+  function updateUser(data: Partial<User>) {
+    setUser(prev => {
+      if (!prev) return null
+      const updated = { ...prev, ...data }
+      localStorage.setItem('metaspy_session', JSON.stringify(updated))
+      return updated
+    })
+  }
+
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
     const headers = new Headers(options.headers || {})
     if (accessToken) {
@@ -149,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [accessToken, refreshToken])
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, isAuthenticated: !!user, fetchWithAuth }}>
+    <AuthContext.Provider value={{ user, login, signup, logout, isAuthenticated: !!user, fetchWithAuth, updateUser }}>
       {children}
     </AuthContext.Provider>
   )
