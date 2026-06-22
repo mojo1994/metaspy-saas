@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react'
+import { useState, FormEvent, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -13,12 +13,16 @@ export default function Signup() {
   const [erro, setErro] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resendTimer, setResendTimer] = useState(0)
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  useEffect(() => {
+    if (resendTimer <= 0) return
+    const id = setInterval(() => setResendTimer(t => t - 1), 1000)
+    return () => clearInterval(id)
+  }, [resendTimer])
+
+  async function sendCode() {
     setErro(''); setMsg('')
-    if (!nome || !email || !senha) { setErro('Preencha todos os campos.'); return }
-    if (senha.length < 6) { setErro('Senha deve ter ao menos 6 caracteres.'); return }
     setLoading(true)
     try {
       const res = await fetch('/api/auth/signup', {
@@ -29,9 +33,18 @@ export default function Signup() {
       const data = await res.json()
       if (!res.ok) { setErro(data.error || 'Erro ao criar conta.'); setLoading(false); return }
       setMsg('Codigo de confirmacao enviado para seu email!')
-      setStep('code')
+      setResendTimer(30)
     } catch { setErro('Erro de conexao com o servidor.') }
     setLoading(false)
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setErro(''); setMsg('')
+    if (!nome || !email || !senha) { setErro('Preencha todos os campos.'); return }
+    if (senha.length < 6) { setErro('Senha deve ter ao menos 6 caracteres.'); return }
+    await sendCode()
+    if (!erro) setStep('code')
   }
 
   async function handleVerify(e: FormEvent) {
@@ -43,6 +56,10 @@ export default function Signup() {
     setLoading(false)
     if (error === null) navigate('/planos')
     else setErro(error)
+  }
+
+  async function reenviar() {
+    await sendCode()
   }
 
   return (
@@ -89,8 +106,18 @@ export default function Signup() {
             <button type="submit" className="btn btn-gradient" disabled={loading} style={{ marginTop: 4 }}>
               {loading ? 'Confirmando...' : 'Confirmar Cadastro'}
             </button>
-            <p style={{ fontSize: 12, textAlign: 'center', marginTop: 8 }}>
-              <Link to="" onClick={(e) => { e.preventDefault(); setStep('form'); setMsg(''); setErro('') }} style={{ color: 'var(--purple-400)' }}>
+            <p style={{ fontSize: 12, textAlign: 'center', marginTop: 12, color: 'var(--text-muted)' }}>
+              Nao recebeu?{' '}
+              {resendTimer > 0 ? (
+                <span style={{ color: 'var(--text-secondary)' }}>Reenviar em {resendTimer}s</span>
+              ) : (
+                <Link to="" onClick={(e) => { e.preventDefault(); reenviar() }} style={{ color: 'var(--purple-400)' }}>
+                  Reenviar codigo
+                </Link>
+              )}
+            </p>
+            <p style={{ fontSize: 12, textAlign: 'center', marginTop: 4 }}>
+              <Link to="" onClick={(e) => { e.preventDefault(); setStep('form'); setMsg(''); setErro('') }} style={{ color: 'var(--text-secondary)' }}>
                 Voltar e corrigir dados
               </Link>
             </p>

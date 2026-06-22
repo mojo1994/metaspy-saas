@@ -125,10 +125,12 @@ app.post('/api/auth/signup', async (req, res) => {
     const existing = await one('SELECT id FROM users WHERE email = $1', [emailLower])
     if (existing) return res.status(409).json({ error: 'Email ja cadastrado' })
 
+    await run('UPDATE email_codes SET used = 1 WHERE email = $1 AND type = $2 AND used = 0', [emailLower, 'signup'])
+
     const hash = await bcrypt.hash(password, 10)
     const code = generateCode()
     const now = new Date()
-    const expires = new Date(now.getTime() + 15 * 60 * 1000)
+    const expires = new Date(now.getTime() + 5 * 60 * 1000)
     const id = randomUUID()
     const metadata = JSON.stringify({ name: name.trim(), password_hash: hash })
     await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
@@ -221,12 +223,15 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   try {
     const { email } = req.body
     if (!email) return res.status(400).json({ error: 'Email obrigatorio.' })
-    const user = await one('SELECT id, email FROM users WHERE email = $1', [email.toLowerCase().trim()])
+    const emailLower = email.toLowerCase().trim()
+    const user = await one('SELECT id, email FROM users WHERE email = $1', [emailLower])
     if (!user) return res.json({ ok: true, message: 'Se o email existir, voce recebera um codigo.' })
+
+    await run('UPDATE email_codes SET used = 1 WHERE email = $1 AND type = $2 AND used = 0', [emailLower, 'recovery'])
 
     const code = generateCode()
     const now = new Date()
-    const expires = new Date(now.getTime() + 15 * 60 * 1000)
+    const expires = new Date(now.getTime() + 5 * 60 * 1000)
     const id = randomUUID()
     await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [id, user.id, user.email, code, 'recovery', expires.toISOString(), now.toISOString()])

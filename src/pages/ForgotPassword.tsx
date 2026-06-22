@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react'
+import { useState, FormEvent, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 
 export default function ForgotPassword() {
@@ -9,9 +9,16 @@ export default function ForgotPassword() {
   const [msg, setMsg] = useState('')
   const [erro, setErro] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resendTimer, setResendTimer] = useState(0)
 
-  async function sendCode(e: FormEvent) {
-    e.preventDefault()
+  useEffect(() => {
+    if (resendTimer <= 0) return
+    const id = setInterval(() => setResendTimer(t => t - 1), 1000)
+    return () => clearInterval(id)
+  }, [resendTimer])
+
+  async function sendCode(e?: FormEvent) {
+    if (e) e.preventDefault()
     setErro(''); setMsg('')
     if (!email.trim()) { setErro('Digite seu email.'); return }
     setLoading(true)
@@ -24,6 +31,7 @@ export default function ForgotPassword() {
       const data = await res.json()
       if (!res.ok) { setErro(data.error || 'Erro ao enviar codigo.'); return }
       setMsg(data.message || 'Codigo enviado!')
+      setResendTimer(30)
       setStep('code')
     } catch { setErro('Erro de conexao com o servidor.') }
     setLoading(false)
@@ -90,6 +98,16 @@ export default function ForgotPassword() {
             <button type="submit" className="btn btn-gradient" disabled={loading}>
               {loading ? 'Redefinindo...' : 'Redefinir Senha'}
             </button>
+            <p style={{ fontSize: 12, textAlign: 'center', marginTop: 12, color: 'var(--text-muted)' }}>
+              Nao recebeu?{' '}
+              {resendTimer > 0 ? (
+                <span style={{ color: 'var(--text-secondary)' }}>Reenviar em {resendTimer}s</span>
+              ) : (
+                <Link to="" onClick={(e) => { e.preventDefault(); sendCode() }} style={{ color: 'var(--purple-400)' }}>
+                  Reenviar codigo
+                </Link>
+              )}
+            </p>
           </form>
         )}
 
