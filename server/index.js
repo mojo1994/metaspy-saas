@@ -238,16 +238,16 @@ app.get('/api/clone/deep/:id/download', async (req, res) => {
 // ─── Subscription Routes ─────────────────────────────────────────
 const KIRVANO_API = 'https://api.kirvano.com'
 
+const KIRVANO_LINK = 'https://pay.kirvano.com/94aa8ec8-bb4a-4921-bb43-a3a7646d397c'
+
 const KIRVANO_STATIC_LINKS = {
-  gratuito: 'https://pay.kirvano.com/94aa8ec8-bb4a-4921-bb43-a3a7646d397c',
-  mensal: 'https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd',
-  anual: 'https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad',
+  gratuito: KIRVANO_LINK,
+  mensal: KIRVANO_LINK,
+  anual: KIRVANO_LINK,
 }
 
 const KIRVANO_CHECKOUT_UUIDS = {
   '94aa8ec8-bb4a-4921-bb43-a3a7646d397c': 'gratuito',
-  '879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd': 'mensal',
-  '2498bd06-c4e9-412f-ab0d-bd9cededb5ad': 'anual',
 }
 
 app.post('/api/subscription/create-checkout', authMiddleware, async (req, res) => {
