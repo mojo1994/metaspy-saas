@@ -78,6 +78,7 @@ async function authMiddleware(req, res, next) {
 
 // ─── App ─────────────────────────────────────────────────────────
 const app = express()
+app.set('trust proxy', 1)
 app.use(cors({ origin: process.env.FRONTEND_URL || '*', credentials: true }))
 app.use(cookieParser())
 app.use(express.json({ limit: '10mb' }))
