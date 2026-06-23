@@ -9,5 +9,5 @@
 
 [[redirects]]
   from = "/p/*"
-  to = "https://metaspy-host.09santos-felipe.workers.dev/p/:splat"
+  to = "https://metaspy-saas.onrender.com/api/page/:splat"
   status = 200

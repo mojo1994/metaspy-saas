@@ -1069,10 +1069,20 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
     // Always save to local disk
     const pageDir = join(PAGES_DIR, slug)
     mkdirSync(pageDir, { recursive: true })
+    let indexHtml = ''
     for (const entry of entries) {
-      const filePath = join(pageDir, entry.entryName)
+      const entryPath = entry.entryName
+      const filePath = join(pageDir, entryPath)
       mkdirSync(dirname(filePath), { recursive: true })
-      writeFileSync(filePath, entry.getData())
+      const data = entry.getData()
+      writeFileSync(filePath, data)
+      if (entryPath === 'index.html' || entryPath.endsWith('/index.html')) {
+        indexHtml = data.toString('utf-8')
+      }
+    }
+    // Store index.html content in DB for reliable serving
+    if (indexHtml) {
+      run('UPDATE pages SET html = $1 WHERE id = $2', [indexHtml, id]).catch(() => {})
     }
 
     // Save to R2 + update cf_url
@@ -1122,28 +1132,15 @@ async function createPageRecord(userId, title, customSlug, cfUrl) {
   return { id, slug }
 }
 
-// Public routes: serve page by slug (no auth)
+// Public routes: serve page by slug (no auth) — serve from DB html column for all types
 app.get('/api/page/:slug/:path(*)', async (req, res) => {
   try {
     const { slug, path } = req.params
-    const page = await one('SELECT id, type, published FROM pages WHERE slug = $1 AND published = 1', [slug.toLowerCase()])
+    const page = await one('SELECT html, type, published FROM pages WHERE slug = $1 AND published = 1', [slug.toLowerCase()])
     if (!page) return res.status(404).send('Pagina nao encontrada.')
-
-    if (page.type === 'hosted') {
-      let filePath = join(PAGES_DIR, slug, path)
-      if (!existsSync(filePath) && USE_CF_STORAGE) {
-        await downloadPageFromR2(slug, PAGES_DIR)
-        filePath = join(PAGES_DIR, slug, path)
-      }
-      if (!existsSync(filePath)) return res.status(404).send('Arquivo nao encontrado.')
-      const mimeType = mime.lookup(filePath) || 'application/octet-stream'
-      res.set('Content-Type', mimeType)
-      res.sendFile(filePath)
-    } else {
-      const p = await one('SELECT html FROM pages WHERE id = $1', [page.id])
-      res.set('Content-Type', mime.lookup(path) || 'application/octet-stream')
-      res.send(p?.html || '')
-    }
+    const mimeType = mime.lookup(path) || 'text/html; charset=utf-8'
+    res.set('Content-Type', mimeType)
+    res.send(page.html || '')
   } catch {
     res.status(500).send('Erro ao carregar pagina.')
   }
@@ -1153,20 +1150,8 @@ app.get('/api/page/:slug', async (req, res) => {
   try {
     const page = await one('SELECT html, type, title FROM pages WHERE slug = $1 AND published = 1', [req.params.slug.toLowerCase()])
     if (!page) return res.status(404).send('Pagina nao encontrada.')
-
-    if (page.type === 'hosted') {
-      let indexPath = join(PAGES_DIR, req.params.slug, 'index.html')
-      if (!existsSync(indexPath) && USE_CF_STORAGE) {
-        await downloadPageFromR2(req.params.slug, PAGES_DIR)
-        indexPath = join(PAGES_DIR, req.params.slug, 'index.html')
-      }
-      if (!existsSync(indexPath)) return res.status(404).send('index.html nao encontrado.')
-      res.set('Content-Type', 'text/html; charset=utf-8')
-      res.sendFile(indexPath)
-    } else {
-      res.set('Content-Type', 'text/html; charset=utf-8')
-      res.send(page.html)
-    }
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    res.send(page.html || '')
   } catch {
     res.status(500).send('Erro ao carregar pagina.')
   }
