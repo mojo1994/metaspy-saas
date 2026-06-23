@@ -15,7 +15,7 @@ export default function PropertyInspector({ node, onChange }: Props) {
   function setLayoutMode(mode: LayoutMode) { onChange(n.id, { layoutMode: mode }) }
   function setHover(h: HoverStyle) { onChange(n.id, { hoverStyle: h }) }
   function setAnim(a: ScrollAnimation | undefined) { onChange(n.id, { scrollAnimation: a }) }
-  function setClick(c: ClickAction) { onChange(n.id, { clickAction: c }) }
+  function setClick(c: Partial<ClickAction>) { onChange(n.id, { clickAction: { type: 'none', ...n.clickAction, ...c } as ClickAction }) }
 
   const isFreehand = n.layoutMode === 'freehand'
 

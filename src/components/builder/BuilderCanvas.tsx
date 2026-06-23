@@ -17,7 +17,7 @@ interface Props {
   previewMode: boolean
 }
 
-export default function BuilderCanvas({ tree, selectedId, onSelect, onDropWidget, onMoveNode, zoom, deviceWidth, previewMode }: Props) {
+export default function BuilderCanvas({ tree, selectedId, onSelect, onDropWidget, onDropComponent, onMoveNode, zoom, deviceWidth, previewMode }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const [dragOver, setDragOver] = useState<{ id: string; position: 'before' | 'after' | 'inside' } | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)

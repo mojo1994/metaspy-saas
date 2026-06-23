@@ -12,8 +12,7 @@ import PropertyInspector from '../components/builder/PropertyInspector'
 
 type Tab = 'tree' | 'widgets' | 'components'
 
-const API = process.env.REACT_APP_API_URL || ''
-function apiUrl(path: string) { return `${API}${path}` }
+function apiUrl(path: string) { return `/api${path}` }
 
 const WIDGET_CATEGORIES = [
   {
@@ -100,7 +99,7 @@ export default function PageBuilder() {
   useEffect(() => {
     if (!editId || !fetchWithAuth || loadingRef.current) return
     loadingRef.current = true
-    fetchWithAuth(apiUrl(`/api/builder/${editId}`))
+    fetchWithAuth(apiUrl(`/builder/${editId}`))
       .then(res => {
         if (!res.ok) throw new Error('Falha ao carregar')
         return res.json()
@@ -169,7 +168,7 @@ export default function PageBuilder() {
     try {
       const body: any = { name: pageName, tree: page.tree }
       if (dbId) body.id = dbId
-      const res = await fetchWithAuth(apiUrl('/api/builder/save'), {
+      const res = await fetchWithAuth(apiUrl('/builder/save'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -200,7 +199,7 @@ export default function PageBuilder() {
     if (!fetchWithAuth || !dbId) { showToast('error', 'Salve a pagina primeiro.'); return }
     setPublishing(true)
     try {
-      const res = await fetchWithAuth(apiUrl(`/api/builder/${dbId}/publish`), { method: 'POST' })
+      const res = await fetchWithAuth(apiUrl(`/builder/${dbId}/publish`), { method: 'POST' })
       if (!res.ok) throw new Error('Falha ao publicar')
       const data = await res.json()
       setPublishUrl(data.url || data.cf_url || '')
@@ -219,7 +218,7 @@ export default function PageBuilder() {
     const formData = new FormData()
     formData.append('image', file)
     try {
-      const res = await fetchWithAuth(apiUrl('/api/builder/upload'), {
+      const res = await fetchWithAuth(apiUrl('/builder/upload'), {
         method: 'POST',
         body: formData,
       })
