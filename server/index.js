@@ -15,6 +15,8 @@ import { exiftool } from 'exiftool-vendored'
 import mime from 'mime-types'
 import AdmZip from 'adm-zip'
 import { initDb, initSchema, one, query, run } from './db.js'
+import { uploadPageToR2, downloadPageFromR2, deletePageFromR2, getWorkerUrl } from './cloudflareStorage.js'
+const USE_CF_STORAGE = !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3001
@@ -988,7 +990,7 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
 
 app.get('/api/pages', authMiddleware, async (req, res) => {
   try {
-    const pages = await query('SELECT id, slug, title, type, published, created_at, updated_at FROM pages WHERE user_id = $1 ORDER BY updated_at DESC', [req.user.id])
+    const pages = await query('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE user_id = $1 ORDER BY updated_at DESC', [req.user.id])
     res.json(pages)
   } catch {
     res.status(500).json({ error: 'Erro ao listar paginas.' })
@@ -1022,7 +1024,12 @@ app.put('/api/pages/:id', authMiddleware, async (req, res) => {
 
 app.delete('/api/pages/:id', authMiddleware, async (req, res) => {
   try {
+    const page = await one('SELECT slug, cf_url FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
     await run('DELETE FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (USE_CF_STORAGE && page.slug) {
+      deletePageFromR2(page.slug).catch(() => {})
+    }
     res.json({ ok: true })
   } catch {
     res.status(500).json({ error: 'Erro ao deletar pagina.' })
@@ -1035,44 +1042,55 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
     const files = req.files
     if (!files || files.length === 0) return res.status(400).json({ error: 'Arquivo(s) obrigatorio(s).' })
 
+    let entries = []
+    let title
+
     // Single zip file
     if (files.length === 1 && files[0].originalname.endsWith('.zip')) {
       const zip = new AdmZip(files[0].buffer)
-      const entries = zip.getEntries()
+      entries = zip.getEntries().filter(e => !e.isDirectory)
       const hasIndex = entries.some(e => e.entryName === 'index.html' || e.entryName.endsWith('/index.html'))
       if (!hasIndex) return res.status(400).json({ error: 'O ZIP deve conter um arquivo index.html na raiz.' })
-
-      const title = req.body.title || files[0].originalname.replace(/\.zip$/i, '') || 'Pagina hospedada'
-      const { id, slug } = await createPageRecord(req.user.id, title, req.body.slug)
-
-      const pageDir = join(PAGES_DIR, slug)
-      mkdirSync(pageDir, { recursive: true })
-      for (const entry of entries) {
-        if (entry.isDirectory) continue
-        const filePath = join(pageDir, entry.entryName)
-        mkdirSync(dirname(filePath), { recursive: true })
-        writeFileSync(filePath, entry.getData())
-      }
-
-      return res.status(201).json({ id, slug, title, url: `https://centralspyads.netlify.app/p/${slug}` })
+      title = req.body.title || files[0].originalname.replace(/\.zip$/i, '') || 'Pagina hospedada'
+    } else {
+      // Folder upload
+      entries = files.map(f => ({
+        entryName: f.originalname,
+        isDirectory: false,
+        getData: () => f.buffer,
+      }))
+      const hasIndex = files.some(f => f.originalname === 'index.html' || f.originalname.endsWith('/index.html'))
+      if (!hasIndex) return res.status(400).json({ error: 'A pasta deve conter um arquivo index.html.' })
+      title = req.body.title || files.find(f => f.originalname === 'index.html')?.originalname?.replace('/index.html', '') || 'Pagina hospedada'
     }
 
-    // Folder upload (multiple files with relative paths as originalname)
-    const hasIndex = files.some(f => f.originalname === 'index.html' || f.originalname.endsWith('/index.html'))
-    if (!hasIndex) return res.status(400).json({ error: 'A pasta deve conter um arquivo index.html.' })
-
-    const title = req.body.title || files.find(f => f.originalname === 'index.html')?.originalname?.replace('/index.html', '') || 'Pagina hospedada'
     const { id, slug } = await createPageRecord(req.user.id, title, req.body.slug)
 
+    // Always save to local disk
     const pageDir = join(PAGES_DIR, slug)
     mkdirSync(pageDir, { recursive: true })
-    for (const file of files) {
-      const filePath = join(pageDir, file.originalname)
+    for (const entry of entries) {
+      const filePath = join(pageDir, entry.entryName)
       mkdirSync(dirname(filePath), { recursive: true })
-      writeFileSync(filePath, file.buffer)
+      writeFileSync(filePath, entry.getData())
     }
 
-    res.status(201).json({ id, slug, title, url: `https://centralspyads.netlify.app/p/${slug}` })
+    // Save to R2 + update cf_url
+    if (USE_CF_STORAGE) {
+      const cfFiles = entries.map(e => ({
+        path: e.entryName,
+        buffer: e.getData(),
+        contentType: mime.lookup(e.entryName) || 'application/octet-stream',
+      }))
+      uploadPageToR2(slug, cfFiles).catch(err => console.error('Erro upload R2:', err))
+      const cfUrl = getWorkerUrl(slug)
+      run('UPDATE pages SET cf_url = $1 WHERE id = $2', [cfUrl, id]).catch(() => {})
+    }
+
+    res.status(201).json({
+      id, slug, title,
+      url: `https://centralspyads.netlify.app/p/${slug}`,
+    })
   } catch (err) {
     if (err.message === 'slug-exists') return res.status(409).json({ error: 'Este nome de pagina ja esta em uso. Escolha outro.' })
     if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Arquivo muito grande. Maximo: 200MB.' })
@@ -1081,7 +1099,7 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
   }
 })
 
-async function createPageRecord(userId, title, customSlug) {
+async function createPageRecord(userId, title, customSlug, cfUrl) {
   const id = randomUUID()
   let slug
   if (customSlug) {
@@ -1099,8 +1117,8 @@ async function createPageRecord(userId, title, customSlug) {
     counter++
   }
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-  await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-    [id, userId, slug, title, '', 'hosted', 1, now, now])
+  await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, cf_url, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+    [id, userId, slug, title, '', 'hosted', 1, cfUrl || null, now, now])
   return { id, slug }
 }
 
@@ -1112,7 +1130,11 @@ app.get('/api/page/:slug/:path(*)', async (req, res) => {
     if (!page) return res.status(404).send('Pagina nao encontrada.')
 
     if (page.type === 'hosted') {
-      const filePath = join(PAGES_DIR, slug, path)
+      let filePath = join(PAGES_DIR, slug, path)
+      if (!existsSync(filePath) && USE_CF_STORAGE) {
+        await downloadPageFromR2(slug, PAGES_DIR)
+        filePath = join(PAGES_DIR, slug, path)
+      }
       if (!existsSync(filePath)) return res.status(404).send('Arquivo nao encontrado.')
       const mimeType = mime.lookup(filePath) || 'application/octet-stream'
       res.set('Content-Type', mimeType)
@@ -1133,7 +1155,11 @@ app.get('/api/page/:slug', async (req, res) => {
     if (!page) return res.status(404).send('Pagina nao encontrada.')
 
     if (page.type === 'hosted') {
-      const indexPath = join(PAGES_DIR, req.params.slug, 'index.html')
+      let indexPath = join(PAGES_DIR, req.params.slug, 'index.html')
+      if (!existsSync(indexPath) && USE_CF_STORAGE) {
+        await downloadPageFromR2(req.params.slug, PAGES_DIR)
+        indexPath = join(PAGES_DIR, req.params.slug, 'index.html')
+      }
       if (!existsSync(indexPath)) return res.status(404).send('index.html nao encontrado.')
       res.set('Content-Type', 'text/html; charset=utf-8')
       res.sendFile(indexPath)

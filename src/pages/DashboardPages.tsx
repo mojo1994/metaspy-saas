@@ -21,8 +21,9 @@ export default function DashboardPages() {
     setPages(p => p.filter(x => x.id !== id))
   }
 
-  function copyLink(slug: string) {
-    navigator.clipboard.writeText(`https://centralspyads.netlify.app/p/${slug}`)
+  function copyLink(p: any) {
+    const url = p.cf_url || `https://centralspyads.netlify.app/p/${p.slug}`
+    navigator.clipboard.writeText(url)
   }
 
   return (
@@ -63,7 +64,7 @@ export default function DashboardPages() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn btn-secondary" onClick={() => copyLink(p.slug)} style={{ fontSize: 11, padding: '4px 10px' }}>
+                  <button className="btn btn-secondary" onClick={() => copyLink(p)} style={{ fontSize: 11, padding: '4px 10px' }}>
                     Copiar Link
                   </button>
                   <button className="btn btn-accent" onClick={() => navigate(`/dashboard/paginas/editar/${p.id}`)} style={{ fontSize: 11, padding: '4px 10px' }}>

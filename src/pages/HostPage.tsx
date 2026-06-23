@@ -189,7 +189,7 @@ export default function HostPage() {
               Nome da pagina (personalize a URL)
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'var(--text-muted)' }}>
-              <span>centralspyads.netlify.app/p/</span>
+              <span>seusite.com/p/</span>
               <input
                 type="text"
                 value={pageSlug}

@@ -8,3 +8,6 @@ clones/
 teste.txt
 tsconfig.tsbuildinfo
 *.log
+cli.txt
+tokens.txt
+editor.txt
