@@ -1242,16 +1242,16 @@ app.post('/api/builder/save', authMiddleware, async (req, res) => {
 
     // Create new
     const newId = randomUUID()
-    let slug = baseSlug
-    let exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+    let finalSlug = baseSlug
+    let exists = await one('SELECT id FROM pages WHERE slug = $1', [finalSlug])
     let counter = 1
     while (exists) {
-      slug = `${baseSlug}-${counter}`
-      exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+      finalSlug = `${baseSlug}-${counter}`
+      exists = await one('SELECT id FROM pages WHERE slug = $1', [finalSlug])
       counter++
     }
     await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      [newId, req.user.id, slug, name.trim(), treeJson, 'builder', 0, now, now])
+      [newId, req.user.id, finalSlug, name.trim(), treeJson, 'builder', 0, now, now])
     const page = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [newId])
     res.status(201).json(page)
   } catch (err) {
