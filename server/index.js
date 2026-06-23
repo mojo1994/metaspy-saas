@@ -1172,6 +1172,314 @@ app.get('/api/page/:slug', async (req, res) => {
   }
 })
 
+// ─── Builder Routes ─────────────────────────────────────────────────
+const builderUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
+    if (allowed.includes(file.mimetype)) return cb(null, true)
+    cb(new Error('Formato de imagem nao suportado.'))
+  },
+})
+
+app.post('/api/builder/upload', authMiddleware, builderUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem enviada.' })
+    const ext = extname(req.file.originalname) || '.jpg'
+    const fileName = `builder_${randomUUID()}${ext}`
+    const pageDir = join(PAGES_DIR, '_uploads')
+    if (!existsSync(pageDir)) mkdirSync(pageDir, { recursive: true })
+    writeFileSync(join(pageDir, fileName), req.file.buffer)
+    let url = `/api/builder/image/${fileName}`
+    if (USE_CF_STORAGE) {
+      try {
+        await uploadPageToR2(`_uploads/${fileName}`, [{
+          path: fileName,
+          buffer: req.file.buffer,
+          contentType: req.file.mimetype,
+        }])
+        url = getWorkerUrl(`_uploads/${fileName}`)
+      } catch (cfErr) {
+        console.error('Erro R2 upload image:', cfErr)
+      }
+    }
+    res.json({ url, fileName })
+  } catch (err) {
+    console.error('Erro upload builder image:', err)
+    res.status(500).json({ error: 'Erro ao fazer upload da imagem.' })
+  }
+})
+
+app.get('/api/builder/image/:fileName', async (req, res) => {
+  try {
+    const filePath = join(PAGES_DIR, '_uploads', req.params.fileName)
+    if (!existsSync(filePath)) return res.status(404).send('Imagem nao encontrada.')
+    const mimeType = mime.lookup(filePath) || 'image/jpeg'
+    res.set('Content-Type', mimeType)
+    res.sendFile(filePath)
+  } catch {
+    res.status(500).send('Erro ao carregar imagem.')
+  }
+})
+
+app.post('/api/builder/save', authMiddleware, async (req, res) => {
+  try {
+    const { id, name, slug, tree } = req.body
+    if (!name || !tree) return res.status(400).json({ error: 'Nome e arvore sao obrigatorios.' })
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    const treeJson = JSON.stringify(tree)
+    const baseSlug = slug || slugify(name)
+
+    if (id) {
+      const existing = await one('SELECT id FROM pages WHERE id = $1 AND user_id = $2 AND type = $3', [id, req.user.id, 'builder'])
+      if (!existing) return res.status(404).json({ error: 'Pagina nao encontrada.' })
+      await run('UPDATE pages SET title = $1, slug = $2, html = $3, updated_at = $4 WHERE id = $5',
+        [name.trim(), baseSlug, treeJson, now, id])
+      const page = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [id])
+      return res.json(page)
+    }
+
+    // Create new
+    const newId = randomUUID()
+    let slug = baseSlug
+    let exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+    let counter = 1
+    while (exists) {
+      slug = `${baseSlug}-${counter}`
+      exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
+      counter++
+    }
+    await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [newId, req.user.id, slug, name.trim(), treeJson, 'builder', 0, now, now])
+    const page = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [newId])
+    res.status(201).json(page)
+  } catch (err) {
+    console.error('Erro salvar builder:', err)
+    res.status(500).json({ error: 'Erro ao salvar pagina.' })
+  }
+})
+
+app.get('/api/builder', authMiddleware, async (req, res) => {
+  try {
+    const pages = await query('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE user_id = $1 AND type = $2 ORDER BY updated_at DESC', [req.user.id, 'builder'])
+    res.json(pages)
+  } catch {
+    res.status(500).json({ error: 'Erro ao listar paginas.' })
+  }
+})
+
+app.get('/api/builder/:id', authMiddleware, async (req, res) => {
+  try {
+    const page = await one('SELECT * FROM pages WHERE id = $1 AND user_id = $2 AND type = $3', [req.params.id, req.user.id, 'builder'])
+    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
+    res.json(page)
+  } catch {
+    res.status(500).json({ error: 'Erro ao buscar pagina.' })
+  }
+})
+
+app.delete('/api/builder/:id', authMiddleware, async (req, res) => {
+  try {
+    const result = await run('DELETE FROM pages WHERE id = $1 AND user_id = $2 AND type = $3', [req.params.id, req.user.id, 'builder'])
+    if (result.changes === 0) return res.status(404).json({ error: 'Pagina nao encontrada.' })
+    res.json({ ok: true })
+  } catch {
+    res.status(500).json({ error: 'Erro ao deletar pagina.' })
+  }
+})
+
+// Publish builder page: generate HTML, save as hosted page, upload to R2
+app.post('/api/builder/:id/publish', authMiddleware, async (req, res) => {
+  try {
+    const page = await one('SELECT * FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
+    if (page.type !== 'builder') return res.status(400).json({ error: 'Tipo invalido. Use uma pagina do builder.' })
+
+    const tree = JSON.parse(page.html)
+    const html = generateBuilderHtml(tree, page.title)
+
+    // Save as hosted page
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    const slug = page.slug
+    const hostedId = randomUUID()
+    await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [hostedId, req.user.id, slug, `${page.title} (hospedada)`, html, 'hosted', 1, now, now])
+
+    // Save files to disk
+    const pageDir = join(PAGES_DIR, slug)
+    mkdirSync(pageDir, { recursive: true })
+    writeFileSync(join(pageDir, 'index.html'), html)
+
+    // Upload to R2
+    if (USE_CF_STORAGE) {
+      const cfUrl = getWorkerUrl(slug)
+      await uploadPageToR2(slug, [{
+        path: 'index.html',
+        buffer: Buffer.from(html),
+        contentType: 'text/html; charset=utf-8',
+      }]).catch(err => console.error('Erro R2 publish:', err))
+      run('UPDATE pages SET published = 1, cf_url = $1 WHERE id = $2', [cfUrl, hostedId]).catch(() => {})
+      run('UPDATE pages SET published = 1 WHERE id = $1', [req.params.id]).catch(() => {})
+    } else {
+      run('UPDATE pages SET published = 1 WHERE id = $1', [req.params.id]).catch(() => {})
+    }
+
+    const hosted = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [hostedId])
+    res.json({
+      ...hosted,
+      url: `https://centralspyads.netlify.app/p/${slug}`,
+    })
+  } catch (err) {
+    console.error('Erro publicar builder:', err)
+    res.status(500).json({ error: 'Erro ao publicar pagina.' })
+  }
+})
+
+function generateBuilderHtml(tree, title) {
+  function hoverStyleToCss(hs) {
+    if (!hs) return ''
+    const p = []
+    if (hs.backgroundColor) p.push(`background-color: ${hs.backgroundColor}`)
+    if (hs.color) p.push(`color: ${hs.color}`)
+    if (hs.boxShadow) p.push(`box-shadow: ${hs.boxShadow}`)
+    if (hs.opacity !== undefined) p.push(`opacity: ${hs.opacity}`)
+    const t = []
+    if (hs.scale) t.push(`scale(${hs.scale})`)
+    if (hs.translateY) t.push(`translateY(${hs.translateY}px)`)
+    if (t.length) p.push(`transform: ${t.join(' ')}`)
+    return p.join('; ')
+  }
+  function stylesToCss(styles, layoutMode) {
+    if (!styles) return ''
+    const lines = []
+    const val = (s) => s ? `${s.value}${s.unit}` : '0'
+    if (layoutMode === 'freehand') {
+      if (styles.left) lines.push(`left: ${val(styles.left)}`)
+      if (styles.top) lines.push(`top: ${val(styles.top)}`)
+      if (styles.zIndex !== undefined) lines.push(`z-index: ${styles.zIndex}`)
+      if (styles.rotation) lines.push(`transform: rotate(${styles.rotation}deg)`)
+    }
+    const f = (k, v) => { if (v !== undefined && v !== '') lines.push(`${k}: ${v}`) }
+    f('display', styles.display); f('flex-direction', styles.flexDirection)
+    f('align-items', styles.alignItems); f('justify-content', styles.justifyContent)
+    f('gap', styles.gap ? val(styles.gap) : undefined); f('flex', styles.flex)
+    if (styles.width) { if (styles.width === 'fill') f('width', '100%'); else if (styles.width === 'hug') f('width', 'auto'); else f('width', val(styles.width)) }
+    if (styles.height) { if (styles.height === 'hug') f('height', 'auto'); else f('height', val(styles.height)) }
+    f('min-width', styles.minWidth ? val(styles.minWidth) : undefined)
+    f('max-width', styles.maxWidth ? val(styles.maxWidth) : undefined)
+    f('min-height', styles.minHeight ? val(styles.minHeight) : undefined)
+    ;['margin', 'padding'].forEach(p => { ['Top', 'Right', 'Bottom', 'Left'].forEach(s => { const key = `${p}${s}`; f(`${p}-${s.toLowerCase()}`, styles[key] ? val(styles[key]) : undefined) }) })
+    f('background-color', styles.backgroundColor)
+    f('background-image', styles.backgroundImage ? `url(${styles.backgroundImage})` : undefined)
+    f('background-size', styles.backgroundSize)
+    ;['border-width', 'border-style', 'border-color', 'border-radius'].forEach(p => { const key = p === 'border-width' ? 'borderWidth' : p === 'border-style' ? 'borderStyle' : p === 'border-color' ? 'borderColor' : 'borderRadius'; const v = styles[key]; if (v) f(p, typeof v === 'object' ? val(v) : v) })
+    f('box-shadow', styles.boxShadow); f('opacity', styles.opacity)
+    f('font-family', styles.fontFamily); f('font-size', styles.fontSize ? val(styles.fontSize) : undefined)
+    f('font-weight', styles.fontWeight); f('line-height', styles.lineHeight)
+    f('letter-spacing', styles.letterSpacing ? val(styles.letterSpacing) : undefined)
+    f('color', styles.color); f('text-align', styles.textAlign); f('text-decoration', styles.textDecoration)
+    return lines.join('; ')
+  }
+  const SCROLL_ANIMATION_KEYFRAMES = `
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeInLeft { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes fadeInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+@keyframes slideIn { from { opacity: 0; transform: translateY(60px); } to { opacity: 1; transform: translateY(0); } }
+`
+
+  function renderNode(node) {
+    const css = stylesToCss(node.styles, node.layoutMode)
+    const styleAttr = css ? ` style="${css}"` : ''
+    const animAttr = node.scrollAnimation ? ` data-scroll="${node.scrollAnimation.type}" data-duration="${node.scrollAnimation.duration}" data-delay="${node.scrollAnimation.delay}"` : ''
+    const clickAttr = node.clickAction?.type === 'link' ? ` onclick="window.open('${node.clickAction.linkUrl}','${node.clickAction.linkTarget || '_self'}')"` : node.clickAction?.type === 'scrollTo' ? ` onclick="document.querySelector('${node.clickAction.scrollSelector}')?.scrollIntoView({behavior:'smooth'})"` : ''
+
+    const hoverId = node.hoverStyle ? `_h_${node.id.replace(/[^a-zA-Z0-9]/g, '_')}` : ''
+
+    switch (node.type) {
+      case 'page':
+        return `<div${styleAttr}${animAttr}${clickAttr}>${node.children.map(renderNode).join('\n')}</div>`
+      case 'section':
+        return `<section${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.children.map(renderNode).join('\n')}</section>`
+      case 'container': case 'row': case 'column':
+        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.children.map(renderNode).join('\n')}</div>`
+      case 'heading': {
+        const level = node.props?.level || 'h2'
+        return `<${level}${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.props?.text || ''}</${level}>`
+      }
+      case 'text':
+        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.props?.html || ''}</div>`
+      case 'button': {
+        const link = node.props?.link || '#'
+        const target = node.props?.target || '_self'
+        return `<a href="${link}" target="${target}"${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.props?.text || ''}</a>`
+      }
+      case 'image':
+        return `<img src="${node.props?.src || ''}" alt="${node.props?.alt || ''}"${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} />`
+      case 'divider':
+        return `<hr${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} />`
+      default:
+        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.children.map(renderNode).join('\n')}</div>`
+    }
+  }
+
+  // Collect hover styles
+  function collectHoverStyles(node) {
+    let css = ''
+    if (node.hoverStyle) {
+      const id = `_h_${node.id.replace(/[^a-zA-Z0-9]/g, '_')}`
+      css += `#${id}:hover { ${hoverStyleToCss(node.hoverStyle)} }\n`
+    }
+    if (node.scrollAnimation) {
+      const id = node.id.replace(/[^a-zA-Z0-9]/g, '_')
+      css += `[data-scroll="${node.scrollAnimation.type}"] { opacity: 0; }\n`
+    }
+    node.children.forEach(c => { css += collectHoverStyles(c) })
+    return css
+  }
+
+  const bodyContent = renderNode(tree)
+  const hoverCss = collectHoverStyles(tree)
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title || 'Minha Pagina'}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+    ${hoverCss}
+    ${SCROLL_ANIMATION_KEYFRAMES}
+  </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            var el = entry.target;
+            var anim = el.getAttribute('data-scroll');
+            var dur = el.getAttribute('data-duration') || 600;
+            var delay = el.getAttribute('data-delay') || 0;
+            el.style.animation = anim + ' ' + dur + 'ms ease ' + delay + 'ms both';
+            observer.unobserve(el);
+          }
+        });
+      }, { threshold: 0.1 });
+      document.querySelectorAll('[data-scroll]').forEach(function(el) { observer.observe(el); });
+    });
+  </script>
+</head>
+<body>
+${bodyContent}
+</body>
+</html>`
+}
+
 // Cleanup cron: remove files older than 1 hour
 setInterval(async () => {
   const oneHour = 60 * 60 * 1000
