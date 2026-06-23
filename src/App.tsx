@@ -15,6 +15,7 @@ import MetadataCleaner from './pages/MetadataCleaner'
 import DashboardPages from './pages/DashboardPages'
 import PageEditor from './pages/PageEditor'
 import HostPage from './pages/HostPage'
+import PageBuilder from './pages/PageBuilder'
 import Profile from './pages/Profile'
 import Settings from './pages/Settings'
 import Admin from './pages/Admin'
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="paginas/nova" element={<PageEditor />} />
         <Route path="paginas/editar/:id" element={<PageEditor />} />
         <Route path="hospedar" element={<HostPage />} />
+        <Route path="hospedar/criar" element={<PageBuilder />} />
         <Route path="perfil" element={<Profile />} />
         <Route path="configuracoes" element={<Settings />} />
         <Route path="admin" element={<Admin />} />

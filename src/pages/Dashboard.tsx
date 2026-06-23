@@ -57,10 +57,16 @@ export default function Dashboard() {
 
   const isCloackerSub = location.pathname.startsWith('/dashboard/cloacker')
   const [cloackerOpen, setCloackerOpen] = useState(isCloackerSub)
+  const isHospedarSub = location.pathname.startsWith('/dashboard/hospedar')
+  const [hospedarOpen, setHospedarOpen] = useState(isHospedarSub)
 
   useEffect(() => {
     if (isCloackerSub) setCloackerOpen(true)
   }, [isCloackerSub])
+
+  useEffect(() => {
+    if (isHospedarSub) setHospedarOpen(true)
+  }, [isHospedarSub])
 
   return (
     <div className="app-layout">
@@ -106,9 +112,23 @@ export default function Dashboard() {
           <NavLink to="/dashboard/paginas" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             Paginas
           </NavLink>
-          <NavLink to="/dashboard/hospedar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            Hospedar
-          </NavLink>
+          <div className="sidebar-group">
+            <button
+              className={`sidebar-link sidebar-group-toggle${location.pathname.startsWith('/dashboard/hospedar') ? ' active' : ''}`}
+              onClick={() => setHospedarOpen(!hospedarOpen)}
+            >
+              <span>Hospedar</span>
+              <span className="sidebar-arrow" data-open={hospedarOpen}>›</span>
+            </button>
+            <div className={`sidebar-subnav${hospedarOpen ? ' open' : ''}`}>
+              <NavLink to="/dashboard/hospedar" end className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Hospedar Pagina
+              </NavLink>
+              <NavLink to="/dashboard/hospedar/criar" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Criar Pagina
+              </NavLink>
+            </div>
+          </div>
         </nav>
 
         <div className="sidebar-section-label">Conta</div>
