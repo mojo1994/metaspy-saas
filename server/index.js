@@ -1217,10 +1217,10 @@ app.post('/api/builder/save', authMiddleware, async (req, res) => {
     const baseSlug = slug || slugify(name)
 
     if (id) {
-      const existing = await one('SELECT id FROM pages WHERE id = $1 AND user_id = $2 AND type = $3', [id, req.user.id, 'builder'])
+      const existing = await one('SELECT id FROM pages WHERE id = $1 AND user_id = $2', [id, req.user.id])
       if (!existing) return res.status(404).json({ error: 'Pagina nao encontrada.' })
-      await run('UPDATE pages SET title = $1, slug = $2, html = $3, updated_at = $4 WHERE id = $5',
-        [name.trim(), baseSlug, treeJson, now, id])
+      await run('UPDATE pages SET title = $1, slug = $2, html = $3, type = $4, updated_at = $5 WHERE id = $6',
+        [name.trim(), baseSlug, treeJson, 'builder', now, id])
       const page = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [id])
       return res.json(page)
     }
@@ -1256,8 +1256,9 @@ app.get('/api/builder', authMiddleware, async (req, res) => {
 
 app.get('/api/builder/:id', authMiddleware, async (req, res) => {
   try {
-    const page = await one('SELECT * FROM pages WHERE id = $1 AND user_id = $2 AND type = $3', [req.params.id, req.user.id, 'builder'])
+    const page = await one('SELECT * FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
     if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
+    if (page.type !== 'builder' && page.type !== 'hosted') return res.status(400).json({ error: 'Tipo invalido.' })
     res.json(page)
   } catch {
     res.status(500).json({ error: 'Erro ao buscar pagina.' })
@@ -1274,7 +1275,7 @@ app.delete('/api/builder/:id', authMiddleware, async (req, res) => {
   }
 })
 
-// Publish builder page: generate HTML, save as hosted page, upload to R2
+// Publish builder page: generate HTML, update record in-place to type='hosted' + embed tree
 app.post('/api/builder/:id/publish', authMiddleware, async (req, res) => {
   try {
     const page = await one('SELECT * FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
@@ -1283,36 +1284,36 @@ app.post('/api/builder/:id/publish', authMiddleware, async (req, res) => {
 
     const tree = JSON.parse(page.html)
     const html = generateBuilderHtml(tree, page.title)
-
-    // Save as hosted page
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
     const slug = page.slug
-    const hostedId = randomUUID()
-    await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      [hostedId, req.user.id, slug, `${page.title} (hospedada)`, html, 'hosted', 1, now, now])
+
+    // Store generated HTML in the html column & embed tree JSON in a script tag for re-editing
+    const fullHtml = html.replace('</body>',
+      `<script id="__METASPY_TREE" type="application/json">${JSON.stringify(tree)}</script>\n</body>`)
+
+    // Update existing record to type='hosted' so it serves the rendered HTML
+    await run('UPDATE pages SET html = $1, type = $2, published = $3, updated_at = $4 WHERE id = $5',
+      [fullHtml, 'hosted', 1, now, page.id])
 
     // Save files to disk
     const pageDir = join(PAGES_DIR, slug)
     mkdirSync(pageDir, { recursive: true })
-    writeFileSync(join(pageDir, 'index.html'), html)
+    writeFileSync(join(pageDir, 'index.html'), fullHtml)
 
     // Upload to R2
     if (USE_CF_STORAGE) {
       const cfUrl = getWorkerUrl(slug)
       await uploadPageToR2(slug, [{
         path: 'index.html',
-        buffer: Buffer.from(html),
+        buffer: Buffer.from(fullHtml),
         contentType: 'text/html; charset=utf-8',
       }]).catch(err => console.error('Erro R2 publish:', err))
-      run('UPDATE pages SET published = 1, cf_url = $1 WHERE id = $2', [cfUrl, hostedId]).catch(() => {})
-      run('UPDATE pages SET published = 1 WHERE id = $1', [req.params.id]).catch(() => {})
-    } else {
-      run('UPDATE pages SET published = 1 WHERE id = $1', [req.params.id]).catch(() => {})
+      run('UPDATE pages SET cf_url = $1 WHERE id = $2', [cfUrl, page.id]).catch(() => {})
     }
 
-    const hosted = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [hostedId])
+    const updated = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [page.id])
     res.json({
-      ...hosted,
+      ...updated,
       url: `https://centralspyads.netlify.app/p/${slug}`,
     })
   } catch (err) {

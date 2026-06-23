@@ -106,7 +106,14 @@ export default function PageBuilder() {
         return res.json()
       })
       .then(data => {
-        const tree = JSON.parse(data.html)
+        let tree
+        if (data.type === 'hosted') {
+          const match = data.html.match(/<script id="__METASPY_TREE" type="application\/json">(.+?)<\/script>/)
+          tree = match ? JSON.parse(match[1]) : null
+        } else {
+          tree = JSON.parse(data.html)
+        }
+        if (!tree) { loadingRef.current = false; throw new Error('Arvore nao encontrada') }
         setPage({
           id: data.id,
           name: data.title,
