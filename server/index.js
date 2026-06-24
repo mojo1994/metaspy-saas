@@ -1044,7 +1044,7 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
 
     res.status(201).json({
       id, slug, title,
-      url: `https://centralspyads.netlify.app/p/${slug}`,
+      url: getWorkerUrl(slug),
     })
   } catch (err) {
     if (err.message === 'slug-exists') return res.status(409).json({ error: 'Este nome de pagina ja esta em uso. Escolha outro.' })
