@@ -1,0 +1,37 @@
+PROMPT DE CORREÇÃO IMEDIATA – METASPY SAAS
+Prioridade: CRÍTICO (P0) – Segurança e Estabilidade em Produção
+
+1. SEGURANÇA (FALHAS GRAVES)
+Headers de Segurança: Instalar e configurar o helmet.js no backend. Adicionar políticas CSP (Content-Security-Policy) restritivas para mitigar XSS e injeção de scripts, principalmente porque hospedamos HTML de terceiros.
+
+Validação Robusta de Inputs: Implementar validação com Zod em TODAS as rotas POST/PUT. Atualmente a validação é manual e frágil. Isso impede injeção de SQL (mesmo com pool seguro) e dados maliciosos no AST/HTML.
+
+Sanitização de HTML Hospedado: Ao receber upload de páginas (ZIP ou pasta), aplicar sanitização pesada no index.html para remover scripts maliciosos antes de salvar no banco/R2 (usar sanitize-html ou DOMPurify no backend).
+
+2. PERFORMANCE & RESILIÊNCIA (COLD START E PERDA DE DADOS)
+Mitigar Cold Start do Render: Implementar um "Keep-Alive" interno (ping na rota /api/health a cada 60 segundos) para evitar que o serviço free tier do Render durma. Se orçamento permitir, migrar para um plano pago ou usar um cron job externo (ex: Koyeb ou UptimeRobot) para manter ativo.
+
+Persistência de Arquivos (FIX URGENTE): Todos os uploads de clonagem e metadados atualmente salvam em /tmp (efêmero). Migrar IMEDIATAMENTE todo armazenamento de arquivo para o Cloudflare R2 (já integrado) ou S3. Remover dependência de disco local.
+
+Índice de Banco de Dados: Adicionar índice na coluna slug da tabela pages. As consultas públicas (/api/page/:slug) estão fazendo Full Table Scan, o que vai degradar severamente com o crescimento de usuários.
+
+3. CONFIABILIDADE (WEBHOOK E PROCESSAMENTO)
+Idempotência no Webhook Kirvano: O endpoint /api/subscription/webhook precisa de um sistema de idempotency key (usando transaction_id ou event_id). Sem isso, se a Kirvano reenviar o webhook (por falha de rede), o usuário pode ser "downgradado" ou ter o plano ativado duas vezes, corrompendo assinaturas.
+
+Timeout em Requisições Externas: Adicionar timeouts explícitos (ex: 10s) para todas as chamadas fetch para a API do Facebook, Webhooks e serviços externos, com fallback e retry exponencial.
+
+4. MANUTENIBILIDADE (DÍVIDA TÉCNICA)
+Refatorar server/index.js: Esse arquivo tem mais de 1100 linhas. Quebrar em módulos específicos (ex: routes/auth.js, routes/pages.js, routes/cloaker.js, routes/admin.js, services/storage.js). Isso reduz erros em deploys e facilita correções futuras.
+
+Logs Estruturados: Substituir todos os console.log por um logger estruturado (ex: Pino ou Winston) que inclua correlation-id (para rastrear requisições) e nível de severidade. Isso é essencial para debugar em produção no Render.
+
+Prioridade: ALTA (P1) – Melhorias para evolução
+
+5. TESTES
+Escrever testes unitários para a lógica de cálculo de score (MetaSpy) e para as funções de sanitização de AST.
+
+Configurar testes de integração para os endpoints críticos: Login, Criação de Página, e Webhook.
+
+6. CONFIGURAÇÃO DE AMBIENTE
+Revisar as variáveis de ambiente no Render. Garantir que NODE_ENV=production e que JWT_SECRET tenha pelo menos 64 caracteres aleatórios (não usar o default "metaspy-dev-secret").
+
