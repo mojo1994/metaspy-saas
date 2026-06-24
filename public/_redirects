@@ -1,3 +1,3 @@
 /api/*         https://metaspy-saas.onrender.com/api/:splat    200
-/p/*           https://metaspy-host.09santos-felipe.workers.dev/p/:splat   200
+/p/*           https://metaspy-saas.onrender.com/api/page/:splat   200
 /*             /index.html                                      200
