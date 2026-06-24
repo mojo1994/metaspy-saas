@@ -144,7 +144,7 @@ function baseEmail({ code, title, subtitle, extraText, extraLink, extraLinkText 
           <tr>
             <td align="center" style="font-size:12px;color:#5c5c78;padding-bottom:24px">
               <span style="display:inline-block;background:#0a0a14;border:1px solid #1a1a2e;border-radius:20px;padding:6px 14px">
-                ⏱ Codigo valido por 5 minutos
+                Codigo valido por 5 minutos
               </span>
             </td>
           </tr>
@@ -199,7 +199,7 @@ function baseEmail({ code, title, subtitle, extraText, extraLink, extraLinkText 
           </tr>
           <tr>
             <td style="text-align:center;padding-top:16px;font-size:11px;color:#a855f7;font-weight:600">
-              ⚠ Nao encontrou? Verifique sua caixa de spam.
+              Nao encontrou? Verifique sua caixa de spam.
             </td>
           </tr>
         </table>
@@ -246,7 +246,7 @@ export function purchaseConfirmationEmailHtml({ name, plan, days }) {
       <td style="background:#12121e;border:1px solid #1e1e32;border-radius:16px;padding:36px 32px">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
           <tr>
-            <td align="center" style="font-size:24px;padding-bottom:16px">🎉</td>
+            <td align="center" style="font-size:24px;padding-bottom:16px"></td>
           </tr>
           <tr>
             <td align="center" style="font-size:20px;font-weight:700;color:#fff;padding-bottom:6px">Parabens, ${name}!</td>
@@ -345,7 +345,7 @@ export function pendingCheckoutEmailHtml({ name, email }) {
       <td style="background:#12121e;border:1px solid #1e1e32;border-radius:16px;padding:36px 32px">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
           <tr>
-            <td align="center" style="font-size:32px;padding-bottom:16px">🚀</td>
+            <td align="center" style="font-size:32px;padding-bottom:16px"></td>
           </tr>
           <tr>
             <td align="center" style="font-size:20px;font-weight:700;color:#fff;padding-bottom:12px">Ola, ${name}!</td>
@@ -364,7 +364,7 @@ export function pendingCheckoutEmailHtml({ name, email }) {
             <td style="background:linear-gradient(135deg,rgba(168,85,247,0.12),rgba(124,58,237,0.06));border:1px solid rgba(168,85,247,0.25);border-radius:12px;padding:20px 24px;margin-bottom:24px">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td align="center" style="font-size:13px;color:#f59e0b;font-weight:600;padding-bottom:8px">⏳ OFERTA POR TEMPO LIMITADO</td>
+                  <td align="center" style="font-size:13px;color:#f59e0b;font-weight:600;padding-bottom:8px">OFERTA POR TEMPO LIMITADO</td>
                 </tr>
                 <tr>
                   <td align="center" style="font-size:12px;color:#8484a0;line-height:1.5">
@@ -422,7 +422,7 @@ export function pendingCheckoutEmailHtml({ name, email }) {
           </tr>
           <tr>
             <td style="text-align:center;padding-top:8px;font-size:11px;color:#a855f7;font-weight:600">
-              ⚠ Nao encontrou? Verifique sua caixa de spam.
+              Nao encontrou? Verifique sua caixa de spam.
             </td>
           </tr>
         </table>

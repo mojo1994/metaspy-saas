@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { IconLogo, IconTarget, IconDiamond, IconLocked, IconPlay, IconBoxPlus, IconArrowDown, IconCheck, IconDash } from '../components/Icons'
 
 export default function Landing() {
   const { isAuthenticated } = useAuth()
@@ -8,7 +9,9 @@ export default function Landing() {
     <div className="landing">
       <nav className="landing-nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div className="sidebar-logo-icon" style={{ width: 28, height: 28, fontSize: 14 }}>◉</div>
+          <div className="sidebar-logo-icon" style={{ width: 28, height: 28 }}>
+            <IconLogo size={18} />
+          </div>
           <span style={{ fontWeight: 700, fontSize: 16 }}>MetaSpy</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -49,7 +52,7 @@ export default function Landing() {
 
       <section className="landing-features">
         <div className="feature-card">
-          <div className="feature-icon">◎</div>
+          <div className="feature-icon"><IconTarget size={24} /></div>
           <h3>MetaSpy Ad Intelligence</h3>
           <p>
             Escaneie a Biblioteca de Anúncios do Facebook em tempo real. Descubra ofertas
@@ -57,7 +60,7 @@ export default function Landing() {
           </p>
         </div>
         <div className="feature-card">
-          <div className="feature-icon">◈</div>
+          <div className="feature-icon"><IconDiamond size={24} /></div>
           <h3>Clonador</h3>
           <p>
             Clone paginas web completas para o seu computador. Suporte a sites complexos,
@@ -65,7 +68,7 @@ export default function Landing() {
           </p>
         </div>
         <div className="feature-card">
-          <div className="feature-icon">⊘</div>
+          <div className="feature-icon"><IconLocked size={24} /></div>
           <h3>Cloacker</h3>
           <p>
             Gere scripts de cloaking profissionais para proteger suas campanhas. Deteccao
@@ -73,7 +76,7 @@ export default function Landing() {
           </p>
         </div>
         <div className="feature-card">
-          <div className="feature-icon">◉</div>
+          <div className="feature-icon"><IconTarget size={24} /></div>
           <h3>Analise Avancada</h3>
           <p>
             Dashboard completo com estatisticas de score, distribuicao por segmento,
@@ -81,7 +84,7 @@ export default function Landing() {
           </p>
         </div>
         <div className="feature-card">
-          <div className="feature-icon">⊞</div>
+          <div className="feature-icon"><IconBoxPlus size={24} /></div>
           <h3>Filtros Inteligentes</h3>
           <p>
             Filtre por pais, plataforma, status, tipo de midia, score minimo, dias ativo,
@@ -89,7 +92,7 @@ export default function Landing() {
           </p>
         </div>
         <div className="feature-card">
-          <div className="feature-icon">⇩</div>
+          <div className="feature-icon"><IconArrowDown size={24} /></div>
           <h3>Exportacao CSV</h3>
           <p>
             Exporte todos os resultados para CSV com um clique. Perfeito para analises
@@ -97,7 +100,7 @@ export default function Landing() {
           </p>
         </div>
         <div className="feature-card">
-          <div className="feature-icon">▶</div>
+          <div className="feature-icon"><IconPlay size={24} /></div>
           <h3>Bypass Engine</h3>
           <p>
             Motor de bypass em JS, Python, Node e PHP. Suporta Cloudflare, SSL,
@@ -121,11 +124,11 @@ export default function Landing() {
               <span className="planos-period">/mês</span>
             </div>
             <ul className="planos-features">
-              <li><span className="planos-check">✓</span>Clonador + Editor Visual</li>
-              <li><span className="planos-check">✓</span>MetaSpy Minerador de Ads</li>
-              <li><span className="planos-check">✓</span>Estrutura de Arquivos + ZIP</li>
-              <li className="off"><span className="planos-check">—</span>Cloacker Profissional</li>
-              <li className="off"><span className="planos-check">—</span>Análise Avançada</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador + Editor Visual</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>MetaSpy Minerador de Ads</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Estrutura de Arquivos + ZIP</li>
+              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Cloacker Profissional</li>
+              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Análise Avançada</li>
             </ul>
             <Link to="/signup" className="btn btn-primary planos-cta">Assinar Agora</Link>
           </div>
@@ -143,11 +146,11 @@ export default function Landing() {
               <span className="planos-renovation">Renova por R$ 97/ano</span>
             </div>
             <ul className="planos-features">
-              <li><span className="planos-check">✓</span>Clonador + Editor Visual</li>
-              <li><span className="planos-check">✓</span>MetaSpy Minerador de Ads</li>
-              <li><span className="planos-check">✓</span>Estrutura de Arquivos + ZIP</li>
-              <li><span className="planos-check">✓</span>Cloacker Profissional</li>
-              <li><span className="planos-check">✓</span>Análise Avançada + Suporte</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador + Editor Visual</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>MetaSpy Minerador de Ads</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Estrutura de Arquivos + ZIP</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Cloacker Profissional</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Análise Avançada + Suporte</li>
             </ul>
             <Link to="/signup" className="btn btn-gradient planos-cta">Assinar Agora</Link>
           </div>

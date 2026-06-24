@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
-import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { IconImage, IconClose, IconTarget, IconChevronDown, IconChevronRight, IconArrowUp } from '../components/Icons'
 import type { Anuncio, FilterState } from '../types'
 import HelpTooltip from '../components/HelpTooltip'
 
@@ -411,7 +412,7 @@ export default function MetaSpyTool() {
     <div>
       {user?.plano === 'nenhum' && (
         <div className="tool-locked">
-          <div className="tool-locked-icon">◉</div>
+          <div className="tool-locked-icon"><IconTarget size={24} /></div>
           <h3>MetaSpy Ads Intelligence</h3>
           <p>Esta ferramenta esta disponivel apenas para assinantes.</p>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
@@ -458,7 +459,7 @@ export default function MetaSpyTool() {
           onClick={() => setFiltrosExpandidos(!filtrosExpandidos)}
           style={{ width: '100%', justifyContent: 'flex-start', fontSize: 12 }}
         >
-          {filtrosExpandidos ? '▾ Filtros e Configuracoes' : '▸ Filtros e Configuracoes'}
+            {filtrosExpandidos ? <><IconChevronDown size={16} /> Filtros e Configuracoes</> : <><IconChevronRight size={16} /> Filtros e Configuracoes</>}
         </button>
         {filtrosExpandidos && (
           <div style={{
@@ -590,9 +591,9 @@ export default function MetaSpyTool() {
                 const ehDestaque = badge.texto === 'ALTA ESCALA' || badge.texto === 'ESCALADA'
                 return (
                   <div key={a.idAnuncio} className={`ad-card${ehDestaque ? ' destaque' : ''}`}>
-                    {ehDestaque && <span className="card-flag">▲ {a.variacoesAtivas}</span>}
+                    {ehDestaque && <span className="card-flag"><IconArrowUp size={12} /> {a.variacoesAtivas}</span>}
                     <div className="ad-thumb" style={{ display: 'grid', placeItems: 'center', fontSize: 24 }}>
-                      {a.midias?.[0]?.url ? <img className="ad-thumb" src={a.midias[0].url} alt="" /> : '◻'}
+                      {a.midias?.[0]?.url ? <img className="ad-thumb" src={a.midias[0].url} alt="" /> : <IconImage size={24} />}
                     </div>
                     <div className="ad-content">
                       <h3>{a.anunciante}</h3>
@@ -674,7 +675,7 @@ export default function MetaSpyTool() {
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{modalAnuncio.anunciante}</h2>
-              <button className="modal-close" onClick={() => setModalAnuncio(null)}>✕</button>
+              <button className="modal-close" onClick={() => setModalAnuncio(null)}><IconClose size={18} /></button>
             </div>
             <div className="modal-body">
               {modalAnuncio.midias?.[0]?.url && (

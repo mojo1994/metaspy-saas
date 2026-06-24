@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { CloneJob } from '../types'
 import HelpTooltip from '../components/HelpTooltip'
+import { IconCheck, IconArrowDown, IconTarget, IconChevronDown, IconChevronRight } from '../components/Icons'
 
 declare global {
   interface Window {
@@ -193,7 +194,7 @@ export default function PageVaultTool() {
         <h3>Clonador — Clonagem Offline de Paginas Web</h3>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn btn-accent" style={{ fontSize: 12 }}>
-            ⇩ Clonar
+            <IconArrowDown size={14} /> Clonar
           </button>
         </div>
       </div>
@@ -279,7 +280,7 @@ export default function PageVaultTool() {
                 const done = progress >= thresholds[i]
                 return (
                   <div key={step} className={`step ${done ? 'done' : ''}`}>
-                    <span className="step-dot">{done ? '✓' : `0${i + 1}`}</span>
+                    <span className="step-dot">{done ? <><IconCheck size={14} /></> : `0${i + 1}`}</span>
                     <span className="step-label">{step}</span>
                   </div>
                 )
@@ -291,7 +292,7 @@ export default function PageVaultTool() {
             <div className="clone-log-card">
               <div className="clone-log-header" onClick={() => setShowLog(!showLog)}>
                 <span>Log ao vivo ({log.length} linhas)</span>
-                <span>{showLog ? '▾' : '▸'}</span>
+                <span>{showLog ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}</span>
               </div>
               {showLog && (
                 <div className="clone-log-body">
@@ -334,7 +335,7 @@ export default function PageVaultTool() {
                         </button>
                         {job.status === 'completed' && cloneHtml && job.url === cloneUrl && (
                           <button className="btn btn-primary" onClick={() => openEditor(cloneHtml, cloneUrl)} title="Editar no editor visual">
-                            ◎ Editar
+                            <IconTarget size={14} /> Editar
                           </button>
                         )}
                       </div>

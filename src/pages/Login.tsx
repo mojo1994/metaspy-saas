@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { IconLogo } from '../components/Icons'
 
 export default function Login() {
   const { login } = useAuth()
@@ -26,7 +27,7 @@ export default function Login() {
       <div className="auth-card">
         <div style={{ textAlign: 'center' }}>
           <div className="sidebar-logo-icon" style={{ margin: '0 auto 12px', width: 48, height: 48, fontSize: 24 }}>
-            ◉
+            <IconLogo size={24} />
           </div>
           <h2>Entrar</h2>
           <p>Entre na sua conta MetaSpy</p>

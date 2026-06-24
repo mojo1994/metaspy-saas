@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { useEffect, useState } from 'react'
+import { IconGear, IconWarning } from '../components/Icons'
 
 export default function Dashboard() {
   const { user, logout, isAuthenticated, fetchWithAuth, updateUser } = useAuth()
@@ -153,7 +154,7 @@ export default function Dashboard() {
           </NavLink>
           {user?.email === '09santos.felipe@gmail.com' && (
             <NavLink to="/dashboard/admin" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              ⚙ PAINEL
+              <IconGear size={14} /> PAINEL
             </NavLink>
           )}
         </nav>
@@ -239,7 +240,7 @@ export default function Dashboard() {
             </div>
             {verifyErr && <div style={{ width: '100%', fontSize: 12, color: 'var(--danger)' }}>{verifyErr}</div>}
             {verifyMsg && <div style={{ width: '100%', fontSize: 12, color: 'var(--success)' }}>{verifyMsg}</div>}
-            {showVerify && !verifyMsg && <div style={{ width: '100%', fontSize: 11, color: 'var(--purple-400)', textAlign: 'center' }}>⚠ Nao encontrou? Verifique sua caixa de spam.</div>}
+            {showVerify && !verifyMsg && <div style={{ width: '100%', fontSize: 11, color: 'var(--purple-400)', textAlign: 'center' }}><IconWarning /> Nao encontrou? Verifique sua caixa de spam.</div>}
           </div>
         )}
         <Outlet />

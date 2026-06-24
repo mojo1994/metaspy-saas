@@ -1,5 +1,6 @@
 import { useState, FormEvent, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { IconWarning, IconLogo } from '../components/Icons'
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
@@ -61,7 +62,9 @@ export default function ForgotPassword() {
     <div className="auth-page">
       <div className="auth-card">
         <div style={{ textAlign: 'center' }}>
-          <div className="sidebar-logo-icon" style={{ margin: '0 auto 12px', width: 48, height: 48, fontSize: 24 }}>◉</div>
+          <div className="sidebar-logo-icon" style={{ margin: '0 auto 12px', width: 48, height: 48, fontSize: 24 }}>
+            <IconLogo size={24} />
+          </div>
           <h2>{step === 'done' ? 'Pronto!' : 'Recuperar Senha'}</h2>
           <p>
             {step === 'email' && 'Digite seu email para receber um codigo de 6 digitos.'}
@@ -109,7 +112,7 @@ export default function ForgotPassword() {
               )}
             </p>
             <p style={{ fontSize: 11, textAlign: 'center', marginTop: 4, color: 'var(--purple-400)' }}>
-              ⚠ Nao encontrou? Verifique sua caixa de spam.
+              <IconWarning /> Nao encontrou? Verifique sua caixa de spam.
             </p>
           </form>
         )}

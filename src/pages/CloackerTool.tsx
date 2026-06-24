@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import HelpTooltip from '../components/HelpTooltip'
+import { IconLocked } from '../components/Icons'
 
 interface CloackerScript {
   id: string
@@ -100,7 +101,7 @@ export default function CloackerTool() {
   if (!hasCloaker) {
     return (
       <div className="tool-locked">
-        <div className="tool-locked-icon">⊘</div>
+        <div className="tool-locked-icon"><IconLocked size={24} /></div>
         <h3>Cloacker</h3>
         <p>Disponivel apenas no plano Anual.</p>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>

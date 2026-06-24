@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { IconCheck, IconDash, IconStar, IconLogo } from '../components/Icons'
 
 const FEATURES_MENSAIS = [
   { label: 'Clonador de Paginas', ok: true },
@@ -55,7 +56,9 @@ export default function Planos() {
 
       <nav className="planos-nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div className="sidebar-logo-icon" style={{ width: 28, height: 28, fontSize: 14 }}>◉</div>
+          <div className="sidebar-logo-icon" style={{ width: 28, height: 28 }}>
+            <IconLogo size={18} />
+          </div>
           <span style={{ fontWeight: 700, fontSize: 16 }}>MetaSpy</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -96,7 +99,7 @@ export default function Planos() {
           <ul className="planos-features">
             {FEATURES_MENSAIS.map(f => (
               <li key={f.label} className={f.ok ? '' : 'off'}>
-                <span className="planos-check">{f.ok ? '✓' : '—'}</span>
+                <span className="planos-check">{f.ok ? <IconCheck size={12} /> : <IconDash size={12} />}</span>
                 {f.label}
               </li>
             ))}
@@ -121,7 +124,7 @@ export default function Planos() {
           <ul className="planos-features">
             {FEATURES_ANUAIS.map(f => (
               <li key={f.label}>
-                <span className="planos-check">✓</span>
+                <span className="planos-check"><IconCheck size={12} /></span>
                 {f.label}
               </li>
             ))}
@@ -144,9 +147,9 @@ export default function Planos() {
             <div key={f.label} className="planos-table-row">
               <div className="planos-table-cell">{f.label}</div>
               <div className={`planos-table-cell ${FEATURES_MENSAIS.find(m => m.label === f.label)?.ok ? 'check' : ''}`}>
-                {FEATURES_MENSAIS.find(m => m.label === f.label)?.ok ? '✓' : '—'}
+                {FEATURES_MENSAIS.find(m => m.label === f.label)?.ok ? <IconCheck size={12} /> : <IconDash size={12} />}
               </div>
-              <div className={`planos-table-cell check`}>✓</div>
+              <div className={`planos-table-cell check`}><IconCheck size={12} /></div>
             </div>
           ))}
         </div>
@@ -157,7 +160,9 @@ export default function Planos() {
         <div className="planos-depoimentos-grid">
           {DEPOIMENTOS.map(d => (
             <div key={d.nome} className="planos-depoimento-card">
-              <div className="planos-depoimento-stars">★★★★★</div>
+              <div className="planos-depoimento-stars">
+                <IconStar size={14} /><IconStar size={14} /><IconStar size={14} /><IconStar size={14} /><IconStar size={14} />
+              </div>
               <p className="planos-depoimento-texto">"{d.texto}"</p>
               <div className="planos-depoimento-autor">
                 <strong>{d.nome}</strong>

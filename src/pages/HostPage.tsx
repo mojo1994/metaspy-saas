@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { IconRocket } from '../components/Icons'
 
 function getFilesFromEntry(entry: FileSystemEntry, path = ''): Promise<{ file: File; path: string }[]> {
   return new Promise(resolve => {
@@ -286,7 +287,9 @@ export default function HostPage() {
           padding: 32,
           textAlign: 'center',
         }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🚀</div>
+          <div style={{ marginBottom: 12 }}>
+            <IconRocket size={48} />
+          </div>
           <h3 style={{ marginBottom: 6 }}>Pagina hospedada com sucesso!</h3>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>{result.title}</p>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { IconTarget, IconDiamond, IconLocked } from '../components/Icons'
 
 export default function DashboardHome() {
   const { user } = useAuth()
@@ -37,7 +38,7 @@ export default function DashboardHome() {
           onClick={() => user?.plano === 'nenhum' ? navigate('/planos') : navigate('/dashboard/metaspy')}
           style={{ cursor: 'pointer', '--i': 0 } as React.CSSProperties}
         >
-          <div className="feature-icon">{user?.plano === 'nenhum' ? '◉' : '◎'}</div>
+          <div className="feature-icon">{user?.plano === 'nenhum' ? <IconLocked size={24} /> : <IconTarget size={24} />}</div>
           <h3>MetaSpy Ads</h3>
           <p>Analise anuncios do Facebook com score de escala e deteccao de estrategias.</p>
           <div className="feature-action">
@@ -49,7 +50,7 @@ export default function DashboardHome() {
           onClick={() => user?.plano === 'nenhum' ? navigate('/planos') : navigate('/dashboard/pagevault')}
           style={{ cursor: 'pointer', '--i': 1 } as React.CSSProperties}
         >
-          <div className="feature-icon">◈</div>
+          <div className="feature-icon"><IconDiamond size={24} /></div>
           <h3>Clonador</h3>
           <p>Clone paginas web offline com suporte a sites complexos e bypass.</p>
           <div className="feature-action">
@@ -61,7 +62,7 @@ export default function DashboardHome() {
           onClick={() => user?.plano !== 'anual' ? navigate('/planos') : navigate('/dashboard/cloacker')}
           style={{ cursor: 'pointer', '--i': 2 } as React.CSSProperties}
         >
-          <div className="feature-icon">⊘</div>
+          <div className="feature-icon"><IconLocked size={24} /></div>
           <h3>Cloacker</h3>
           <p>Gere scripts de cloaking para proteger suas campanhas de bots.</p>
           <div className="feature-action">

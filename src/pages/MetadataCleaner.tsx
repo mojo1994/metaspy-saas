@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { IconVideo, IconImage } from '../components/Icons'
 
 export default function MetadataCleaner() {
   const { fetchWithAuth } = useAuth()
@@ -131,7 +132,7 @@ export default function MetadataCleaner() {
           ) : (
             <div className="cleaner-file-info">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 24 }}>{isVideo(file.type) ? '▷' : '◇'}</span>
+                <span style={{ fontSize: 24 }}>{isVideo(file.type) ? <IconVideo size={24} /> : <IconImage size={24} />}</span>
                 <div style={{ flex: 1, textAlign: 'left' }}>
                   <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{file.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>

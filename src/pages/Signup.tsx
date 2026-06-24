@@ -1,6 +1,7 @@
 import { useState, FormEvent, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { IconWarning, IconLogo } from '../components/Icons'
 
 export default function Signup() {
   const { verifySignup } = useAuth()
@@ -67,7 +68,7 @@ export default function Signup() {
       <div className="auth-card">
         <div style={{ textAlign: 'center' }}>
           <div className="sidebar-logo-icon" style={{ margin: '0 auto 12px', width: 48, height: 48, fontSize: 24 }}>
-            ◉
+            <IconLogo size={24} />
           </div>
           <h2>{step === 'form' ? 'Criar Conta' : 'Confirmar Email'}</h2>
           <p>
@@ -117,7 +118,7 @@ export default function Signup() {
               )}
             </p>
             <p style={{ fontSize: 11, textAlign: 'center', marginTop: 4, color: 'var(--purple-400)' }}>
-              ⚠ Nao encontrou? Verifique sua caixa de spam.
+              <IconWarning /> Nao encontrou? Verifique sua caixa de spam.
             </p>
             <p style={{ fontSize: 12, textAlign: 'center', marginTop: 4 }}>
               <Link to="" onClick={(e) => { e.preventDefault(); setStep('form'); setMsg(''); setErro('') }} style={{ color: 'var(--text-secondary)' }}>

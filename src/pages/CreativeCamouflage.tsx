@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { IconVideo, IconImage } from '../components/Icons'
 
 export default function CreativeCamouflage() {
   const { fetchWithAuth } = useAuth()
@@ -201,7 +202,7 @@ export default function CreativeCamouflage() {
             <div className="camouflage-upload-placeholder" onClick={() => document.getElementById('camo-file-input')?.click()}>
               {file ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 28 }}>{file.type.startsWith('video/') ? '▷' : '◇'}</span>
+                  <span style={{ fontSize: 28 }}>{file.type.startsWith('video/') ? <IconVideo size={28} /> : <IconImage size={28} />}</span>
                   <div style={{ flex: 1, textAlign: 'left' }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{file.name}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
