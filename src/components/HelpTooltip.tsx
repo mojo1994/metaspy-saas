@@ -7,7 +7,7 @@ interface HelpTooltipProps {
 export default function HelpTooltip({ text }: HelpTooltipProps) {
   const [visible, setVisible] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
-  const iconRef = useRef<HTMLSpanElement>(null)
+  const iconRef = useRef<HTMLButtonElement>(null)
   const tipRef = useRef<HTMLDivElement>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -41,17 +41,18 @@ export default function HelpTooltip({ text }: HelpTooltipProps) {
 
   return (
     <>
-      <span
+      <button
         ref={iconRef}
+        type="button"
         className="help-icon"
         onMouseEnter={show}
         onMouseLeave={hide}
         onFocus={show}
         onBlur={hide}
-        tabIndex={-1}
-        role="button"
         aria-label="Ajuda"
-      >?</span>
+      >
+        ?
+      </button>
       {visible && (
         <div
           ref={tipRef}

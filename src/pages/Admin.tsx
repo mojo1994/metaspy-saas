@@ -99,12 +99,38 @@ export default function Admin() {
       <div className="admin-users-section">
         <div className="admin-table-header">
           <h3>Usuários</h3>
-          <button className="btn btn-secondary" onClick={loadUsers} style={{ fontSize: 12, padding: '4px 12px' }}>
+          <button type="button" className="btn btn-secondary" onClick={loadUsers} style={{ fontSize: 12, padding: '4px 12px' }}>
             Atualizar
           </button>
         </div>
         {loading ? (
-          <p className="admin-loading">Carregando...</p>
+          <div className="admin-loading" aria-busy="true" aria-live="polite">
+            <div className="skeleton skeleton-block" style={{ width: '38%' }} />
+            <div className="skeleton-table-row">
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+            </div>
+            <div className="skeleton-table-row">
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+            </div>
+            <div className="skeleton-table-row">
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+            </div>
+            <div className="skeleton-table-row">
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line" />
+            </div>
+          </div>
         ) : (
           <div className="admin-table-wrap">
             <table className="admin-table">
@@ -141,22 +167,22 @@ export default function Admin() {
                     <td>
                       <div className="admin-actions">
                         {u.plan !== 'basico' && (
-                          <button className="btn btn-sm btn-ativo" onClick={() => setPlan(u.id, 'basico')} disabled={setPlanLoading === u.id}>
+                          <button type="button" className="btn btn-sm btn-ativo" onClick={() => setPlan(u.id, 'basico')} disabled={setPlanLoading === u.id}>
                             Basico
                           </button>
                         )}
                         {u.plan !== 'gold' && (
-                          <button className="btn btn-sm" onClick={() => setPlan(u.id, 'gold')} disabled={setPlanLoading === u.id}>
+                          <button type="button" className="btn btn-sm" onClick={() => setPlan(u.id, 'gold')} disabled={setPlanLoading === u.id}>
                             Gold
                           </button>
                         )}
                         {u.plan !== 'premium' && (
-                          <button className="btn btn-sm btn-alta" onClick={() => setPlan(u.id, 'premium')} disabled={setPlanLoading === u.id}>
+                          <button type="button" className="btn btn-sm btn-alta" onClick={() => setPlan(u.id, 'premium')} disabled={setPlanLoading === u.id}>
                             Premium
                           </button>
                         )}
                         {u.plan !== 'nenhum' && (
-                          <button className="btn btn-sm btn-secondary" onClick={() => setPlan(u.id, 'nenhum')} disabled={setPlanLoading === u.id}>
+                          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setPlan(u.id, 'nenhum')} disabled={setPlanLoading === u.id}>
                             Remover
                           </button>
                         )}

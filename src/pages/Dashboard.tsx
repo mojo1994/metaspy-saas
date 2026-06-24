@@ -95,8 +95,10 @@ export default function Dashboard() {
           </NavLink>
           <div className="sidebar-group">
             <button
+              type="button"
               className={`sidebar-link sidebar-group-toggle${location.pathname.startsWith('/dashboard/cloacker') ? ' active' : ''}`}
               onClick={() => setCloackerOpen(!cloackerOpen)}
+              aria-expanded={cloackerOpen}
             >
               <span>Cloacker</span>
               <span className="sidebar-arrow" data-open={cloackerOpen}>›</span>
@@ -110,9 +112,11 @@ export default function Dashboard() {
               </NavLink>
               <div className="sidebar-group">
                 <button
+                  type="button"
                   className={`sidebar-link sidebar-group-toggle${location.pathname.startsWith('/dashboard/cloacker/camouflage') ? ' active' : ''}`}
                   onClick={() => setCamoOpen(!camoOpen)}
                   style={{ paddingLeft: 16, fontSize: 12 }}
+                  aria-expanded={camoOpen}
                 >
                   <span>Camuflagem</span>
                   <span className="sidebar-arrow" data-open={camoOpen}>›</span>
@@ -130,8 +134,10 @@ export default function Dashboard() {
           </div>
           <div className="sidebar-group">
             <button
+              type="button"
               className={`sidebar-link sidebar-group-toggle${location.pathname.startsWith('/dashboard/hospedar') ? ' active' : ''}`}
               onClick={() => setHospedarOpen(!hospedarOpen)}
+              aria-expanded={hospedarOpen}
             >
               <span>Hospedar</span>
               <span className="sidebar-arrow" data-open={hospedarOpen}>›</span>
@@ -185,6 +191,7 @@ export default function Dashboard() {
           <div style={{ display: 'flex', gap: 4 }}>
             {(['dark', 'light', 'system'] as const).map(m => (
               <button
+                type="button"
                 key={m}
                 className={`btn ${theme === m ? 'btn-accent' : 'btn-secondary'}`}
                 onClick={() => setTheme(m)}
@@ -197,7 +204,7 @@ export default function Dashboard() {
         </div>
 
         <div className="sidebar-footer">
-          <button className="sidebar-link" onClick={handleLogout} style={{ fontSize: 12, color: 'var(--text-muted)', justifyContent: 'center' }}>
+          <button type="button" className="sidebar-link" onClick={handleLogout} style={{ fontSize: 12, color: 'var(--text-muted)', justifyContent: 'center' }}>
             Sair
           </button>
         </div>
@@ -226,7 +233,7 @@ export default function Dashboard() {
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {!showVerify ? (
-                <button className="btn btn-accent" onClick={sendVerification} disabled={verifyLoading} style={{ fontSize: 12, padding: '6px 14px', whiteSpace: 'nowrap' }}>
+                <button type="button" className="btn btn-accent" onClick={sendVerification} disabled={verifyLoading} style={{ fontSize: 12, padding: '6px 14px', whiteSpace: 'nowrap' }}>
                   {verifyLoading ? 'Enviando...' : 'Enviar Codigo'}
                 </button>
               ) : (
@@ -250,10 +257,10 @@ export default function Dashboard() {
                       color: 'var(--text-primary)'
                     }}
                   />
-                  <button className="btn btn-gradient" onClick={confirmVerification} disabled={verifyLoading} style={{ fontSize: 12, padding: '6px 14px', whiteSpace: 'nowrap' }}>
+                  <button type="button" className="btn btn-gradient" onClick={confirmVerification} disabled={verifyLoading} style={{ fontSize: 12, padding: '6px 14px', whiteSpace: 'nowrap' }}>
                     {verifyLoading ? '...' : 'Confirmar'}
                   </button>
-                  <button className="btn btn-secondary" onClick={() => { setShowVerify(false); setVerifyCode(''); setVerifyErr(''); setVerifyMsg('') }} style={{ fontSize: 12, padding: '6px 10px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => { setShowVerify(false); setVerifyCode(''); setVerifyErr(''); setVerifyMsg('') }} style={{ fontSize: 12, padding: '6px 10px' }}>
                     Cancelar
                   </button>
                 </>
