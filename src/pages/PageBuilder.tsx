@@ -6,6 +6,7 @@ import {
   findNode, findPath, removeNode, insertNode, moveNode, cloneSubtree,
   NodeType, stylesToCss, hoverStyleToCss, SCROLL_ANIMATION_KEYFRAMES, nodeTypeLabel,
 } from '../components/builder/documentModel'
+import { useEditorStore } from '../components/builder/builderStore'
 import ElementTree from '../components/builder/ElementTree'
 import BuilderCanvas from '../components/builder/BuilderCanvas'
 import PropertyInspector from '../components/builder/PropertyInspector'
@@ -84,80 +85,49 @@ export default function PageBuilder() {
   const { fetchWithAuth, user } = useAuth()
 
   const editId = searchParams.get('edit')
-  const [page, setPage] = useState<PageData>(() => {
-    const p = createDefaultPage('Minha Pagina', 'minha-pagina')
-    return p
-  })
+  const tree = useEditorStore(s => s.tree)
+  const selectedId = useEditorStore(s => s.selectedId)
+  const zoom = useEditorStore(s => s.zoom)
+  const deviceIndex = useEditorStore(s => s.deviceIndex)
+  const previewMode = useEditorStore(s => s.previewMode)
+  const store = useEditorStore()
+  const autoInitRef = useRef(false)
+
+  const [pageMeta, setPageMeta] = useState({ name: 'Minha Pagina', slug: 'minha-pagina' })
   const [dbId, setDbId] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string>(page.tree.id)
-  const [zoom, setZoom] = useState(1)
-  const [deviceIndex, setDeviceIndex] = useState(0)
-  const [previewMode, setPreviewMode] = useState(false)
   const [leftTab, setLeftTab] = useState<Tab>('tree')
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [searchFilter, setSearchFilter] = useState('')
-  const [pageName, setPageName] = useState(page.name)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [savedComponents, setSavedComponents] = useState<SavedComponent[]>(loadComponents)
   const [publishUrl, setPublishUrl] = useState<string | null>(null)
-  const [canUndo, setCanUndo] = useState(false)
-  const [canRedo, setCanRedo] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const autoSaveRef = useRef<ReturnType<typeof setTimeout>>()
   const loadingRef = useRef(false)
-  const historyRef = useRef<DocumentNode[]>([])
-  const historyIdxRef = useRef(-1)
   const clipboardRef = useRef<DocumentNode | null>(null)
   const hasUnsavedRef = useRef(false)
-  const pageRootIdRef = useRef(page.tree.id)
-  const lastHistoryPushRef = useRef(0)
+  const pageRootIdRef = useRef(tree.id)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const updatePreviewTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
-  const selectedNode = selectedId ? findNode(page.tree, selectedId) : null
+  const selectedNode = selectedId ? findNode(tree, selectedId) : null
+
+  // Initialize store with default tree if not loaded from backend
+  useEffect(() => {
+    if (!editId && !autoInitRef.current) {
+      autoInitRef.current = true
+      const p = createDefaultPage('Minha Pagina', 'minha-pagina')
+      store.initTree(p.tree, p.tree.id)
+      pageRootIdRef.current = p.tree.id
+    }
+  }, [])
 
   function showToast(type: 'success' | 'error', message: string) {
     setToast({ type, message })
     setTimeout(() => setToast(null), 3000)
-  }
-
-  function pushHistory(tree: DocumentNode) {
-    const clone = JSON.parse(JSON.stringify(tree))
-    historyRef.current = historyRef.current.slice(0, historyIdxRef.current + 1)
-    historyRef.current.push(clone)
-    if (historyRef.current.length > MAX_HISTORY) historyRef.current.shift()
-    historyIdxRef.current = historyRef.current.length - 1
-    setCanUndo(historyIdxRef.current > 0)
-    setCanRedo(false)
-  }
-
-  function pushHistoryStructured(tree: DocumentNode) {
-    const now = Date.now()
-    if (now - lastHistoryPushRef.current > 800) {
-      pushHistory(tree)
-      lastHistoryPushRef.current = now
-    }
-  }
-
-  function handleUndo() {
-    if (historyIdxRef.current <= 0) return
-    historyIdxRef.current--
-    const snapshot = JSON.parse(JSON.stringify(historyRef.current[historyIdxRef.current]))
-    setPage(prev => ({ ...prev, tree: snapshot }))
-    setCanUndo(historyIdxRef.current > 0)
-    setCanRedo(true)
-    hasUnsavedRef.current = true
-  }
-
-  function handleRedo() {
-    if (historyIdxRef.current >= historyRef.current.length - 1) return
-    historyIdxRef.current++
-    const snapshot = JSON.parse(JSON.stringify(historyRef.current[historyIdxRef.current]))
-    setPage(prev => ({ ...prev, tree: snapshot }))
-    setCanUndo(true)
-    setCanRedo(historyIdxRef.current < historyRef.current.length - 1)
-    hasUnsavedRef.current = true
   }
 
   // Load from backend
@@ -170,30 +140,18 @@ export default function PageBuilder() {
         return res.json()
       })
       .then(data => {
-        let tree
+        let loadedTree
         if (data.type === 'hosted') {
           const match = data.html.match(/<script id="__METASPY_TREE" type="application\/json">(.+?)<\/script>/)
-          tree = match ? JSON.parse(match[1]) : null
+          loadedTree = match ? JSON.parse(match[1]) : null
         } else {
-          tree = JSON.parse(data.html)
+          loadedTree = JSON.parse(data.html)
         }
-        if (!tree) { loadingRef.current = false; throw new Error('Arvore nao encontrada') }
-        setPage({
-          id: data.id,
-          name: data.title,
-          slug: data.slug,
-          tree,
-          breakpoints: ['1440', '768', '375'],
-          globalStyles: {},
-        })
-        setPageName(data.title)
+        if (!loadedTree) { loadingRef.current = false; throw new Error('Arvore nao encontrada') }
+        store.initTree(loadedTree, loadedTree.id)
+        setPageMeta({ name: data.title, slug: data.slug })
         setDbId(data.id)
-        setSelectedId(tree.id)
-        pageRootIdRef.current = tree.id
-        historyRef.current = [JSON.parse(JSON.stringify(tree))]
-        historyIdxRef.current = 0
-        setCanUndo(false)
-        setCanRedo(false)
+        pageRootIdRef.current = loadedTree.id
         hasUnsavedRef.current = false
         loadingRef.current = false
       })
@@ -204,38 +162,28 @@ export default function PageBuilder() {
       })
   }, [editId, fetchWithAuth])
 
-  function updatePageTree(updater: (tree: DocumentNode) => void) {
-    setPage(prev => {
-      const next = { ...prev, tree: JSON.parse(JSON.stringify(prev.tree)) }
-      updater(next.tree)
-      return next
-    })
-    hasUnsavedRef.current = true
-  }
-
-  const handleSelect = useCallback((id: string) => setSelectedId(id), [])
+  const handleSelect = useCallback((id: string) => store.selectNode(id), [])
   const handleDelete = useCallback((id: string) => {
-    setPage(prev => { pushHistory(prev.tree); return prev })
-    updatePageTree(tree => removeNode(tree, id))
-    setSelectedId(pageRootIdRef.current)
+    store.deleteNode(id)
+    hasUnsavedRef.current = true
   }, [])
   const handleRename = useCallback((id: string, name: string) => {
-    setPage(prev => { pushHistory(prev.tree); return prev })
-    updatePageTree(tree => { const node = findNode(tree, id); if (node) node.name = name })
+    store.pushHistory()
+    store.updateNode(id, { name })
+    hasUnsavedRef.current = true
   }, [])
   const handleMove = useCallback((nodeId: string, newParentId: string, newIndex: number) => {
-    setPage(prev => { pushHistory(prev.tree); return prev })
-    updatePageTree(tree => moveNode(tree, nodeId, newParentId, newIndex))
+    store.moveNodeAction(nodeId, newParentId, newIndex)
+    hasUnsavedRef.current = true
   }, [])
   const handleDropWidget = useCallback((type: string, parentId: string, index?: number) => {
-    setPage(prev => { pushHistory(prev.tree); return prev })
-    const node = createDefaultNode(type as NodeType)
-    updatePageTree(tree => insertNode(tree, parentId, node, index ?? 0))
-    setSelectedId(node.id)
+    store.addWidget(type, parentId, index)
+    hasUnsavedRef.current = true
   }, [])
   const handleUpdateNode = useCallback((id: string, changes: Partial<DocumentNode>) => {
-    setPage(prev => { pushHistoryStructured(prev.tree); return prev })
-    updatePageTree(tree => { const node = findNode(tree, id); if (node) Object.assign(node, changes) })
+    store.pushHistory()
+    store.updateNode(id, changes)
+    hasUnsavedRef.current = true
   }, [])
 
   // Keyboard shortcuts
@@ -250,13 +198,13 @@ export default function PageBuilder() {
       const target = e.target as HTMLElement
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
       if (e.key === 'Escape' && !isInput) {
-        setPreviewMode(false)
-        setSelectedId(pageRootIdRef.current)
+        store.setPreviewMode(false)
+        store.selectNode(pageRootIdRef.current)
         return
       }
       if (isInput) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const sid = selectedId
+        const sid = store.selectedId
         if (sid && sid !== pageRootIdRef.current) {
           e.preventDefault()
           deleteRef.current(sid)
@@ -267,19 +215,21 @@ export default function PageBuilder() {
         switch (e.key.toLowerCase()) {
           case 'z':
             e.preventDefault()
-            if (e.shiftKey) handleRedo()
-            else handleUndo()
+            if (e.shiftKey) store.redo()
+            else store.undo()
+            hasUnsavedRef.current = true
             break
           case 'y':
             e.preventDefault()
-            handleRedo()
+            store.redo()
+            hasUnsavedRef.current = true
             break
           case 's':
             e.preventDefault()
             handleSaveRef.current()
             break
           case 'c': {
-            const sn = findNode(page.tree, selectedId)
+            const sn = findNode(tree, store.selectedId)
             if (sn) {
               clipboardRef.current = JSON.parse(JSON.stringify(sn))
               showToast('success', 'Elemento copiado!')
@@ -289,15 +239,18 @@ export default function PageBuilder() {
           case 'v':
             if (clipboardRef.current) {
               const cloned = cloneSubtree(clipboardRef.current)
-              pushHistory(page.tree)
-              updatePageTree(tree => insertNode(tree, selectedId || pageRootIdRef.current, cloned, 0))
-              setSelectedId(cloned.id)
+              store.pushHistory()
+              const parentId = store.selectedId || tree.id
+              const newTree = JSON.parse(JSON.stringify(tree))
+              insertNode(newTree, parentId, cloned, 0)
+              store.initTree(newTree, cloned.id)
+              hasUnsavedRef.current = true
               showToast('success', 'Elemento colado!')
             }
             break
           case 'd':
             e.preventDefault()
-            const sn = findNode(page.tree, selectedId)
+            const sn = findNode(tree, store.selectedId)
             if (sn && sn.id !== pageRootIdRef.current) {
               duplicateRef.current(sn.id)
             }
@@ -307,7 +260,7 @@ export default function PageBuilder() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedId, page.tree])
+  }, [tree, selectedId])
 
   // Beforeunload
   useEffect(() => {
@@ -322,17 +275,12 @@ export default function PageBuilder() {
   }, [])
 
   function handleDuplicate(nodeId: string) {
-    const rootId = pageRootIdRef.current
-    const node = findNode(page.tree, nodeId)
-    if (!node) return
-    const cloned = cloneSubtree(node)
-    setPage(prev => { pushHistory(prev.tree); return prev })
-    updatePageTree(tree => insertNode(tree, rootId, cloned, 0))
-    setSelectedId(cloned.id)
+    store.duplicateNode(nodeId)
+    hasUnsavedRef.current = true
   }
 
   function handleCopy(nodeId: string) {
-    const node = findNode(page.tree, nodeId)
+    const node = findNode(tree, nodeId)
     if (node) {
       clipboardRef.current = JSON.parse(JSON.stringify(node))
       showToast('success', 'Elemento copiado!')
@@ -342,9 +290,12 @@ export default function PageBuilder() {
   function handlePaste() {
     if (clipboardRef.current) {
       const cloned = cloneSubtree(clipboardRef.current)
-      setPage(prev => { pushHistory(prev.tree); return prev })
-      updatePageTree(tree => insertNode(tree, selectedId || page.tree.id, cloned, 0))
-      setSelectedId(cloned.id)
+      store.pushHistory()
+      const parentId = selectedId || tree.id
+      const newTree = JSON.parse(JSON.stringify(tree))
+      insertNode(newTree, parentId, cloned, 0)
+      store.initTree(newTree, cloned.id)
+      hasUnsavedRef.current = true
       showToast('success', 'Elemento colado!')
     }
   }
@@ -354,7 +305,7 @@ export default function PageBuilder() {
     if (!fetchWithAuth) return
     setSaving(true)
     try {
-      const body: any = { name: pageName, tree: page.tree }
+      const body: any = { name: pageMeta.name, tree }
       if (dbId) body.id = dbId
       const res = await fetchWithAuth(apiUrl('/builder/save'), {
         method: 'POST',
@@ -381,7 +332,7 @@ export default function PageBuilder() {
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current)
     autoSaveRef.current = setTimeout(() => { handleSave() }, 10000)
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current) }
-  }, [page.tree, dbId])
+  }, [tree, dbId])
 
   // Publish
   async function handlePublish() {
@@ -461,8 +412,12 @@ export default function PageBuilder() {
 
   function handleInsertComponent(compNode: DocumentNode) {
     const node = cloneSubtree(compNode)
-    updatePageTree(tree => insertNode(tree, selectedId || page.tree.id, node, 0))
-    setSelectedId(node.id)
+    store.pushHistory()
+    const parentId = selectedId || tree.id
+    const newTree = JSON.parse(JSON.stringify(tree))
+    insertNode(newTree, parentId, node, 0)
+    store.initTree(newTree, node.id)
+    hasUnsavedRef.current = true
   }
 
   function handleDeleteComponent(id: string) {
@@ -473,11 +428,11 @@ export default function PageBuilder() {
 
   // Export HTML
   function handleExport() {
-    const html = generateHtml(page.tree)
+    const html = generateHtml(tree)
     const blob = new Blob([html], { type: 'text/html' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `${page.slug}.html`; a.click()
+    a.href = url; a.download = `${pageMeta.slug}.html`; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -490,6 +445,27 @@ export default function PageBuilder() {
     e.dataTransfer.setData('application/metaspy-component', JSON.stringify(comp.node))
     e.dataTransfer.effectAllowed = 'copy'
   }
+
+  // Reactive iframe preview (Item 1)
+  const updatePreview = useCallback(() => {
+    if (!iframeRef.current) return
+    const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
+    if (!doc) return
+    const html = generateHtml(tree)
+    doc.open()
+    doc.write(html)
+    doc.close()
+  }, [tree])
+
+  const updatePreviewRef = useRef(updatePreview)
+  updatePreviewRef.current = updatePreview
+
+  useEffect(() => {
+    if (!previewMode) return
+    if (updatePreviewTimerRef.current) clearTimeout(updatePreviewTimerRef.current)
+    updatePreviewTimerRef.current = setTimeout(() => updatePreviewRef.current(), 100)
+    return () => { if (updatePreviewTimerRef.current) clearTimeout(updatePreviewTimerRef.current) }
+  }, [tree, previewMode])
 
   const currentDevice = DEVICES[deviceIndex]
 
@@ -590,8 +566,8 @@ export default function PageBuilder() {
         </button>
 
         <input
-          value={pageName}
-          onChange={e => setPageName(e.target.value)}
+          value={pageMeta.name}
+          onChange={e => setPageMeta(prev => ({ ...prev, name: e.target.value }))}
           style={{
             border: 'none', background: 'transparent', color: 'var(--text-primary)',
             fontWeight: 600, fontSize: 14, padding: '4px 8px', borderRadius: 4,
@@ -607,23 +583,23 @@ export default function PageBuilder() {
             <button
               key={d.label}
               className={`builder-device-btn ${i === deviceIndex ? 'active' : ''}`}
-              onClick={() => setDeviceIndex(i)}
+              onClick={() => store.setDeviceIndex(i)}
             ><WidgetIcon type={d.type} size={14} /> {d.label}</button>
           ))}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button onClick={() => setZoom(z => Math.max(0.25, z - 0.1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14 }}>−</button>
+          <button onClick={() => store.setZoom(Math.max(0.25, zoom - 0.1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14 }}>−</button>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14 }}>+</button>
+          <button onClick={() => store.setZoom(Math.min(2, zoom + 0.1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14 }}>+</button>
         </div>
 
         <div style={{ display: 'flex', gap: 2, marginLeft: 8 }}>
-          <button className="builder-device-btn" onClick={handleUndo} disabled={!canUndo} title="Desfazer (Ctrl+Z)" style={{ opacity: canUndo ? 1 : 0.3 }}>↩</button>
-          <button className="builder-device-btn" onClick={handleRedo} disabled={!canRedo} title="Refazer (Ctrl+Shift+Z)" style={{ opacity: canRedo ? 1 : 0.3 }}>↪</button>
+          <button className="builder-device-btn" onClick={() => { store.undo(); hasUnsavedRef.current = true }} title="Desfazer (Ctrl+Z)">↩</button>
+          <button className="builder-device-btn" onClick={() => { store.redo(); hasUnsavedRef.current = true }} title="Refazer (Ctrl+Shift+Z)">↪</button>
         </div>
 
-        <button className={`builder-device-btn ${previewMode ? 'active' : ''}`} onClick={() => setPreviewMode(p => !p)} style={{ marginLeft: 4 }}>
+        <button className={`builder-device-btn ${previewMode ? 'active' : ''}`} onClick={() => store.setPreviewMode(!previewMode)} style={{ marginLeft: 4 }}>
           ⊡ Preview
         </button>
 
@@ -659,7 +635,7 @@ export default function PageBuilder() {
           <div className="builder-left-content">
             {leftTab === 'tree' && (
               <ElementTree
-                tree={page.tree}
+                tree={tree}
                 selectedId={selectedId}
                 onSelect={handleSelect}
                 onDelete={handleDelete}
@@ -689,7 +665,7 @@ export default function PageBuilder() {
                             className="builder-widget-item"
                             draggable
                             onDragStart={e => handleWidgetDragStart(e, item.type)}
-                            onClick={() => handleDropWidget(item.type, selectedId || page.tree.id, 0)}
+                            onClick={() => handleDropWidget(item.type, selectedId || tree.id, 0)}
                           >
                             <WidgetIcon type={item.type} size={20} />
                             <span>{item.label}</span>
@@ -734,24 +710,35 @@ export default function PageBuilder() {
         </div>
 
         <div className="builder-center">
-          <BuilderCanvas
-            tree={page.tree}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-            onDropWidget={handleDropWidget}
-            onDropComponent={(node, parentId, index) => {
-              const cloned = cloneSubtree(node)
-              updatePageTree(tree => insertNode(tree, parentId, cloned, index ?? 0))
-              setSelectedId(cloned.id)
-            }}
-            onMoveNode={handleMove}
-            onUpdateNode={handleUpdateNode}
-            zoom={zoom}
-            deviceWidth={currentDevice.width}
-            previewMode={previewMode}
-          />
+          {previewMode ? (
+            <iframe
+              ref={iframeRef}
+              style={{ flex: 1, border: 'none', width: '100%', background: '#fff' }}
+              title="Preview"
+            />
+          ) : (
+            <BuilderCanvas
+              tree={tree}
+              selectedId={selectedId}
+              onSelect={handleSelect}
+              onDropWidget={handleDropWidget}
+              onDropComponent={(node, parentId, index) => {
+                const cloned = cloneSubtree(node)
+                store.pushHistory()
+                const newTree = JSON.parse(JSON.stringify(tree))
+                insertNode(newTree, parentId, cloned, index ?? 0)
+                store.initTree(newTree, cloned.id)
+                hasUnsavedRef.current = true
+              }}
+              onMoveNode={handleMove}
+              onUpdateNode={handleUpdateNode}
+              zoom={zoom}
+              deviceWidth={currentDevice.width}
+              previewMode={false}
+            />
+          )}
           {!previewMode && selectedId && (() => {
-            const path = findPath(page.tree, selectedId)
+            const path = findPath(tree, selectedId)
             if (path.length <= 1) return null
             return (
               <div className="builder-breadcrumb">
@@ -776,7 +763,7 @@ export default function PageBuilder() {
         </div>
 
         <div className="builder-right">
-          <PropertyInspector node={selectedNode} onChange={handleUpdateNode} />
+          <PropertyInspector node={selectedNode} onChange={handleUpdateNode} deviceWidth={String(currentDevice.width)} />
           {selectedNode?.type === 'image' && (
             <div style={{ padding: '4px 12px 12px' }}>
               <input
@@ -821,7 +808,7 @@ export default function PageBuilder() {
 
 function generateHtml(tree: DocumentNode): string {
   function renderNode(node: DocumentNode): string {
-    const css = stylesToCss(node.styles, node.layoutMode)
+    const css = stylesToCss(node.styles, node.layoutMode, undefined, node.deviceStyles)
     const styleAttr = css ? ` style="${css}"` : ''
     const animAttr = node.scrollAnimation ? ` data-scroll="${node.scrollAnimation.type}" data-duration="${node.scrollAnimation.duration}" data-delay="${node.scrollAnimation.delay}"` : ''
     const clickAttr = node.clickAction?.type === 'link' ? ` onclick="window.open('${node.clickAction.linkUrl}','${node.clickAction.linkTarget || '_self'}')"` : node.clickAction?.type === 'scrollTo' ? ` onclick="document.querySelector('${node.clickAction.scrollSelector}')?.scrollIntoView({behavior:'smooth'})"` : ''
@@ -862,8 +849,24 @@ function generateHtml(tree: DocumentNode): string {
     return css
   }
 
+  function collectFonts(node: DocumentNode): Set<string> {
+    const fonts = new Set<string>()
+    if (node.styles.fontFamily && node.styles.fontFamily !== 'Inter') fonts.add(node.styles.fontFamily)
+    if (node.deviceStyles) {
+      for (const ds of Object.values(node.deviceStyles)) {
+        if (ds.fontFamily && ds.fontFamily !== 'Inter') fonts.add(ds.fontFamily)
+      }
+    }
+    node.children.forEach(c => { collectFonts(c).forEach(f => fonts.add(f)) })
+    return fonts
+  }
+
   const bodyContent = renderNode(tree)
   const hoverCss = collectHoverStyles(tree)
+  const usedFonts = collectFonts(tree)
+  const fontLink = usedFonts.size
+    ? [...usedFonts].map(f => `family=${encodeURIComponent(f)}:wght@300;400;500;600;700;800`).join('&') : ''
+  const googleFontsHref = fontLink ? `https://fonts.googleapis.com/css2?${fontLink}&display=swap` : null
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -872,6 +875,7 @@ function generateHtml(tree: DocumentNode): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${tree.props.title || 'Minha Pagina'}</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  ${googleFontsHref ? `<link href="${googleFontsHref}" rel="stylesheet">` : ''}
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }

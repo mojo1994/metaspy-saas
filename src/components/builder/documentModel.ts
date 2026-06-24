@@ -82,6 +82,7 @@ export interface DocumentNode {
   name: string
   layoutMode: LayoutMode
   styles: NodeStyles
+  deviceStyles?: Record<string, Partial<NodeStyles>>
   children: DocumentNode[]
   props: Record<string, any>
   visible: boolean
@@ -281,7 +282,11 @@ export function cloneSubtree(node: DocumentNode): DocumentNode {
   return clone
 }
 
-export function stylesToCss(styles: NodeStyles, layoutMode: LayoutMode): string {
+export function stylesToCss(styles: NodeStyles, layoutMode: LayoutMode, device?: string, deviceStyles?: Record<string, Partial<NodeStyles>>): string {
+  const merged = { ...styles }
+  if (device && deviceStyles?.[device]) {
+    Object.assign(merged, deviceStyles[device])
+  }
   const lines: string[] = []
   const val = (s?: StyleValue | string) => {
     if (s === undefined) return '0'

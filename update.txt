@@ -136,3 +136,262 @@ style.css (asynchronous, non-critical CSS).
 scripts.js (all behavioral JS, including form handling and cloaking logic).
 assets/ (downloaded images/videos referenced in the HTML, organized by folder).
 The server must utilize a streaming ZIP library to package these files on the fly, preventing memory overload on the Render instance.
+
+BACKEND MVP: ERROR PREVENTION, DELIVERABLES & ACCEPTANCE CRITERIA
+For the 7 Pillars of the MetaSpy Page Builder
+PRELIMINARY NON-FUNCTIONAL REQUIREMENTS (NFRS) – MANDATORY FOR ALL MODULES
+These technical constraints apply to every single backend implementation listed below:
+
+Atomic Operations: Every write operation (save, update, delete) must be wrapped in a database transaction (BEGIN...COMMIT). If any step fails, the entire transaction must roll back to prevent partial state corruption.
+
+Input Sanitization & Schema Validation: All incoming JSON payloads must be strictly validated against a predefined Zod or JSON Schema. Reject any extra fields, malformed types, or deeply nested structures exceeding the maximum depth (e.g., 15 levels).
+
+Idempotency Keys: For mutation endpoints (POST, PUT, DELETE), enforce idempotency using a client-generated Idempotency-Key header stored in a Redis cache or database table for 24 hours. This prevents duplicate processing due to network retries.
+
+Optimistic Locking (Version Control): Every pages table must contain a version integer field. All UPDATE operations must include WHERE version = :currentVersion. If the version mismatches, the server must return a 409 Conflict status with the latest server-side version, forcing the client to merge changes.
+
+Graceful Degradation & Fallbacks: External services (S3, Google Fonts API, CRM webhooks) must have timeouts (e.g., 8 seconds) and circuit-breaker logic. If an external service fails, the core operation (e.g., page save) must still succeed, returning a 202 Accepted with a warning header for the asynchronous task.
+
+Logging & Observability: Every critical action (AST save, S3 upload, webhook dispatch, ZIP generation) must log a structured JSON object containing userId, pageId, action, duration_ms, and error_stack (if applicable) to a centralized logging stream for debugging.
+
+PILLAR 1: DATA MODEL (AST & VERSIONING)
+MVP Deliverable:
+
+API endpoints to create, retrieve, update, and publish page drafts.
+
+Full version history (Undo/Redo snapshots) stored and retrievable.
+
+Database Schema Adjustments:
+
+pages table: id, user_id, draft_ast (JSONB), published_ast (JSONB), version (INT), last_saved_at (TIMESTAMP).
+
+page_history table: id, page_id, ast_snapshot (JSONB), created_at (TIMESTAMP), snapshot_hash (TEXT for deduplication).
+
+Create a partial index on page_history where created_at > NOW() - INTERVAL '30 days' to manage storage growth.
+
+Critical Error Prevention Mechanisms:
+
+AST Depth & Circular Reference Guard: Upon every save, execute a recursive traversal of the AST. If depth exceeds 15 levels or if an elementId references itself within its children, immediately reject with a 422 Unprocessable Entity and a descriptive error path.
+
+Draft vs. Published Isolation: The PUT /api/pages/:id/publish endpoint must atomically copy draft_ast to published_ast only if the version field matches the client's provided version. If the draft is empty or invalid, return 400 Bad Request.
+
+Storage Optimization: When generating a new history snapshot, compute a SHA-256 hash of the draft_ast. If the hash matches the previous snapshot, skip the database insert entirely to prevent history spam. Prune history older than 30 days using a scheduled background worker (cron).
+
+API Contracts (Strict):
+
+GET /api/pages/:id → Returns { id, draftAst, publishedAst, version }
+
+PUT /api/pages/:id/draft → Accepts { ast: {...} }, validates schema, performs optimistic lock check, returns { version: newVersion }.
+
+POST /api/pages/:id/publish → Requires { version } in body, performs lock check, atomically copies draft_ast to published_ast.
+
+GET /api/pages/:id/history → Accepts ?limit=20&offset=0, returns paginated snapshots with timestamps.
+
+Acceptance Criteria (MVP Checklist):
+
+Concurrent edits to the same page from two different browsers return a 409 Conflict error, preventing data loss.
+
+Saving an AST with a missing type property on any node returns a 400 with a specific validation path (e.g., children[0].type is required).
+
+Publishing a page updates the published_ast and increments version by exactly 1.
+
+History endpoint returns the correct snapshots in descending chronological order.
+
+PILLAR 2: COMPONENT SYSTEM (RESPONSIVE STORAGE)
+MVP Deliverable:
+
+Store responsive styles (desktop, tablet, mobile) for every element in the AST without duplication.
+
+Database Schema Adjustments:
+
+No additional tables needed. The draft_ast JSONB schema must enforce the styles structure at every node: { "desktop": {...}, "tablet": {...}, "mobile": {...} }.
+
+Critical Error Prevention Mechanisms:
+
+CSS Injection Sanitization: All color, size, and unit values (e.g., padding, font-size) must pass a regex whitelist: only allow CSS-safe characters ([a-zA-Z0-9#.%pxremvhvwem]). Reject any payload containing expression, url(, javascript:, or data: to prevent CSS-based XSS.
+
+Property Normalization: Map user-friendly values to standard CSS. For example, if the client sends margin: "10px 20px", the backend must convert it to { top: "10px", right: "20px", bottom: "10px", left: "20px" } before storing, ensuring consistency.
+
+Breakpoint Cascade Inheritance: If an element has no mobile object, the compiler (Pillar 7) must inherit desktop values, but the backend must not auto-fill this. Storage must strictly reflect the user's explicit choices.
+
+API Contracts (Strict):
+
+No dedicated endpoints for styles; they are fully integrated into the PUT /api/pages/:id/draft payload.
+
+Acceptance Criteria (MVP Checklist):
+
+A mobile style object can be saved independently without affecting the desktop or tablet values.
+
+Sending an invalid CSS unit (e.g., font-size: "abc") is rejected with a 422 error detailing the invalid field path.
+
+The stored JSONB retains the exact key structure (desktop/tablet/mobile) for every element.
+
+PILLAR 3: VISUAL EDITING (BATCH UPDATES & STRUCTURAL REORDERING)
+MVP Deliverable:
+
+Batch update endpoint that modifies multiple elements in a single atomic request.
+
+Endpoint to reorder elements within the AST (move children between siblings).
+
+Critical Error Prevention Mechanisms:
+
+Batch Update Atomicity: The client sends { updates: [ { id, path: "styles.color", value: "red" } ] }. The backend must resolve each path using a JSON path parser (e.g., json-ptr). If any path fails to resolve, the entire batch update must be rejected (rollback) to prevent partial state changes.
+
+Parent-Child Constraint on Reorder: When receiving a move operation (e.g., moving Element A under Element B), the backend must validate that Element B is not a descendant of Element A. If a circular movement is detected (which would break the tree), return 422 with "Cannot move a node into its own descendant".
+
+Deep Clone on Updates: To prevent unintended reference sharing in the JSONB object, use jsonb_set at the database level or deep-clone the entire AST in the application layer before applying mutations.
+
+API Contracts (Strict):
+
+PATCH /api/pages/:id/batch → Accepts { version, updates: [ { id, path, value } ], reorders: [ { id, newParentId, index } ] }. Returns updated AST and new version.
+
+Acceptance Criteria (MVP Checklist):
+
+Batch updating 50+ elements in one request succeeds or fails entirely; no partial writes occur.
+
+Moving an element to its own child returns a 422 error.
+
+Reorder operation updates the array index correctly, preserving all sibling nodes.
+
+PILLAR 4: ASSET MANAGEMENT (MEDIA LIBRARY & OPTIMIZATION)
+MVP Deliverable:
+
+Presigned URL uploads to S3/Cloudinary.
+
+Centralized media library API.
+
+Automated thumbnail and WebP/AVIF generation (async).
+
+Cleanup service for orphaned assets.
+
+Database Schema Adjustments:
+
+media_assets table: id, user_id, original_filename, mime_type, size_bytes, s3_key_original, s3_key_webp, s3_key_thumbnail, uploaded_at, last_used_at, is_archived.
+
+Critical Error Prevention Mechanisms:
+
+Multipart Upload Validation: When the client requests a presigned URL via POST /api/media/upload-url, the backend must generate a strict policy limiting the file size (30MB image, 200MB video) and the exact content type (e.g., image/jpeg). If the client uploads a mismatched file type to the presigned URL, S3 rejects it automatically, but the backend must also validate the Content-Type header in the completion callback.
+
+Asset-Ghost Prevention: When a user inserts an image into the AST, the frontend must send the media_asset.id. The PUT /api/pages/:id/draft endpoint must cross-reference all referenced media IDs against the media_assets table. If any ID is missing, reject the save with "Referenced asset not found: [id]".
+
+Orphan Cleanup (Cron Worker): Schedule a weekly background task that queries all pages tables for referenced asset IDs. Compile a set of actively used IDs. Query media_assets and identify assets with last_used_at < NOW() - INTERVAL '90 days' and not in the active set. Mark them as is_archived and delete the physical S3 objects (using batch deletion) 7 days later to allow manual restoration if needed.
+
+API Contracts (Strict):
+
+POST /api/media/upload-url → Accepts { filename, mimeType }, returns { uploadUrl, key, assetId }.
+
+POST /api/media/upload-complete → Accepts { assetId, key }, updates DB to uploaded_at = NOW().
+
+GET /api/media/library → Accepts ?page=1&limit=20&search=keyword, returns paginated list of user assets.
+
+Acceptance Criteria (MVP Checklist):
+
+An uploaded image generates a WebP derivative and a 150x150 thumbnail in the cloud within 5 seconds (async queue).
+
+Saving a page that references an asset_id that does not exist returns a 422 error with the missing ID.
+
+Deleting an asset from the library fails if it is currently referenced by any published page (DB constraint check).
+
+PILLAR 5: INTERACTIVITY & LOGIC (CONDITIONALS & VARIABLES)
+MVP Deliverable:
+
+Store conditional visibility rules and dynamic variable placeholders (e.g., {{utm_source}}) inside the AST.
+
+Backend endpoint to evaluate the page AST against a mock context for testing.
+
+Critical Error Prevention Mechanisms:
+
+Rule Engine Sandboxing: Conditions are stored as JSON (e.g., { "type": "utm_param", "key": "source", "operator": "eq", "value": "facebook" }). The backend must never evaluate these rules using eval() or new Function(). Instead, the backend only stores them; evaluation occurs strictly client-side. However, the backend must validate the operator enum against a whitelist (eq, neq, contains, gt, lt, matches) and reject unknown operators with a 422.
+
+Variable Escaping: For dynamic placeholders ({{variable}}), the backend must escape any HTML characters during SSR compilation (Pillar 7) to prevent injection. If a placeholder resolves to a malicious <script> tag, the output must escape it to &lt;script&gt;.
+
+Context Isolation: Do not store user session tokens or sensitive PII inside the AST. The AST should only store placeholder keys (e.g., firstName, utmSource). The actual values (session data, URL params) are resolved by the client-side runtime.
+
+API Contracts (Strict):
+
+POST /api/pages/:id/validate-logic → Accepts { version, mockContext: { utm_source: "google", user: { name: "Test" } } }. Returns a list of elements where conditions evaluate to false (visible issues). This endpoint is for debugging only.
+
+Acceptance Criteria (MVP Checklist):
+
+Storing a condition with an unsupported operator (e.g., "operator": "maybe") fails with a validation error.
+
+The mock validation endpoint correctly returns a list of elements hidden under specific mock contexts.
+
+The AST retains the exact conditional payload without corruption over multiple save cycles.
+
+PILLAR 6: FORM BUILDER & LEAD CAPTURE
+MVP Deliverable:
+
+Store form configurations (fields, validation rules) inside the AST.
+
+Submission endpoint that routes leads to internal DB and external Webhooks.
+
+Basic retry mechanism for webhook failures.
+
+Database Schema Adjustments:
+
+form_submissions table: id, page_id, user_id (owner), form_data (JSONB), status (pending/success/failed), created_at.
+
+webhook_failures table: id, submission_id, attempt_count, next_retry_at, last_error.
+
+Critical Error Prevention Mechanisms:
+
+Rate Limiting per Form: Implement a sliding window rate limiter keyed by form_id and client_ip to prevent spam. E.g., max 5 submissions per minute per IP.
+
+Webhook Circuit Breaker: When a webhook endpoint fails 5 times in a row, mark it as unhealthy in a Redis cache and stop dispatching for 5 minutes. Return 202 Accepted to the client (storing the lead locally) while the circuit is open.
+
+Retry with Exponential Backoff: Store failed webhook delivery attempts in the webhook_failures table. A background worker (using node-cron or BullMQ) retries them with exponential backoff (1min, 5min, 15min, 1hour, 4hours). After 5 retries, mark the submission as failed and log the final error.
+
+PII Masking in Logs: Logs capturing form_data must mask sensitive fields (passwords, credit cards) by truncating or replacing with [REDACTED] based on field name patterns (e.g., matching password, cc, cvv).
+
+API Contracts (Strict):
+
+POST /api/forms/:pageId/submit → Accepts { formData: {...} }, validates against the AST's validation rules, returns { submissionId, status: "accepted" }.
+
+GET /api/forms/:pageId/submissions → (Protected owner-only) Accepts ?page=1&limit=20, returns list of stored leads.
+
+Acceptance Criteria (MVP Checklist):
+
+Submitting a form with invalid email format returns a 400 with "field_email: Invalid email format".
+
+If the configured webhook URL returns a 500 status, the submission is stored locally and retried asynchronously.
+
+Rate limit blocks the 6th submission from the same IP within 1 minute with a 429 Too Many Requests header.
+
+PILLAR 7: CODE OUTPUT & PERFORMANCE (SSR, MINIFICATION, EXPORT)
+MVP Deliverable:
+
+Server-side rendering (SSR) endpoint that compiles the AST into a complete HTML string.
+
+Minification pipeline (HTML, CSS, JS) embedded in the compilation process.
+
+ZIP archive streaming endpoint containing index.html, style.css, scripts.js, and assets/.
+
+Critical Error Prevention Mechanisms:
+
+Streaming vs. Memory Buffering: The GET /api/pages/:id/export endpoint must use stream API (Node.js native PassThrough streams) to pipe the ZIP directly to res. This prevents the server from holding the entire ZIP file in memory, which would cause Out-Of-Memory (OOM) errors on Render for large pages (e.g., 200MB of assets). Use archiver with { highWaterMark: 1024 * 1024 }.
+
+Asset Path Abstraction: The compiler must replace all asset URLs in the AST with either absolute S3 presigned URLs or relative local paths (assets/image.jpg) depending on the export mode. The ZIP compilation must download the required assets from S3 into the assets/ folder. Implement a timeout guard (15 seconds per asset) to skip stuck downloads rather than blocking the entire export.
+
+CSS PurgeCss Safeguard: When running PurgeCSS to remove unused styles, backup the original CSS. If PurgeCSS reduces the file by more than 90% (suspicious), the backend must automatically fallback to the un-purged version and log a warning. This prevents accidental removal of dynamically generated classes.
+
+Minification Failure Isolation: If CSS minification (cssnano) fails due to a syntax error, the backend must catch the error, log it, and emit the raw CSS instead of failing the entire request. The index.html should still be generated.
+
+Cache Invalidation: Add a ETag header on the compiled HTML (hash of the AST + version). If the client requests the same version, return 304 Not Modified to reduce server load.
+
+API Contracts (Strict):
+
+GET /api/pages/:id/render → Accepts ?minify=true&format=inline|external. Returns text/html with appropriate Content-Type.
+
+GET /api/pages/:id/export → Streams a .zip file with Content-Disposition: attachment; filename="page-export.zip".
+
+Acceptance Criteria (MVP Checklist):
+
+Exporting a 20MB page (with videos) streams the ZIP without spiking server memory usage above 200MB.
+
+Minified CSS reduces output size by at least 30% (validated by integration tests).
+
+If PurgeCSS fails, the exported file remains valid (fallback to raw CSS) and an error is logged.
+
+Concurrent export requests from 10 different users do not block each other (handled via asynchronous streaming).
+

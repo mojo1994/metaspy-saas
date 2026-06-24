@@ -112,7 +112,7 @@ const CanvasNode = memo(function CanvasNode({ node, selectedId, depth, onSelect,
   const isSelected = node.id === selectedId
   const isDropTarget = dragOver?.id === node.id
   const isFreehand = node.layoutMode === 'freehand'
-  const css = stylesToCss(node.styles, node.layoutMode)
+  const css = stylesToCss(node.styles, node.layoutMode, undefined, node.deviceStyles)
   const hoverCss = hoverStyleToCss(node.hoverStyle)
   const animCss = scrollAnimationToCss(node.scrollAnimation)
   const isHovered = hoveredId === node.id && !isSelected

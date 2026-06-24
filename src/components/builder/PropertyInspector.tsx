@@ -1,16 +1,23 @@
 import { useState, useRef, useEffect } from 'react'
 import { DocumentNode, LayoutMode, StyleValue, ScrollAnimation, ClickAction, HoverStyle } from './documentModel'
 
-interface Props { node: DocumentNode | null; onChange: (id: string, changes: Partial<DocumentNode>) => void }
+interface Props { node: DocumentNode | null; onChange: (id: string, changes: Partial<DocumentNode>) => void; deviceWidth?: string }
 
 type Section = 'content' | 'layout' | 'appearance' | 'typography' | 'interactions' | 'animation'
 
-export default function PropertyInspector({ node, onChange }: Props) {
+export default function PropertyInspector({ node, onChange, deviceWidth }: Props) {
   const [activeSection, setActiveSection] = useState<Section>('content')
   if (!node) return <div style={{ padding: 20, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>Selecione um elemento</div>
 
   const n = node
-  function setStyle(prop: string, val: any) { onChange(n.id, { styles: { ...n.styles, [prop]: val } }) }
+  const isDeviceView = deviceWidth && deviceWidth !== '1440'
+  function setStyle(prop: string, val: any) {
+    if (isDeviceView) {
+      onChange(n.id, { deviceStyles: { ...(n.deviceStyles || {}), [deviceWidth]: { ...(n.deviceStyles?.[deviceWidth] || {}), [prop]: val } } })
+    } else {
+      onChange(n.id, { styles: { ...n.styles, [prop]: val } })
+    }
+  }
   function setProp(key: string, val: any) { onChange(n.id, { props: { ...n.props, [key]: val } }) }
   function setLayoutMode(mode: LayoutMode) { onChange(n.id, { layoutMode: mode }) }
   function setHover(h: HoverStyle) { onChange(n.id, { hoverStyle: h }) }
@@ -90,7 +97,10 @@ export default function PropertyInspector({ node, onChange }: Props) {
     <div style={{ overflow: 'auto', height: '100%', fontSize: 12 }}>
       <style>{builderInspectorCss}</style>
       <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontWeight: 600, fontSize: 13 }}>{n.name}</div>
+        <div style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+          {n.name}
+          {isDeviceView && <span style={{ fontSize: 9, background: '#7c3aed', color: '#fff', padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>{deviceWidth}</span>}
+        </div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{nodeTypeLabel(n.type)}</div>
       </div>
       <div className="builder-section-tabs"> {sections.map(s => (
@@ -219,6 +229,13 @@ export default function PropertyInspector({ node, onChange }: Props) {
             </div>
           </div>
           <UnitInput label="Raio" value={n.styles.borderRadius} onChange={v => setStyle('borderRadius', v)} />
+          <div className="builder-section-title" style={{ marginTop: 8 }}>Box Model</div>
+          <BoxModelDiagram
+            padding={{ top: n.styles.paddingTop, right: n.styles.paddingRight, bottom: n.styles.paddingBottom, left: n.styles.paddingLeft }}
+            margin={{ top: n.styles.marginTop, right: n.styles.marginRight, bottom: n.styles.marginBottom, left: n.styles.marginLeft }}
+            onPaddingChange={(side, v) => setStyle(`padding${side}`, v)}
+            onMarginChange={(side, v) => setStyle(`margin${side}`, v)}
+          />
           <div className="builder-section-title">Sombra</div>
           <StyleInput label="Box Shadow" value={n.styles.boxShadow} onChange={v => setStyle('boxShadow', v)} />
           <div className="builder-prop-row">
@@ -235,7 +252,7 @@ export default function PropertyInspector({ node, onChange }: Props) {
       {activeSection === 'typography' && (
         <div>
           <div className="builder-section-title">Fonte</div>
-          <StyleInput label="Familia" value={n.styles.fontFamily} onChange={v => setStyle('fontFamily', v)} />
+          <FontSelect label="Fonte" value={n.styles.fontFamily} onChange={v => setStyle('fontFamily', v)} />
           <UnitInput label="Tamanho" value={n.styles.fontSize} onChange={v => setStyle('fontSize', v)} />
           <StyleInput label="Peso" value={n.styles.fontWeight} onChange={v => setStyle('fontWeight', v)} type="number" />
           <StyleInput label="Altura Linha" value={n.styles.lineHeight} onChange={v => setStyle('lineHeight', Number(v))} type="number" />
@@ -332,6 +349,153 @@ function RichTextEditor({ html, onChange }: { html: string; onChange: (html: str
         className="builder-prop-input"
         style={{ width: '100%', minHeight: 80, padding: 8, outline: 'none', overflow: 'auto' }}
       />
+    </div>
+  )
+}
+
+const sides: ('Top' | 'Right' | 'Bottom' | 'Left')[] = ['Top', 'Right', 'Bottom', 'Left']
+
+function BoxModelDiagram({ padding, margin, onPaddingChange, onMarginChange }: {
+  padding: Record<string, any>
+  margin: Record<string, any>
+  onPaddingChange: (side: string, v: any) => void
+  onMarginChange: (side: string, v: any) => void
+}) {
+  const boxVal = (v: any) => {
+    if (!v || v === '0') return '0'
+    if (typeof v === 'object') return `${v.value}${v.unit}`
+    return String(v)
+  }
+  return (
+    <div style={{ padding: '8px 12px' }}>
+      {/* Margin outer */}
+      <div style={{ border: '1px dashed #f59e0b', borderRadius: 4, padding: 4, position: 'relative', background: 'rgba(245,158,11,0.05)' }}>
+        <div style={{ fontSize: 8, color: '#f59e0b', textAlign: 'center', marginBottom: 2 }}>Margem</div>
+        {/* Row for top margin */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 2 }}>
+          <BoxSideInput value={margin.top} onChange={v => onMarginChange('Top', v)} side="T" color="#f59e0b" />
+        </div>
+        {/* Middle row: left margin | padding area | right margin */}
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: 2 }}>
+          <BoxSideInput value={margin.left} onChange={v => onMarginChange('Left', v)} side="L" color="#f59e0b" />
+          {/* Padding area */}
+          <div style={{ flex: 1, border: '1px dashed #10b981', borderRadius: 4, padding: 4, background: 'rgba(16,185,129,0.05)' }}>
+            <div style={{ fontSize: 8, color: '#10b981', textAlign: 'center', marginBottom: 2 }}>Padding</div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 2 }}>
+              <BoxSideInput value={padding.top} onChange={v => onPaddingChange('Top', v)} side="T" color="#10b981" />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <BoxSideInput value={padding.left} onChange={v => onPaddingChange('Left', v)} side="L" color="#10b981" />
+              <div style={{ flex: 1, border: '1px solid #6366f1', borderRadius: 2, padding: '8px 4px', textAlign: 'center', fontSize: 9, color: '#6366f1', background: 'rgba(99,102,241,0.05)' }}>Conteudo</div>
+              <BoxSideInput value={padding.right} onChange={v => onPaddingChange('Right', v)} side="R" color="#10b981" />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 2 }}>
+              <BoxSideInput value={padding.bottom} onChange={v => onPaddingChange('Bottom', v)} side="B" color="#10b981" />
+            </div>
+          </div>
+          <BoxSideInput value={margin.right} onChange={v => onMarginChange('Right', v)} side="R" color="#f59e0b" />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 2 }}>
+          <BoxSideInput value={margin.bottom} onChange={v => onMarginChange('Bottom', v)} side="B" color="#f59e0b" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BoxSideInput({ value, onChange, side, color }: { value: any; onChange: (v: any) => void; side: string; color: string }) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState('')
+  const v = value as StyleValue | undefined
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        className="builder-prop-input"
+        style={{ width: 40, fontSize: 9, padding: '1px 2px', textAlign: 'center' }}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onBlur={() => {
+          setEditing(false)
+          if (text === '' || text === '0') { onChange(null) }
+          else {
+            const num = parseFloat(text)
+            if (!isNaN(num)) onChange({ value: num, unit: 'px' } as StyleValue)
+          }
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+      />
+    )
+  }
+  const display = v ? `${v.value}${v.unit}` : '0'
+  return (
+    <div
+      onClick={() => { setText(display); setEditing(true) }}
+      style={{
+        writingMode: side === 'L' || side === 'R' ? 'vertical-lr' : undefined,
+        fontSize: 9, color, cursor: 'pointer', textAlign: 'center',
+        padding: '1px 3px', minWidth: 20, minHeight: 16,
+        background: 'rgba(255,255,255,0.05)', borderRadius: 2,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      title={`${side === 'T' ? 'Topo' : side === 'B' ? 'Base' : side === 'L' ? 'Esquerda' : 'Direita'}: ${display}`}
+    >
+      {display}
+    </div>
+  )
+}
+
+const GOOGLE_FONTS = [
+  { value: '', label: 'Padrão (Inter)' },
+  { value: 'Playfair Display', label: 'Playfair Display' },
+  { value: 'Roboto', label: 'Roboto' },
+  { value: 'Montserrat', label: 'Montserrat' },
+  { value: 'Poppins', label: 'Poppins' },
+  { value: 'Open Sans', label: 'Open Sans' },
+  { value: 'Lato', label: 'Lato' },
+  { value: 'Raleway', label: 'Raleway' },
+  { value: 'Merriweather', label: 'Merriweather' },
+  { value: 'Nunito', label: 'Nunito' },
+  { value: 'Oswald', label: 'Oswald' },
+  { value: 'PT Sans', label: 'PT Sans' },
+  { value: 'Quicksand', label: 'Quicksand' },
+  { value: 'DM Sans', label: 'DM Sans' },
+  { value: 'Pacifico', label: 'Pacifico' },
+  { value: 'Bebas Neue', label: 'Bebas Neue' },
+  { value: 'Inter', label: 'Inter' },
+]
+
+function FontSelect({ label, value, onChange }: { label: string; value?: string; onChange: (v: string) => void }) {
+  const selected = GOOGLE_FONTS.find(f => f.value === value)
+  const [custom, setCustom] = useState(!selected && !!value)
+  return (
+    <div className="builder-prop-row">
+      <span className="builder-prop-label">{label}</span>
+      <div className="builder-prop-input-wrap" style={{ flex: 1 }}>
+        <select
+          style={{ flex: 1, padding: '3px 4px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11, outline: 'none' }}
+          value={custom ? '__custom__' : (value || '')}
+          onChange={e => {
+            if (e.target.value === '__custom__') { setCustom(true) }
+            else { setCustom(false); onChange(e.target.value) }
+          }}
+        >
+          {GOOGLE_FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+          <option value="__custom__">Outra...</option>
+        </select>
+        {custom && (
+          <input
+            className="builder-prop-input"
+            style={{ flex: 1, marginLeft: 4 }}
+            value={value || ''}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Nome da fonte"
+          />
+        )}
+      </div>
     </div>
   )
 }
