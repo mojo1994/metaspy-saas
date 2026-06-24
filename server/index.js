@@ -55,14 +55,16 @@ const uploadPage = multer({
 })
 
 const PLAN_CONFIG = {
-  mensal: { price: 49.90, days: 30, kirvanoPlan: 'mensal' },
-  anual: { price: 110.90, days: 365, renewal: 97, kirvanoPlan: 'anual' },
+  basico: { price: 49.90, days: 30, kirvanoPlan: 'basico' },
+  gold: { price: 97.00, days: 30, kirvanoPlan: 'gold' },
+  premium: { price: 197.00, days: 30, kirvanoPlan: 'premium' },
 }
 
 const PLAN_FEATURES = {
   nenhum: { clone: false, minerador: false, cloaker: false, pagevault: false, analise: false, cleaner: false },
-  mensal: { clone: true, minerador: true, cloaker: false, pagevault: true, analise: false, cleaner: false },
-  anual: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: true },
+  basico: { clone: true, minerador: true, cloaker: false, pagevault: false, analise: false, cleaner: false },
+  gold: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: false },
+  premium: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: true },
 }
 
 function generateToken(userId) {
@@ -423,13 +425,13 @@ app.get('/api/page-fetch', async (req, res) => {
 const KIRVANO_API = 'https://api.kirvano.com'
 
 const KIRVANO_STATIC_LINKS = {
-  mensal: 'https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd',
-  anual: 'https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad',
+  basico: 'https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd',
+  gold: 'https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad',
 }
 
 const KIRVANO_CHECKOUT_UUIDS = {
-  '879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd': 'mensal',
-  '2498bd06-c4e9-412f-ab0d-bd9cededb5ad': 'anual',
+  '879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd': 'basico',
+  '2498bd06-c4e9-412f-ab0d-bd9cededb5ad': 'gold',
 }
 
 app.post('/api/subscription/create-checkout', authMiddleware, async (req, res) => {
@@ -527,7 +529,7 @@ app.get('/api/subscription/status', authMiddleware, async (req, res) => {
 // ─── Cloaker Routes ──────────────────────────────────────────────
 app.post('/api/cloaker/generate', authMiddleware, async (req, res) => {
   const features = PLAN_FEATURES[req.user.plan]
-  if (!features?.cloaker) return res.status(403).json({ error: 'Plano anual necessario' })
+  if (!features?.cloaker) return res.status(403).json({ error: 'Disponivel apenas nos planos Gold e Premium' })
   try {
     const { target_url, safe_url } = req.body
     if (!target_url || !safe_url) return res.status(400).json({ error: 'URL de destino e URL segura sao obrigatorias' })
@@ -595,7 +597,7 @@ const USER_AGENTS = {
 app.post('/api/cloaker/detect', authMiddleware, async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
-    if (!features?.cloaker) return res.status(403).json({ erro: 'Funcionalidade disponivel apenas no plano Anual.' })
+    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
     const { url } = req.body
     if (!url) return res.status(400).json({ erro: 'URL e obrigatoria.' })
     const resultados = {}
@@ -634,7 +636,7 @@ app.post('/api/cloaker/detect', authMiddleware, async (req, res) => {
 app.post('/api/cloaker/camouflage', authMiddleware, async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
-    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Anual.' })
+    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
     const { texto_original, url_destino, palavras_sensiveis } = req.body
     if (!texto_original || !url_destino) return res.status(400).json({ erro: 'Texto original e URL destino sao obrigatorios.' })
     const scriptCamuflado = `<!-- SCRIPT DE CAMUFLAGEM DE CRIATIVOS - METASPY -->
@@ -676,7 +678,7 @@ app.post('/api/cloaker/camouflage', authMiddleware, async (req, res) => {
 // ─── Upload Camouflage ──────────────────────────────────────────
 app.post('/api/cloaker/upload-camouflage', authMiddleware, (req, res, next) => {
   const features = PLAN_FEATURES[req.user.plan]
-  if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Anual.' })
+  if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
   next()
 }, upload.single('file'), async (req, res) => {
   try {
@@ -812,11 +814,11 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
 app.put('/api/admin/users/:id/plan', adminMiddleware, async (req, res) => {
   try {
     const { plan } = req.body
-    if (!['nenhum', 'mensal', 'anual'].includes(plan)) return res.status(400).json({ error: 'Plano invalido' })
+    if (!['nenhum', 'basico', 'gold', 'premium'].includes(plan)) return res.status(400).json({ error: 'Plano invalido' })
     const config = PLAN_CONFIG[plan]
     if (!config) return res.status(400).json({ error: 'Plano invalido' })
     const now = new Date()
-    const expiry = plan === 'nenhum' ? null : new Date(now.getTime() + (plan === 'anual' ? 365 : 30) * 24 * 60 * 60 * 1000)
+    const expiry = plan === 'nenhum' ? null : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
     const expiryStr = expiry ? expiry.toISOString().replace('T', ' ').slice(0, 19) : null
     await run('UPDATE users SET plan = $1, subscription_status = $2, subscription_expiry = $3 WHERE id = $4',
       [plan, plan === 'nenhum' ? 'inactive' : 'active', expiryStr, req.params.id])
@@ -892,7 +894,7 @@ async function cleanMetadata(filePath, mimeType) {
 app.post('/api/cleaner/upload', authMiddleware, async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
-    if (!features?.cleaner) return res.status(403).json({ error: 'Disponivel apenas no plano Anual.' })
+    if (!features?.cleaner) return res.status(403).json({ error: 'Disponivel apenas no plano Premium.' })
 
     cleanerUpload.single('file')(req, res, async (err) => {
       if (err) return res.status(400).json({ error: err.message })

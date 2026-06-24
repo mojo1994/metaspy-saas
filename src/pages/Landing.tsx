@@ -111,24 +111,24 @@ export default function Landing() {
 
       <section className="landing-planos">
         <h2>Escolha seu Arsenal</h2>
-        <p className="landing-planos-sub">Sem plano free. Sem enrolação. Resultado do primeiro dia.</p>
+        <p className="landing-planos-sub">Sem plano free. Sem enrolacao. Resultado do primeiro dia.</p>
         <div className="landing-planos-cards">
           <div className="planos-card">
             <div className="planos-card-header">
-              <h3>Mensal</h3>
-              <p className="planos-card-desc">Para quem quer começar a escalar agora</p>
+              <h3>Basico</h3>
+              <p className="planos-card-desc">Para quem quer comecar a escalar agora</p>
             </div>
             <div className="planos-card-price">
-              <span className="planos-original">R$ 197</span>
+              <span className="planos-original">R$ 97</span>
               <span className="planos-current">R$ 49,90</span>
-              <span className="planos-period">/mês</span>
+              <span className="planos-period">/mes</span>
             </div>
             <ul className="planos-features">
-              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador + Editor Visual</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador de Paginas</li>
               <li><span className="planos-check"><IconCheck size={12} /></span>MetaSpy Minerador de Ads</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>Estrutura de Arquivos + ZIP</li>
               <li className="off"><span className="planos-check"><IconDash size={12} /></span>Cloacker Profissional</li>
-              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Análise Avançada</li>
+              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Remover Metadados</li>
+              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Suporte Prioritario</li>
             </ul>
             <Link to="/signup" className="btn btn-primary planos-cta">Assinar Agora</Link>
           </div>
@@ -136,23 +136,42 @@ export default function Landing() {
           <div className="planos-card planos-card-destaque">
             <div className="planos-card-badge">MELHOR VALOR</div>
             <div className="planos-card-header">
-              <h3>Anual</h3>
-              <p className="planos-card-desc">O pacote completo para máquinas de guerra</p>
+              <h3>Gold</h3>
+              <p className="planos-card-desc">O pacote completo para maquinas de guerra</p>
+            </div>
+            <div className="planos-card-price">
+              <span className="planos-original">R$ 197</span>
+              <span className="planos-current">R$ 97,00</span>
+              <span className="planos-period">/mes</span>
+            </div>
+            <ul className="planos-features">
+              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador de Paginas</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>MetaSpy Minerador de Ads</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Cloacker Profissional</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Analise Avancada + Suporte</li>
+              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Remover Metadados</li>
+            </ul>
+            <Link to="/signup" className="btn btn-gradient planos-cta">Assinar Agora</Link>
+          </div>
+
+          <div className="planos-card">
+            <div className="planos-card-header">
+              <h3>Premium</h3>
+              <p className="planos-card-desc">Todas as ferramentas sem limites</p>
             </div>
             <div className="planos-card-price">
               <span className="planos-original">R$ 397</span>
-              <span className="planos-current">R$ 110,90</span>
-              <span className="planos-period">/ano</span>
-              <span className="planos-renovation">Renova por R$ 97/ano</span>
+              <span className="planos-current">R$ 197,00</span>
+              <span className="planos-period">/mes</span>
             </div>
             <ul className="planos-features">
-              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador + Editor Visual</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador de Paginas</li>
               <li><span className="planos-check"><IconCheck size={12} /></span>MetaSpy Minerador de Ads</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>Estrutura de Arquivos + ZIP</li>
               <li><span className="planos-check"><IconCheck size={12} /></span>Cloacker Profissional</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>Análise Avançada + Suporte</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Remover Metadados</li>
+              <li><span className="planos-check"><IconCheck size={12} /></span>Suporte Prioritario</li>
             </ul>
-            <Link to="/signup" className="btn btn-gradient planos-cta">Assinar Agora</Link>
+            <Link to="/signup" className="btn btn-primary planos-cta">Assinar Agora</Link>
           </div>
         </div>
         <div style={{ textAlign: 'center', marginTop: 24 }}>

@@ -3,26 +3,52 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { IconCheck, IconDash, IconStar, IconLogo } from '../components/Icons'
 
-const FEATURES_MENSAIS = [
+const FEATURES_BASICO = [
   { label: 'Clonador de Paginas', ok: true },
-  { label: 'Editor Visual de Paginas', ok: true },
-  { label: 'Estrutura de Arquivos + ZIP', ok: true },
   { label: 'MetaSpy Minerador de Ads', ok: true },
+  { label: 'Editor Visual de Paginas', ok: false },
+  { label: 'Estrutura de Arquivos + ZIP', ok: false },
   { label: 'Cloacker Profissional', ok: false },
   { label: 'Analise Avancada de Ofertas', ok: false },
   { label: 'Bypass Engine Multicamada', ok: false },
+  { label: 'Remover Metadados', ok: false },
   { label: 'Suporte Prioritario', ok: false },
 ]
 
-const FEATURES_ANUAIS = [
+const FEATURES_GOLD = [
   { label: 'Clonador de Paginas', ok: true },
+  { label: 'MetaSpy Minerador de Ads', ok: true },
   { label: 'Editor Visual de Paginas', ok: true },
   { label: 'Estrutura de Arquivos + ZIP', ok: true },
-  { label: 'MetaSpy Minerador de Ads', ok: true },
   { label: 'Cloacker Profissional', ok: true },
   { label: 'Analise Avancada de Ofertas', ok: true },
   { label: 'Bypass Engine Multicamada', ok: true },
+  { label: 'Remover Metadados', ok: false },
   { label: 'Suporte Prioritario', ok: true },
+]
+
+const FEATURES_PREMIUM = [
+  { label: 'Clonador de Paginas', ok: true },
+  { label: 'MetaSpy Minerador de Ads', ok: true },
+  { label: 'Editor Visual de Paginas', ok: true },
+  { label: 'Estrutura de Arquivos + ZIP', ok: true },
+  { label: 'Cloacker Profissional', ok: true },
+  { label: 'Analise Avancada de Ofertas', ok: true },
+  { label: 'Bypass Engine Multicamada', ok: true },
+  { label: 'Remover Metadados', ok: true },
+  { label: 'Suporte Prioritario', ok: true },
+]
+
+const ALL_FEATURES = [
+  'Clonador de Paginas',
+  'MetaSpy Minerador de Ads',
+  'Editor Visual de Paginas',
+  'Estrutura de Arquivos + ZIP',
+  'Cloacker Profissional',
+  'Analise Avancada de Ofertas',
+  'Bypass Engine Multicamada',
+  'Remover Metadados',
+  'Suporte Prioritario',
 ]
 
 const DEPOIMENTOS = [
@@ -80,57 +106,76 @@ export default function Planos() {
           As ferramentas que os top players usam para escalar ofertas no Meta Ads. <br />
           Sem plano free. Sem enrolação. Resultado do primeiro dia.
         </p>
-        <button className="btn btn-gradient planos-hero-cta" onClick={() => handleCheckout('mensal')}>
-          COMEÇAR AGORA
-        </button>
       </section>
 
       <section className="planos-cards">
         <div className="planos-card">
           <div className="planos-card-header">
-            <h2>Mensal</h2>
-            <p className="planos-card-desc">Para quem quer começar a escalar agora</p>
+            <h2>Basico</h2>
+            <p className="planos-card-desc">Para quem quer comecar a escalar agora</p>
           </div>
           <div className="planos-card-price">
-            <span className="planos-original">R$ 197</span>
+            <span className="planos-original">R$ 97</span>
             <span className="planos-current">R$ 49,90</span>
-            <span className="planos-period">/mês</span>
+            <span className="planos-period">/mes</span>
           </div>
           <ul className="planos-features">
-            {FEATURES_MENSAIS.map(f => (
+            {FEATURES_BASICO.map(f => (
               <li key={f.label} className={f.ok ? '' : 'off'}>
                 <span className="planos-check">{f.ok ? <IconCheck size={12} /> : <IconDash size={12} />}</span>
                 {f.label}
               </li>
             ))}
           </ul>
-          <button className="btn btn-primary planos-cta" onClick={() => handleCheckout('mensal')} disabled={loading === 'mensal'}>
-            {loading === 'mensal' ? 'Redirecionando...' : 'Assinar Agora'}
+          <button className="btn btn-primary planos-cta" onClick={() => handleCheckout('basico')} disabled={loading === 'basico'}>
+            {loading === 'basico' ? 'Redirecionando...' : 'Assinar Agora'}
           </button>
         </div>
 
         <div className="planos-card planos-card-destaque">
           <div className="planos-card-badge">MELHOR VALOR</div>
           <div className="planos-card-header">
-            <h2>Anual</h2>
-            <p className="planos-card-desc">O pacote completo para máquinas de guerra</p>
+            <h2>Gold</h2>
+            <p className="planos-card-desc">O pacote completo para maquinas de guerra</p>
           </div>
           <div className="planos-card-price">
-            <span className="planos-original">R$ 397</span>
-            <span className="planos-current">R$ 110,90</span>
-            <span className="planos-period">/ano</span>
-            <span className="planos-renovation">Renova automaticamente por R$ 97/ano</span>
+            <span className="planos-original">R$ 197</span>
+            <span className="planos-current">R$ 97,00</span>
+            <span className="planos-period">/mes</span>
           </div>
           <ul className="planos-features">
-            {FEATURES_ANUAIS.map(f => (
-              <li key={f.label}>
-                <span className="planos-check"><IconCheck size={12} /></span>
+            {FEATURES_GOLD.map(f => (
+              <li key={f.label} className={f.ok ? '' : 'off'}>
+                <span className="planos-check">{f.ok ? <IconCheck size={12} /> : <IconDash size={12} />}</span>
                 {f.label}
               </li>
             ))}
           </ul>
-          <button className="btn btn-gradient planos-cta" onClick={() => handleCheckout('anual')} disabled={loading === 'anual'}>
-            {loading === 'anual' ? 'Redirecionando...' : 'Assinar Agora'}
+          <button className="btn btn-gradient planos-cta" onClick={() => handleCheckout('gold')} disabled={loading === 'gold'}>
+            {loading === 'gold' ? 'Redirecionando...' : 'Assinar Agora'}
+          </button>
+        </div>
+
+        <div className="planos-card">
+          <div className="planos-card-header">
+            <h2>Premium</h2>
+            <p className="planos-card-desc">Todas as ferramentas sem limites</p>
+          </div>
+          <div className="planos-card-price">
+            <span className="planos-original">R$ 397</span>
+            <span className="planos-current">R$ 197,00</span>
+            <span className="planos-period">/mes</span>
+          </div>
+          <ul className="planos-features">
+            {FEATURES_PREMIUM.map(f => (
+              <li key={f.label} className={f.ok ? '' : 'off'}>
+                <span className="planos-check">{f.ok ? <IconCheck size={12} /> : <IconDash size={12} />}</span>
+                {f.label}
+              </li>
+            ))}
+          </ul>
+          <button className="btn btn-primary planos-cta" onClick={() => handleCheckout('premium')} disabled={loading === 'premium'}>
+            {loading === 'premium' ? 'Redirecionando...' : 'Assinar Agora'}
           </button>
         </div>
       </section>
@@ -140,14 +185,18 @@ export default function Planos() {
         <div className="planos-table">
           <div className="planos-table-row header">
             <div className="planos-table-cell">Funcionalidade</div>
-            <div className="planos-table-cell">Mensal</div>
-            <div className="planos-table-cell">Anual</div>
+            <div className="planos-table-cell">Basico</div>
+            <div className="planos-table-cell">Gold</div>
+            <div className="planos-table-cell">Premium</div>
           </div>
-          {FEATURES_ANUAIS.map(f => (
-            <div key={f.label} className="planos-table-row">
-              <div className="planos-table-cell">{f.label}</div>
-              <div className={`planos-table-cell ${FEATURES_MENSAIS.find(m => m.label === f.label)?.ok ? 'check' : ''}`}>
-                {FEATURES_MENSAIS.find(m => m.label === f.label)?.ok ? <IconCheck size={12} /> : <IconDash size={12} />}
+          {ALL_FEATURES.map(f => (
+            <div key={f} className="planos-table-row">
+              <div className="planos-table-cell">{f}</div>
+              <div className={`planos-table-cell ${FEATURES_BASICO.find(x => x.label === f)?.ok ? 'check' : ''}`}>
+                {FEATURES_BASICO.find(x => x.label === f)?.ok ? <IconCheck size={12} /> : <IconDash size={12} />}
+              </div>
+              <div className={`planos-table-cell ${FEATURES_GOLD.find(x => x.label === f)?.ok ? 'check' : ''}`}>
+                {FEATURES_GOLD.find(x => x.label === f)?.ok ? <IconCheck size={12} /> : <IconDash size={12} />}
               </div>
               <div className={`planos-table-cell check`}><IconCheck size={12} /></div>
             </div>
@@ -174,14 +223,14 @@ export default function Planos() {
       </section>
 
       <section className="planos-faq">
-        <h2>Dúvidas Frequentes</h2>
+        <h2>Duvidas Frequentes</h2>
         <div className="planos-faq-grid">
           {[
-            { p: 'Posso cancelar quando quiser?', r: 'Sim. Cancele a qualquer momento. Seu acesso continua até o fim do período pago.' },
-            { p: 'O pagamento é seguro?', r: 'Totalmente. Processamos via Kirvano com cartão, Pix ou boleto. Seus dados estão protegidos.' },
+            { p: 'Posso cancelar quando quiser?', r: 'Sim. Cancele a qualquer momento. Seu acesso continua ate o fim do periodo pago.' },
+            { p: 'O pagamento e seguro?', r: 'Totalmente. Processamos via Kirvano com cartao, Pix ou boleto. Seus dados estao protegidos.' },
             { p: 'Funciona para qualquer nicho?', r: 'Sim. O MetaSpy funciona para Nutra, Info, Ecommerce, leads e qualquer vertical do Meta Ads.' },
-            { p: 'Precisa de conhecimento técnico?', r: 'Não. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiência em programação.' },
-            { p: 'Qual a diferença entre Mensal e Anual?', r: 'O plano Mensal dá acesso ao Clonador e MetaSpy Minerador. O Anual libera todas as ferramentas incluindo Cloacker, Análise Avançada e Suporte Prioritário.' },
+            { p: 'Precisa de conhecimento tecnico?', r: 'Nao. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiencia em programacao.' },
+            { p: 'Qual a diferenca entre os planos?', r: 'O Basico da acesso ao Clonador de Paginas e MetaSpy Minerador. O Gold libera todas as ferramentas exceto Remover Metadados. O Premium libera todas as ferramentas sem excecao.' },
           ].map(faq => (
             <details key={faq.p} className="planos-faq-item">
               <summary>{faq.p}</summary>
@@ -193,14 +242,14 @@ export default function Planos() {
 
       <section className="planos-cta-bottom">
         <h2>Pronto para escalar?</h2>
-        <p>Junte-se a centenas de profissionais que já usam o MetaSpy para dominar o Meta Ads.</p>
-        <button className="btn btn-gradient" style={{ padding: '14px 40px', fontSize: 16 }} onClick={() => handleCheckout('mensal')}>
-          COMEÇAR AGORA
+        <p>Junte-se a centenas de profissionais que ja usam o MetaSpy para dominar o Meta Ads.</p>
+        <button className="btn btn-gradient" style={{ padding: '14px 40px', fontSize: 16 }} onClick={() => handleCheckout('basico')}>
+          COMECAR AGORA
         </button>
       </section>
 
       <footer className="planos-footer">
-        <p>MetaSpy © 2026 — Inteligência de ofertas em escala. By Banshee.ads</p>
+        <p>MetaSpy © 2026 — Inteligencia de ofertas em escala. By Banshee.ads</p>
       </footer>
     </div>
   )

@@ -70,8 +70,8 @@ export default function Profile() {
 
   const plano = user?.plano || 'nenhum'
   const hasPlan = plano !== 'nenhum'
-  const planName = plano === 'anual' ? 'Anual' : plano === 'mensal' ? 'Mensal' : 'Nenhum'
-  const planColor = plano === 'anual' ? 'var(--purple-300)' : plano === 'mensal' ? 'var(--success)' : 'var(--text-secondary)'
+  const planName = plano === 'premium' ? 'Premium' : plano === 'gold' ? 'Gold' : plano === 'basico' ? 'Basico' : 'Nenhum'
+  const planColor = plano === 'premium' ? 'var(--purple-300)' : plano === 'gold' ? 'var(--warning)' : plano === 'basico' ? 'var(--success)' : 'var(--text-secondary)'
 
   return (
     <div>

@@ -16,7 +16,7 @@ export default function DashboardHome() {
   const hour = time.getHours()
   const greeting = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite'
 
-  const isAtivo = user?.plano === 'mensal' || user?.plano === 'anual'
+  const isAtivo = user?.plano === 'basico' || user?.plano === 'gold' || user?.plano === 'premium'
 
   return (
     <div className="dashboard-home">
@@ -58,15 +58,15 @@ export default function DashboardHome() {
           </div>
         </div>
         <div
-          className={`feature-card${user?.plano !== 'anual' ? ' locked' : ''}`}
-          onClick={() => user?.plano !== 'anual' ? navigate('/planos') : navigate('/dashboard/cloacker')}
+          className={`feature-card${user?.plano === 'nenhum' || user?.plano === 'basico' ? ' locked' : ''}`}
+          onClick={() => user?.plano === 'nenhum' || user?.plano === 'basico' ? navigate('/planos') : navigate('/dashboard/cloacker')}
           style={{ cursor: 'pointer', '--i': 2 } as React.CSSProperties}
         >
           <div className="feature-icon"><IconLocked size={24} /></div>
           <h3>Cloacker</h3>
           <p>Gere scripts de cloaking para proteger suas campanhas de bots.</p>
           <div className="feature-action">
-            {user?.plano !== 'anual' ? 'Desbloquear →' : 'Acessar →'}
+            {user?.plano === 'nenhum' || user?.plano === 'basico' ? 'Desbloquear →' : 'Acessar →'}
           </div>
         </div>
       </div>

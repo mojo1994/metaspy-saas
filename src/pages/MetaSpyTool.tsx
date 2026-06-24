@@ -416,7 +416,7 @@ export default function MetaSpyTool() {
           <h3>MetaSpy Ads Intelligence</h3>
           <p>Esta ferramenta esta disponivel apenas para assinantes.</p>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-            Assine o plano Mensal ou Anual e tenha acesso ao minerador de anuncios,
+            Assine um dos planos e tenha acesso ao minerador de anuncios,
             cloacker, clonador e todas as ferramentas avancadas.
           </p>
           <button className="btn btn-primary" onClick={() => navigate('/planos')}>

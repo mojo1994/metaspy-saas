@@ -227,7 +227,7 @@ export function recoveryEmailHtml(code) {
 }
 
 export function purchaseConfirmationEmailHtml({ name, plan, days }) {
-  const planLabel = plan === 'anual' ? 'Anual' : 'Mensal'
+  const planLabel = { basico: 'Basico', gold: 'Gold', premium: 'Premium' }[plan] || 'Premium'
   return emailLayout(`
     <tr><td height="16"></td></tr>
 

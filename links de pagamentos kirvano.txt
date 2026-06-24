@@ -1,0 +1,3 @@
+basico = https://pay.kirvano.com/c921cdd9-aefd-40db-95a7-fcbd7952006d de 197 por 39,90 
+gold = https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd de 219 por 97,90
+premium = https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad de 397 por 197,90

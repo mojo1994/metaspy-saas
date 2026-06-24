@@ -96,16 +96,16 @@ export default function CloackerTool() {
     })
   }
 
-  const hasCloaker = user?.plano === 'anual'
+  const hasCloaker = user?.plano === 'gold' || user?.plano === 'premium'
 
   if (!hasCloaker) {
     return (
       <div className="tool-locked">
         <div className="tool-locked-icon"><IconLocked size={24} /></div>
         <h3>Cloacker</h3>
-        <p>Disponivel apenas no plano Anual.</p>
+        <p>Disponivel apenas nos planos Gold e Premium.</p>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-          Assine o plano Anual e tenha acesso ao gerador de scripts de cloaking,
+          Assine o plano Gold ou Premium e tenha acesso ao gerador de scripts de cloaking,
           minerador de anuncios, clonador de paginas e todas as ferramentas.
         </p>
         <button className="btn btn-primary" onClick={() => navigate('/planos')}>

@@ -79,10 +79,10 @@ export default function Admin() {
       <div className="admin-chart-section">
         <h3>Usuários por Plano</h3>
         <div className="admin-chart">
-          {['mensal', 'anual', 'nenhum'].map(p => {
+          {['basico', 'gold', 'premium', 'nenhum'].map(p => {
             const count = users.filter(u => u.plan === p).length
             const pct = totalUsers > 0 ? (count / totalUsers * 100) : 0
-            const label = p === 'nenhum' ? 'Sem Plano' : p === 'mensal' ? 'Mensal' : 'Anual'
+            const label = p === 'nenhum' ? 'Sem Plano' : p === 'basico' ? 'Basico' : p === 'gold' ? 'Gold' : 'Premium'
             return (
               <div key={p} className="admin-chart-bar-wrap">
                 <div className="admin-chart-label">{label}</div>
@@ -126,8 +126,8 @@ export default function Admin() {
                     <td>{u.name}</td>
                     <td className="admin-email">{u.email}</td>
                     <td>
-                      <span className={`badge ${u.plan === 'anual' ? 'alta' : u.plan === 'mensal' ? 'ativo' : 'info'}`}>
-                        {u.plan === 'nenhum' ? 'Nenhum' : u.plan === 'mensal' ? 'Mensal' : 'Anual'}
+                      <span className={`badge ${u.plan === 'premium' ? 'alta' : u.plan === 'gold' ? 'alta' : u.plan === 'basico' ? 'ativo' : 'info'}`}>
+                        {u.plan === 'nenhum' ? 'Nenhum' : u.plan === 'basico' ? 'Basico' : u.plan === 'gold' ? 'Gold' : 'Premium'}
                       </span>
                     </td>
                     <td>
@@ -140,14 +140,19 @@ export default function Admin() {
                     <td>{new Date(u.created_at + 'Z').toLocaleDateString('pt-BR')}</td>
                     <td>
                       <div className="admin-actions">
-                        {u.plan !== 'mensal' && (
-                          <button className="btn btn-sm btn-ativo" onClick={() => setPlan(u.id, 'mensal')} disabled={setPlanLoading === u.id}>
-                            Mensal
+                        {u.plan !== 'basico' && (
+                          <button className="btn btn-sm btn-ativo" onClick={() => setPlan(u.id, 'basico')} disabled={setPlanLoading === u.id}>
+                            Basico
                           </button>
                         )}
-                        {u.plan !== 'anual' && (
-                          <button className="btn btn-sm btn-alta" onClick={() => setPlan(u.id, 'anual')} disabled={setPlanLoading === u.id}>
-                            Anual
+                        {u.plan !== 'gold' && (
+                          <button className="btn btn-sm" onClick={() => setPlan(u.id, 'gold')} disabled={setPlanLoading === u.id}>
+                            Gold
+                          </button>
+                        )}
+                        {u.plan !== 'premium' && (
+                          <button className="btn btn-sm btn-alta" onClick={() => setPlan(u.id, 'premium')} disabled={setPlanLoading === u.id}>
+                            Premium
                           </button>
                         )}
                         {u.plan !== 'nenhum' && (
