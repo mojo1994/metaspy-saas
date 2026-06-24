@@ -1054,6 +1054,57 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
   }
 })
 
+// Public route: serve hosted page assets by slug/path — try R2 first, fallback to DB
+app.get('/api/page/:slug/:path(*)', async (req, res) => {
+  try {
+    const { slug, path } = req.params
+    const mimeType = mime.lookup(path) || 'text/html; charset=utf-8'
+    if (USE_CF_STORAGE && mimeType === 'text/html; charset=utf-8') {
+      try {
+        const r2Data = await getPageContentFromR2(slug, path || 'index.html')
+        if (r2Data) {
+          res.set('Content-Type', mimeType)
+          res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+          res.set('X-Cache', 'R2-HIT')
+          return res.send(r2Data.toString('utf-8'))
+        }
+      } catch {}
+    }
+    const page = await one('SELECT html FROM pages WHERE slug = $1 AND published = 1', [slug])
+    if (!page) return res.status(404).send('Pagina nao encontrada.')
+    res.set('Content-Type', mimeType)
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+    res.send(page.html || '')
+  } catch {
+    res.status(500).send('Erro ao carregar pagina.')
+  }
+})
+
+// Public route: serve hosted page by slug
+app.get('/api/page/:slug', async (req, res) => {
+  try {
+    const slug = req.params.slug.toLowerCase()
+    if (USE_CF_STORAGE) {
+      try {
+        const r2Data = await getPageContentFromR2(slug, 'index.html')
+        if (r2Data) {
+          res.set('Content-Type', 'text/html; charset=utf-8')
+          res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+          res.set('X-Cache', 'R2-HIT')
+          return res.send(r2Data.toString('utf-8'))
+        }
+      } catch {}
+    }
+    const page = await one('SELECT html FROM pages WHERE slug = $1 AND published = 1', [slug])
+    if (!page) return res.status(404).send('Pagina nao encontrada.')
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+    res.send(page.html || '')
+  } catch {
+    res.status(500).send('Erro ao carregar pagina.')
+  }
+})
+
 // ─── Error Handler ────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   if (err?.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ erro: 'Arquivo muito grande. Maximo: 200MB.' })
