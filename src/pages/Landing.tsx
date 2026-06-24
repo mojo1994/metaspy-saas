@@ -1,181 +1,259 @@
+import { useEffect } from 'react'
+import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { IconLogo, IconTarget, IconDiamond, IconLocked, IconPlay, IconBoxPlus, IconArrowDown, IconCheck, IconDash } from '../components/Icons'
+import {
+  Radar,
+  Copy,
+  Shield,
+  BarChart3,
+  SlidersHorizontal,
+  Download,
+  Play,
+  ArrowRight,
+  Check,
+  Minus,
+  Sparkles,
+  Layers3,
+} from 'lucide-react'
+
+const FEATURE_ITEMS = [
+  {
+    title: 'MetaSpy Ad Intelligence',
+    description: 'Escaneie a Biblioteca de Anúncios do Facebook em tempo real. Descubra ofertas escaladas por score, tempo de atividade, variações criativas e muito mais.',
+    icon: Radar,
+  },
+  {
+    title: 'Clonador',
+    description: 'Clone paginas web completas para o seu computador. Suporte a sites complexos, quizzes Inlead, e bypass de seguranca com engine multicamada.',
+    icon: Copy,
+  },
+  {
+    title: 'Cloacker',
+    description: 'Gere scripts de cloaking profissionais para proteger suas campanhas. Detecção de bots, fingerprinting e bloqueio por IP em um clique.',
+    icon: Shield,
+  },
+  {
+    title: 'Analise Avancada',
+    description: 'Dashboard completo com estatisticas de score, distribuicao por segmento, competitividade de nicho e top ofertas em escala.',
+    icon: BarChart3,
+  },
+  {
+    title: 'Filtros Inteligentes',
+    description: 'Filtre por pais, plataforma, status, tipo de midia, score minimo, dias ativo, segmento (Nutra/Info), palavras negativas e muito mais.',
+    icon: SlidersHorizontal,
+  },
+  {
+    title: 'Exportacao CSV',
+    description: 'Exporte todos os resultados para CSV com um clique. Perfeito para analises externas e relatorios personalizados.',
+    icon: Download,
+  },
+  {
+    title: 'Bypass Engine',
+    description: 'Motor de bypass em JS, Python, Node e PHP. Suporta Cloudflare, SSL, quizzes interativos e sites com protecao avançada.',
+    icon: Play,
+  },
+]
+
+const PRICE_ROWS = [
+  {
+    title: 'Basico',
+    original: 'R$ 97',
+    current: 'R$ 49,90',
+    features: [
+      ['Clonador de Paginas', true],
+      ['MetaSpy Minerador de Ads', true],
+      ['Cloacker Profissional', false],
+      ['Remover Metadados', false],
+      ['Suporte Prioritario', false],
+    ],
+    highlighted: false,
+  },
+  {
+    title: 'Gold',
+    original: 'R$ 197',
+    current: 'R$ 97,00',
+    features: [
+      ['Clonador de Paginas', true],
+      ['MetaSpy Minerador de Ads', true],
+      ['Cloacker Profissional', true],
+      ['Analise Avancada + Suporte', true],
+      ['Remover Metadados', false],
+    ],
+    highlighted: true,
+  },
+  {
+    title: 'Premium',
+    original: 'R$ 397',
+    current: 'R$ 197,00',
+    features: [
+      ['Clonador de Paginas', true],
+      ['MetaSpy Minerador de Ads', true],
+      ['Cloacker Profissional', true],
+      ['Remover Metadados', true],
+      ['Suporte Prioritario', true],
+    ],
+    highlighted: false,
+  },
+] as const
+
+function delayStyle(delay: number): CSSProperties {
+  return { ['--reveal-delay' as never]: `${delay}ms` } as CSSProperties
+}
 
 export default function Landing() {
   const { isAuthenticated } = useAuth()
 
+  useEffect(() => {
+    const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'))
+    if (targets.length === 0) return
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduced) {
+      targets.forEach(target => target.classList.add('is-visible'))
+      return
+    }
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return
+        entry.target.classList.add('is-visible')
+        observer.unobserve(entry.target)
+      })
+    }, { threshold: 0.14, rootMargin: '0px 0px -6% 0px' })
+
+    targets.forEach(target => observer.observe(target))
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div className="landing">
-      <nav className="landing-nav">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div className="sidebar-logo-icon" style={{ width: 28, height: 28 }}>
-            <IconLogo size={18} />
+      <nav className="landing-nav" data-reveal style={delayStyle(0)}>
+        <div className="landing-brand">
+          <div className="sidebar-logo-icon landing-brand-mark">
+            <Sparkles size={16} strokeWidth={2} />
           </div>
-          <span style={{ fontWeight: 700, fontSize: 16 }}>MetaSpy</span>
+          <span className="landing-brand-name">MetaSpy</span>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="landing-nav-actions">
           {isAuthenticated ? (
-            <Link to="/dashboard" className="btn btn-gradient">Dashboard</Link>
+            <Link to="/dashboard" className="btn btn-gradient landing-nav-btn">Dashboard</Link>
           ) : (
             <>
-              <Link to="/login" className="btn btn-secondary">Entrar</Link>
-              <Link to="/signup" className="btn btn-gradient">Criar Conta</Link>
+              <Link to="/login" className="btn btn-secondary landing-nav-btn">Entrar</Link>
+              <Link to="/signup" className="btn btn-gradient landing-nav-btn">Criar Conta</Link>
             </>
           )}
         </div>
       </nav>
 
       <section className="landing-hero">
-        <h1>Inteligência de Ofertas em Escala</h1>
-        <p>
-          Identifique, analise e clone as melhores ofertas da Biblioteca de Anúncios do Meta
-          com filtros avançados e destaque visual em tempo real.
-        </p>
-        <div className="landing-cta">
-          {isAuthenticated ? (
-            <Link to="/dashboard" className="btn btn-gradient" style={{ padding: '14px 32px', fontSize: 15 }}>
-              Ir para o Dashboard
-            </Link>
-          ) : (
-            <>
-              <Link to="/planos" className="btn btn-gradient" style={{ padding: '14px 32px', fontSize: 15 }}>
-                COMEÇAR AGORA
+        <div className="landing-hero-inner">
+          <h1 data-reveal style={delayStyle(120)}>
+            Inteligência de Ofertas em Escala
+          </h1>
+          <p data-reveal style={delayStyle(240)}>
+            Identifique, analise e clone as melhores ofertas da Biblioteca de Anúncios do Meta
+            com filtros avançados e destaque visual em tempo real.
+          </p>
+          <div className="landing-cta" data-reveal style={delayStyle(360)}>
+            {isAuthenticated ? (
+              <Link to="/dashboard" className="btn btn-gradient landing-cta-btn">
+                Ir para o Dashboard <ArrowRight size={18} strokeWidth={2} />
               </Link>
-              <Link to="/login" className="btn btn-primary" style={{ padding: '14px 32px', fontSize: 15 }}>
-                Entrar
-              </Link>
-            </>
-          )}
+            ) : (
+              <>
+                <Link to="/planos" className="btn btn-gradient landing-cta-btn">
+                  COMEÇAR AGORA <ArrowRight size={18} strokeWidth={2} />
+                </Link>
+                <Link to="/login" className="btn btn-primary landing-cta-btn">
+                  Entrar <ArrowRight size={18} strokeWidth={2} />
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </section>
 
       <section className="landing-features">
-        <div className="feature-card">
-          <div className="feature-icon"><IconTarget size={24} /></div>
-          <h3>MetaSpy Ad Intelligence</h3>
-          <p>
-            Escaneie a Biblioteca de Anúncios do Facebook em tempo real. Descubra ofertas
-            escaladas por score, tempo de atividade, variações criativas e muito mais.
-          </p>
-        </div>
-        <div className="feature-card">
-          <div className="feature-icon"><IconDiamond size={24} /></div>
-          <h3>Clonador</h3>
-          <p>
-            Clone paginas web completas para o seu computador. Suporte a sites complexos,
-            quizzes Inlead, e bypass de seguranca com engine multicamada.
-          </p>
-        </div>
-        <div className="feature-card">
-          <div className="feature-icon"><IconLocked size={24} /></div>
-          <h3>Cloacker</h3>
-          <p>
-            Gere scripts de cloaking profissionais para proteger suas campanhas. Deteccao
-            de bots, fingerprinting e bloqueio por IP em um clique.
-          </p>
-        </div>
-        <div className="feature-card">
-          <div className="feature-icon"><IconTarget size={24} /></div>
-          <h3>Analise Avancada</h3>
-          <p>
-            Dashboard completo com estatisticas de score, distribuicao por segmento,
-            competitividade de nicho e top ofertas em escala.
-          </p>
-        </div>
-        <div className="feature-card">
-          <div className="feature-icon"><IconBoxPlus size={24} /></div>
-          <h3>Filtros Inteligentes</h3>
-          <p>
-            Filtre por pais, plataforma, status, tipo de midia, score minimo, dias ativo,
-            segmento (Nutra/Info), palavras negativas e muito mais.
-          </p>
-        </div>
-        <div className="feature-card">
-          <div className="feature-icon"><IconArrowDown size={24} /></div>
-          <h3>Exportacao CSV</h3>
-          <p>
-            Exporte todos os resultados para CSV com um clique. Perfeito para analises
-            externas e relatorios personalizados.
-          </p>
-        </div>
-        <div className="feature-card">
-          <div className="feature-icon"><IconPlay size={24} /></div>
-          <h3>Bypass Engine</h3>
-          <p>
-            Motor de bypass em JS, Python, Node e PHP. Suporta Cloudflare, SSL,
-            quizzes interativos e sites com protecao avançada.
-          </p>
-        </div>
+        {FEATURE_ITEMS.map((item, index) => {
+          const Icon = item.icon
+          return (
+            <article
+              key={item.title}
+              className="feature-card landing-feature-card"
+              data-reveal
+              style={delayStyle(index * 70)}
+            >
+              <div className="feature-icon">
+                <Icon size={24} strokeWidth={2} />
+              </div>
+              <h3>{item.title}</h3>
+              <p>{item.description}</p>
+            </article>
+          )
+        })}
       </section>
 
       <section className="landing-planos">
-        <h2>Escolha seu Arsenal</h2>
-        <p className="landing-planos-sub">Sem plano free. Sem enrolacao. Resultado do primeiro dia.</p>
+        <h2 data-reveal style={delayStyle(120)}>Escolha seu Arsenal</h2>
+        <p className="landing-planos-sub" data-reveal style={delayStyle(200)}>
+          Sem plano free. Sem enrolacao. Resultado do primeiro dia.
+        </p>
         <div className="landing-planos-cards">
-          <div className="planos-card">
-            <div className="planos-card-header">
-              <h3>Basico</h3>
-              <p className="planos-card-desc">Para quem quer comecar a escalar agora</p>
-            </div>
-            <div className="planos-card-price">
-              <span className="planos-original">R$ 97</span>
-              <span className="planos-current">R$ 49,90</span>
-              <span className="planos-period">/mes</span>
-            </div>
-            <ul className="planos-features">
-              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador de Paginas</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>MetaSpy Minerador de Ads</li>
-              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Cloacker Profissional</li>
-              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Remover Metadados</li>
-              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Suporte Prioritario</li>
-            </ul>
-            <Link to="/signup" className="btn btn-primary planos-cta">Assinar Agora</Link>
-          </div>
+          {PRICE_ROWS.map((plan, index) => (
+            <article
+              key={plan.title}
+              className={`planos-card landing-plan-card ${plan.highlighted ? 'planos-card-destaque' : ''}`}
+              data-reveal
+              style={delayStyle(index * 90)}
+            >
+              <div className="planos-card-header">
+                <div className="planos-card-title-row">
+                  <h3>{plan.title}</h3>
+                  {plan.highlighted && (
+                    <div className="planos-card-badge planos-card-badge-animated">
+                      <Layers3 size={12} strokeWidth={2} />
+                      MELHOR VALOR
+                    </div>
+                  )}
+                </div>
+                <p className="planos-card-desc">
+                  {plan.title === 'Basico'
+                    ? 'Para quem quer comecar a escalar agora'
+                    : plan.title === 'Gold'
+                      ? 'O pacote completo para maquinas de guerra'
+                      : 'Todas as ferramentas sem limites'}
+                </p>
+              </div>
 
-          <div className="planos-card planos-card-destaque">
-            <div className="planos-card-badge">MELHOR VALOR</div>
-            <div className="planos-card-header">
-              <h3>Gold</h3>
-              <p className="planos-card-desc">O pacote completo para maquinas de guerra</p>
-            </div>
-            <div className="planos-card-price">
-              <span className="planos-original">R$ 197</span>
-              <span className="planos-current">R$ 97,00</span>
-              <span className="planos-period">/mes</span>
-            </div>
-            <ul className="planos-features">
-              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador de Paginas</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>MetaSpy Minerador de Ads</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>Cloacker Profissional</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>Analise Avancada + Suporte</li>
-              <li className="off"><span className="planos-check"><IconDash size={12} /></span>Remover Metadados</li>
-            </ul>
-            <Link to="/signup" className="btn btn-gradient planos-cta">Assinar Agora</Link>
-          </div>
+              <div className="planos-card-price">
+                <span className="planos-original">
+                  <span>{plan.original}</span>
+                </span>
+                <span className="planos-current">{plan.current}</span>
+                <span className="planos-period">/mes</span>
+              </div>
 
-          <div className="planos-card">
-            <div className="planos-card-header">
-              <h3>Premium</h3>
-              <p className="planos-card-desc">Todas as ferramentas sem limites</p>
-            </div>
-            <div className="planos-card-price">
-              <span className="planos-original">R$ 397</span>
-              <span className="planos-current">R$ 197,00</span>
-              <span className="planos-period">/mes</span>
-            </div>
-            <ul className="planos-features">
-              <li><span className="planos-check"><IconCheck size={12} /></span>Clonador de Paginas</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>MetaSpy Minerador de Ads</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>Cloacker Profissional</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>Remover Metadados</li>
-              <li><span className="planos-check"><IconCheck size={12} /></span>Suporte Prioritario</li>
-            </ul>
-            <Link to="/signup" className="btn btn-primary planos-cta">Assinar Agora</Link>
-          </div>
+              <ul className="planos-features">
+                {plan.features.map(([label, ok]) => (
+                  <li key={label} className={ok ? '' : 'off'}>
+                    <span className="planos-check">
+                      {ok ? <Check size={12} strokeWidth={2.5} /> : <Minus size={12} strokeWidth={2.5} />}
+                    </span>
+                    {label}
+                  </li>
+                ))}
+              </ul>
+
+              <Link to="/signup" className={`btn ${plan.highlighted ? 'btn-gradient' : 'btn-primary'} planos-cta`}>
+                Assinar Agora
+              </Link>
+            </article>
+          ))}
         </div>
-        <div style={{ textAlign: 'center', marginTop: 24 }}>
-          <Link to="/planos" className="btn btn-secondary" style={{ padding: '12px 28px' }}>Ver Comparativo Completo</Link>
+        <div className="landing-planos-footer" data-reveal style={delayStyle(220)}>
+          <Link to="/planos" className="btn btn-secondary landing-comparison-btn">Ver Comparativo Completo</Link>
         </div>
       </section>
 

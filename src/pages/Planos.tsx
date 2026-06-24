@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { IconCheck, IconDash, IconStar, IconLogo } from '../components/Icons'
+import { Radar, Check, Minus, Star, Sparkles, ArrowRight } from 'lucide-react'
 
 const FEATURES_BASICO = [
   { label: 'Clonador de Paginas', ok: true },
@@ -52,15 +53,77 @@ const ALL_FEATURES = [
 ]
 
 const DEPOIMENTOS = [
-  { nome: 'Rafael M.', cargo: 'Afiliado, 2 anos', texto: 'O MetaSpy mudou completamente minha forma de analisar ofertas. Em 3 meses passei de R$3k para R$15k/mês.' },
-  { nome: 'Camila S.', cargo: 'Media Buyer', texto: 'O clonador + editor é absurdo de bom. Editar página em tempo real direto no canvas é outro nível.' },
-  { nome: 'Lucas O.', cargo: 'Diretor de Tráfego', texto: 'Uso o cloacker em todas as campanhas. Zero denúncias desde que comecei a usar. Vale cada centavo.' },
+  { nome: 'Rafael M.', cargo: 'Afiliado, 2 anos', texto: 'O MetaSpy mudou completamente minha forma de analisar ofertas. Em 3 meses passei de R$3k para R$15k/mÃªs.' },
+  { nome: 'Camila S.', cargo: 'Media Buyer', texto: 'O clonador + editor Ã© absurdo de bom. Editar pÃ¡gina em tempo real direto no canvas Ã© outro nÃ­vel.' },
+  { nome: 'Lucas O.', cargo: 'Diretor de TrÃ¡fego', texto: 'Uso o cloacker em todas as campanhas. Zero denÃºncias desde que comecei a usar. Vale cada centavo.' },
 ]
+
+const PLAN_CARD_DATA = [
+  {
+    key: 'basico',
+    title: 'Basico',
+    description: 'Para quem quer comecar a escalar agora',
+    original: 'R$ 97',
+    current: 'R$ 49,90',
+    button: 'Assinar Agora',
+    features: FEATURES_BASICO,
+    className: 'plan-card-basic',
+    highlighted: false,
+  },
+  {
+    key: 'gold',
+    title: 'Gold',
+    description: 'O pacote completo para maquinas de guerra',
+    original: 'R$ 197',
+    current: 'R$ 97,00',
+    button: 'Assinar Agora',
+    features: FEATURES_GOLD,
+    className: 'plan-card-gold',
+    highlighted: true,
+  },
+  {
+    key: 'premium',
+    title: 'Premium',
+    description: 'Todas as ferramentas sem limites',
+    original: 'R$ 397',
+    current: 'R$ 197,00',
+    button: 'Assinar Agora',
+    features: FEATURES_PREMIUM,
+    className: 'plan-card-premium',
+    highlighted: false,
+  },
+] as const
+
+function revealStyle(delayMs: number): CSSProperties {
+  return { ['--reveal-delay' as never]: `${delayMs}ms` } as CSSProperties
+}
 
 export default function Planos() {
   const { isAuthenticated, fetchWithAuth } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState<string | null>(null)
+
+  useEffect(() => {
+    const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'))
+    if (targets.length === 0) return
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (prefersReducedMotion) {
+      targets.forEach(target => target.classList.add('is-visible'))
+      return
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return
+        entry.target.classList.add('is-visible')
+        observer.unobserve(entry.target)
+      })
+    }, { threshold: 0.18, rootMargin: '0px 0px -8% 0px' })
+
+    targets.forEach(target => observer.observe(target))
+    return () => observer.disconnect()
+  }, [])
 
   async function handleCheckout(plan: string) {
     if (!isAuthenticated) { navigate('/signup?redirect=planos'); return }
@@ -80,137 +143,171 @@ export default function Planos() {
     <div className="planos-page">
       <div className="planos-bg" />
 
-      <nav className="planos-nav">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div className="sidebar-logo-icon" style={{ width: 28, height: 28 }}>
-            <IconLogo size={18} />
+      <nav className="planos-nav" data-reveal style={revealStyle(0)}>
+        <div className="planos-brand">
+          <div className="sidebar-logo-icon planos-brand-mark">
+            <Radar size={18} strokeWidth={2} />
           </div>
-          <span style={{ fontWeight: 700, fontSize: 16 }}>MetaSpy</span>
+          <span className="planos-brand-name">MetaSpy</span>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="planos-nav-actions">
           {isAuthenticated ? (
-            <button className="btn btn-secondary" onClick={() => navigate('/dashboard')}>Dashboard</button>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/dashboard')}>Dashboard</button>
           ) : (
             <>
-              <button className="btn btn-secondary" onClick={() => navigate('/login')}>Entrar</button>
-              <button className="btn btn-gradient" onClick={() => navigate('/signup')}>Criar Conta</button>
+              <button type="button" className="btn btn-secondary" onClick={() => navigate('/login')}>Entrar</button>
+              <button type="button" className="btn btn-gradient" onClick={() => navigate('/signup')}>Criar Conta</button>
             </>
           )}
         </div>
       </nav>
 
       <section className="planos-hero">
-        <div className="planos-hero-badge">ACESSO IMEDIATO • CANCELAMENTO LIVRE</div>
-        <h1>Escolha seu Arsenal de Guerra</h1>
-        <p className="planos-subtitle">
-          As ferramentas que os top players usam para escalar ofertas no Meta Ads. <br />
-          Sem plano free. Sem enrolação. Resultado do primeiro dia.
-        </p>
-      </section>
-
-      <section className="planos-cards">
-        <div className="planos-card">
-          <div className="planos-card-header">
-            <h2>Basico</h2>
-            <p className="planos-card-desc">Para quem quer comecar a escalar agora</p>
+        <div className="planos-hero-inner">
+          <div className="planos-hero-badge reveal-lift" data-reveal style={revealStyle(0)}>
+            ACESSO IMEDIATO â€¢ CANCELAMENTO LIVRE
           </div>
-          <div className="planos-card-price">
-            <span className="planos-original">R$ 97</span>
-            <span className="planos-current">R$ 49,90</span>
-            <span className="planos-period">/mes</span>
+          <h1 className="reveal-lift planos-hero-title" data-reveal style={revealStyle(120)}>
+            Escolha seu Arsenal de Guerra
+          </h1>
+          <p className="planos-subtitle reveal-lift" data-reveal style={revealStyle(240)}>
+            As ferramentas que os top players usam para escalar ofertas no Meta Ads. <br />
+            Sem plano free. Sem enrolaÃ§Ã£o. Resultado do primeiro dia.
+          </p>
+          <div className="planos-hero-cta-row" data-reveal style={revealStyle(360)}>
+            {isAuthenticated ? (
+              <button type="button" className="btn btn-gradient planos-hero-cta" onClick={() => navigate('/dashboard')}>
+                Ir para o Dashboard <ArrowRight size={18} strokeWidth={2} />
+              </button>
+            ) : (
+              <>
+                <button type="button" className="btn btn-gradient planos-hero-cta" onClick={() => navigate('/signup')}>
+                  COMEÃ‡AR AGORA <ArrowRight size={18} strokeWidth={2} />
+                </button>
+                <button type="button" className="btn btn-primary planos-hero-cta" onClick={() => navigate('/login')}>
+                  Entrar <ArrowRight size={18} strokeWidth={2} />
+                </button>
+              </>
+            )}
           </div>
-          <ul className="planos-features">
-            {FEATURES_BASICO.map(f => (
-              <li key={f.label} className={f.ok ? '' : 'off'}>
-                <span className="planos-check">{f.ok ? <IconCheck size={12} /> : <IconDash size={12} />}</span>
-                {f.label}
-              </li>
-            ))}
-          </ul>
-          <button className="btn btn-primary planos-cta" onClick={() => handleCheckout('basico')} disabled={loading === 'basico'}>
-            {loading === 'basico' ? 'Redirecionando...' : 'Assinar Agora'}
-          </button>
-        </div>
-
-        <div className="planos-card planos-card-destaque">
-          <div className="planos-card-badge">MELHOR VALOR</div>
-          <div className="planos-card-header">
-            <h2>Gold</h2>
-            <p className="planos-card-desc">O pacote completo para maquinas de guerra</p>
-          </div>
-          <div className="planos-card-price">
-            <span className="planos-original">R$ 197</span>
-            <span className="planos-current">R$ 97,00</span>
-            <span className="planos-period">/mes</span>
-          </div>
-          <ul className="planos-features">
-            {FEATURES_GOLD.map(f => (
-              <li key={f.label} className={f.ok ? '' : 'off'}>
-                <span className="planos-check">{f.ok ? <IconCheck size={12} /> : <IconDash size={12} />}</span>
-                {f.label}
-              </li>
-            ))}
-          </ul>
-          <button className="btn btn-gradient planos-cta" onClick={() => handleCheckout('gold')} disabled={loading === 'gold'}>
-            {loading === 'gold' ? 'Redirecionando...' : 'Assinar Agora'}
-          </button>
-        </div>
-
-        <div className="planos-card">
-          <div className="planos-card-header">
-            <h2>Premium</h2>
-            <p className="planos-card-desc">Todas as ferramentas sem limites</p>
-          </div>
-          <div className="planos-card-price">
-            <span className="planos-original">R$ 397</span>
-            <span className="planos-current">R$ 197,00</span>
-            <span className="planos-period">/mes</span>
-          </div>
-          <ul className="planos-features">
-            {FEATURES_PREMIUM.map(f => (
-              <li key={f.label} className={f.ok ? '' : 'off'}>
-                <span className="planos-check">{f.ok ? <IconCheck size={12} /> : <IconDash size={12} />}</span>
-                {f.label}
-              </li>
-            ))}
-          </ul>
-          <button className="btn btn-primary planos-cta" onClick={() => handleCheckout('premium')} disabled={loading === 'premium'}>
-            {loading === 'premium' ? 'Redirecionando...' : 'Assinar Agora'}
-          </button>
         </div>
       </section>
 
-      <section className="planos-comparison">
-        <h2>Comparativo Completo</h2>
-        <div className="planos-table">
-          <div className="planos-table-row header">
-            <div className="planos-table-cell">Funcionalidade</div>
-            <div className="planos-table-cell">Basico</div>
-            <div className="planos-table-cell">Gold</div>
-            <div className="planos-table-cell">Premium</div>
-          </div>
-          {ALL_FEATURES.map(f => (
-            <div key={f} className="planos-table-row">
-              <div className="planos-table-cell">{f}</div>
-              <div className={`planos-table-cell ${FEATURES_BASICO.find(x => x.label === f)?.ok ? 'check' : ''}`}>
-                {FEATURES_BASICO.find(x => x.label === f)?.ok ? <IconCheck size={12} /> : <IconDash size={12} />}
+      <section className="planos-cards" data-reveal style={revealStyle(120)}>
+        {PLAN_CARD_DATA.map((plan, index) => (
+          <article
+            key={plan.key}
+            className={`planos-card ${plan.highlighted ? 'planos-card-destaque' : ''} ${plan.className}`}
+            data-reveal
+            style={revealStyle(index * 80)}
+          >
+            <div className="planos-card-header">
+              <div className="planos-card-title-row">
+                <h2>{plan.title}</h2>
+                {plan.highlighted && (
+                  <div className="planos-card-badge planos-card-badge-animated">
+                    <Sparkles size={12} strokeWidth={2} />
+                    MELHOR VALOR
+                  </div>
+                )}
               </div>
-              <div className={`planos-table-cell ${FEATURES_GOLD.find(x => x.label === f)?.ok ? 'check' : ''}`}>
-                {FEATURES_GOLD.find(x => x.label === f)?.ok ? <IconCheck size={12} /> : <IconDash size={12} />}
-              </div>
-              <div className={`planos-table-cell check`}><IconCheck size={12} /></div>
+              <p className="planos-card-desc">{plan.description}</p>
             </div>
-          ))}
+
+            <div className="planos-card-price">
+              <span className="planos-original">
+                <span>{plan.original}</span>
+              </span>
+              <span className="planos-current">{plan.current}</span>
+              <span className="planos-period">/mes</span>
+            </div>
+
+            <ul className="planos-features">
+              {plan.features.map(f => (
+                <li key={f.label} className={f.ok ? '' : 'off'}>
+                  <span className="planos-check">
+                    {f.ok ? <Check size={12} strokeWidth={2.5} /> : <Minus size={12} strokeWidth={2.5} />}
+                  </span>
+                  {f.label}
+                </li>
+              ))}
+            </ul>
+
+            <button
+              type="button"
+              className={`btn ${plan.highlighted ? 'btn-gradient' : 'btn-primary'} planos-cta`}
+              onClick={() => handleCheckout(plan.key)}
+              disabled={loading === plan.key}
+            >
+              {loading === plan.key ? 'Redirecionando...' : plan.button}
+            </button>
+          </article>
+        ))}
+      </section>
+
+      <section className="planos-comparison" data-reveal style={revealStyle(160)}>
+        <div className="planos-section-heading">
+          <h2>Comparativo Completo</h2>
+        </div>
+        <div className="planos-table-shell">
+          <div className="planos-table" role="table" aria-label="Comparativo completo dos planos">
+            <div className="planos-table-row planos-table-header" role="row">
+              <div className="planos-table-cell planos-table-feature" role="columnheader">Funcionalidade</div>
+              <div className="planos-table-cell planos-plan-col" role="columnheader">
+                <span className="planos-plan-name">Basico</span>
+              </div>
+              <div className="planos-table-cell planos-plan-col planos-plan-col-highlight" role="columnheader">
+                <span className="planos-plan-name">Gold</span>
+                <span className="planos-plan-badge">MELHOR VALOR</span>
+              </div>
+              <div className="planos-table-cell planos-plan-col" role="columnheader">
+                <span className="planos-plan-name">Premium</span>
+              </div>
+            </div>
+
+            {ALL_FEATURES.map((feature, index) => {
+              const basic = FEATURES_BASICO.find(x => x.label === feature)?.ok
+              const gold = FEATURES_GOLD.find(x => x.label === feature)?.ok
+              const premium = FEATURES_PREMIUM.find(x => x.label === feature)?.ok
+
+              return (
+                <div
+                  key={feature}
+                  className="planos-table-row planos-table-data"
+                  role="row"
+                  data-reveal
+                  style={revealStyle(80 + index * 70)}
+                >
+                  <div className="planos-table-cell planos-table-feature" role="cell">
+                    {feature}
+                  </div>
+                  <div className="planos-table-cell planos-table-flag" role="cell">
+                    {basic ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2.5} />}
+                  </div>
+                  <div className="planos-table-cell planos-table-flag planos-table-flag-highlight" role="cell">
+                    {gold ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2.5} />}
+                  </div>
+                  <div className="planos-table-cell planos-table-flag" role="cell">
+                    {premium ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2.5} />}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </section>
 
-      <section className="planos-depoimentos">
+      <section className="planos-depoimentos" data-reveal style={revealStyle(160)}>
         <h2>Quem usa, recomenda</h2>
         <div className="planos-depoimentos-grid">
-          {DEPOIMENTOS.map(d => (
-            <div key={d.nome} className="planos-depoimento-card">
-              <div className="planos-depoimento-stars">
-                <IconStar size={14} /><IconStar size={14} /><IconStar size={14} /><IconStar size={14} /><IconStar size={14} />
+          {DEPOIMENTOS.map((d, index) => (
+            <div key={d.nome} className="planos-depoimento-card" data-reveal style={revealStyle(index * 80)}>
+              <div className="planos-depoimento-stars" aria-hidden="true">
+                <Star size={14} strokeWidth={2.2} fill="currentColor" />
+                <Star size={14} strokeWidth={2.2} fill="currentColor" />
+                <Star size={14} strokeWidth={2.2} fill="currentColor" />
+                <Star size={14} strokeWidth={2.2} fill="currentColor" />
+                <Star size={14} strokeWidth={2.2} fill="currentColor" />
               </div>
               <p className="planos-depoimento-texto">"{d.texto}"</p>
               <div className="planos-depoimento-autor">
@@ -222,7 +319,7 @@ export default function Planos() {
         </div>
       </section>
 
-      <section className="planos-faq">
+      <section className="planos-faq" data-reveal style={revealStyle(160)}>
         <h2>Duvidas Frequentes</h2>
         <div className="planos-faq-grid">
           {[
@@ -231,8 +328,8 @@ export default function Planos() {
             { p: 'Funciona para qualquer nicho?', r: 'Sim. O MetaSpy funciona para Nutra, Info, Ecommerce, leads e qualquer vertical do Meta Ads.' },
             { p: 'Precisa de conhecimento tecnico?', r: 'Nao. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiencia em programacao.' },
             { p: 'Qual a diferenca entre os planos?', r: 'O Basico da acesso ao Clonador de Paginas e MetaSpy Minerador. O Gold libera todas as ferramentas exceto Remover Metadados. O Premium libera todas as ferramentas sem excecao.' },
-          ].map(faq => (
-            <details key={faq.p} className="planos-faq-item">
+          ].map((faq, index) => (
+            <details key={faq.p} className="planos-faq-item" data-reveal style={revealStyle(index * 60)}>
               <summary>{faq.p}</summary>
               <p>{faq.r}</p>
             </details>
@@ -240,16 +337,16 @@ export default function Planos() {
         </div>
       </section>
 
-      <section className="planos-cta-bottom">
+      <section className="planos-cta-bottom" data-reveal style={revealStyle(180)}>
         <h2>Pronto para escalar?</h2>
         <p>Junte-se a centenas de profissionais que ja usam o MetaSpy para dominar o Meta Ads.</p>
-        <button className="btn btn-gradient" style={{ padding: '14px 40px', fontSize: 16 }} onClick={() => handleCheckout('basico')}>
-          COMECAR AGORA
+        <button type="button" className="btn btn-gradient planos-bottom-cta" onClick={() => handleCheckout('basico')}>
+          COMECAR AGORA <ArrowRight size={18} strokeWidth={2} />
         </button>
       </section>
 
       <footer className="planos-footer">
-        <p>MetaSpy © 2026 — Inteligencia de ofertas em escala. By Banshee.ads</p>
+        <p>MetaSpy Â© 2026 â€” Inteligencia de ofertas em escala. By Banshee.ads</p>
       </footer>
     </div>
   )
