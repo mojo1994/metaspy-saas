@@ -9,6 +9,7 @@ import {
 import ElementTree from '../components/builder/ElementTree'
 import BuilderCanvas from '../components/builder/BuilderCanvas'
 import PropertyInspector from '../components/builder/PropertyInspector'
+import { WidgetIcon } from '../components/builder/SymbolIcons'
 
 type Tab = 'tree' | 'widgets' | 'components'
 
@@ -18,51 +19,51 @@ const WIDGET_CATEGORIES = [
   {
     name: 'Estrutura',
     items: [
-      { type: 'section', label: 'Secao', icon: '\u00a7' },
-      { type: 'container', label: 'Container', icon: '\u25ad' },
-      { type: 'row', label: 'Linha', icon: '\u2192' },
-      { type: 'column', label: 'Coluna', icon: '\u2193' },
+      { type: 'section', label: 'Secao' },
+      { type: 'container', label: 'Container' },
+      { type: 'row', label: 'Linha' },
+      { type: 'column', label: 'Coluna' },
     ],
   },
   {
     name: 'Conteudo',
     items: [
-      { type: 'heading', label: 'Titulo', icon: '\u25a4' },
-      { type: 'text', label: 'Texto', icon: '\u00b6' },
-      { type: 'image', label: 'Imagem', icon: '\u22a1' },
-      { type: 'button', label: 'Botao', icon: '\u229f' },
-      { type: 'divider', label: 'Divisor', icon: '\u2014' },
-      { type: 'icon', label: 'Icone', icon: '\u2726' },
-      { type: 'video', label: 'Video', icon: '\u25b6' },
-      { type: 'list', label: 'Lista', icon: '\u2630' },
+      { type: 'heading', label: 'Titulo' },
+      { type: 'text', label: 'Texto' },
+      { type: 'image', label: 'Imagem' },
+      { type: 'button', label: 'Botao' },
+      { type: 'divider', label: 'Divisor' },
+      { type: 'icon', label: 'Icone' },
+      { type: 'video', label: 'Video' },
+      { type: 'list', label: 'Lista' },
     ],
   },
   {
     name: 'Marketing',
     items: [
-      { type: 'hero', label: 'Hero', icon: '\u2605' },
-      { type: 'pricing', label: 'Tabela', icon: '$' },
-      { type: 'faq', label: 'FAQ', icon: '?' },
-      { type: 'testimonial', label: 'Depoimento', icon: '\u275d' },
-      { type: 'countdown', label: 'Timer', icon: '\u25f7' },
-      { type: 'tabs', label: 'Abas', icon: '\u25a5' },
-      { type: 'form', label: 'Formulario', icon: '\u2328' },
-      { type: 'nav', label: 'Nav Bar', icon: '\u2261' },
+      { type: 'hero', label: 'Hero' },
+      { type: 'pricing', label: 'Tabela' },
+      { type: 'faq', label: 'FAQ' },
+      { type: 'testimonial', label: 'Depoimento' },
+      { type: 'countdown', label: 'Timer' },
+      { type: 'tabs', label: 'Abas' },
+      { type: 'form', label: 'Formulario' },
+      { type: 'nav', label: 'Nav Bar' },
     ],
   },
   {
     name: 'Avancado',
     items: [
-      { type: 'modal', label: 'Modal', icon: '\u229e' },
-      { type: 'embed', label: 'Incorporar', icon: '\u27e6' },
+      { type: 'modal', label: 'Modal' },
+      { type: 'embed', label: 'Incorporar' },
     ],
   },
 ]
 
 const DEVICES = [
-  { width: 1440, label: 'Desktop', icon: '\u2610' },
-  { width: 768, label: 'Tablet', icon: '\u25f1' },
-  { width: 375, label: 'Mobile', icon: '\u25f0' },
+  { width: 1440, label: 'Desktop', type: 'pc' },
+  { width: 768, label: 'Tablet', type: 'tablet' },
+  { width: 375, label: 'Mobile', type: 'mobile' },
 ]
 
 const COMPONENTS_KEY = 'metaspy_builder_components'
@@ -579,7 +580,7 @@ export default function PageBuilder() {
               key={d.label}
               className={`builder-device-btn ${i === deviceIndex ? 'active' : ''}`}
               onClick={() => setDeviceIndex(i)}
-            >{d.icon} {d.label}</button>
+            ><WidgetIcon type={d.type} size={14} /> {d.label}</button>
           ))}
         </div>
 
@@ -662,7 +663,7 @@ export default function PageBuilder() {
                             onDragStart={e => handleWidgetDragStart(e, item.type)}
                             onClick={() => handleDropWidget(item.type, selectedId || page.tree.id, 0)}
                           >
-                            <span style={{ fontSize: 20 }}>{item.icon}</span>
+                            <WidgetIcon type={item.type} size={20} />
                             <span>{item.label}</span>
                           </div>
                         ))}

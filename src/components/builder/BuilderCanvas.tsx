@@ -3,6 +3,7 @@ import {
   DocumentNode, stylesToCss, hoverStyleToCss, scrollAnimationToCss,
   SCROLL_ANIMATION_KEYFRAMES, nodeTypeLabel,
 } from './documentModel'
+import { WidgetIcon } from './SymbolIcons'
 
 interface Props {
   tree: DocumentNode
@@ -186,7 +187,7 @@ function renderWidgetPreview(node: DocumentNode, previewMode: boolean): JSX.Elem
     case 'divider':
       return <hr style={{ ...w, border: 'none', height: 1, backgroundColor: '#e0e0e0', margin: 0 }} />
     case 'icon':
-      return <div style={{ ...w, fontSize: node.props.size || 32, color: node.styles.color || '#7c3aed', textAlign: 'center' }}>✦</div>
+      return <div style={{ ...w, display: 'flex', alignItems: 'center', justifyContent: 'center', color: node.styles.color || '#7c3aed' }}><WidgetIcon type="icon" size={node.props.size || 32} /></div>
     case 'video': {
       const src = node.props.src
       if (src && node.props.type === 'youtube') {

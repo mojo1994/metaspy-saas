@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { DocumentNode, nodeTypeLabel } from './documentModel'
+import { WidgetIcon } from './SymbolIcons'
 
 interface Props {
   tree: DocumentNode
@@ -11,14 +12,6 @@ interface Props {
   onDuplicate?: (id: string) => void
   onCopy?: (id: string) => void
   onPaste?: () => void
-}
-
-const TYPE_ICONS: Record<string, string> = {
-  page: '\u25a3', section: '\u00a7', container: '\u25ad', row: '\u2192', column: '\u2193',
-  heading: '\u25a4', text: '\u00b6', image: '\u22a1', button: '\u229f', icon: '\u2726',
-  video: '\u25b6', divider: '\u2014', list: '\u2630', form: '\u2328', nav: '\u2261',
-  hero: '\u2605', pricing: '$', faq: '?', testimonial: '\u275d',
-  countdown: '\u25f7', tabs: '\u25a5', modal: '\u229e', embed: '\u27e6',
 }
 
 export default function ElementTree({ tree, selectedId, onSelect, onDelete, onRename, onMove, onDuplicate, onCopy, onPaste }: Props) {
@@ -148,7 +141,7 @@ export default function ElementTree({ tree, selectedId, onSelect, onDelete, onRe
           )}
           {!hasChildren && <span style={{ width: 16 }} />}
 
-          <span style={{ fontSize: 12 }}>{TYPE_ICONS[node.type] || '●'}</span>
+          <WidgetIcon type={node.type} size={12} />
 
           {editingId === node.id ? (
             <input
