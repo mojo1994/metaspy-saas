@@ -1012,11 +1012,14 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
       const archive = new Archiver('zip', { zlib: { level: 9 } })
       const ws = createWriteStream(zipPath)
       await new Promise((resolve, reject) => {
+        ws.on('finish', resolve)
+        ws.on('error', reject)
         archive.pipe(ws)
         archive.file(htmlPath, { name: 'index.html' })
-        outputPath = zipPath
-        downloadExt = 'zip'
+        archive.finalize()
       })
+      outputPath = zipPath
+      downloadExt = 'zip'
     }
 
     CAMO_MEDIA_OUTPUTS.set(id, outputPath)
