@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { CloneJob } from '../types'
 import HelpTooltip from '../components/HelpTooltip'
-import PageEditor from '../components/PageEditor'
 
 declare global {
   interface Window {
@@ -193,16 +192,12 @@ export default function PageVaultTool() {
       <div className="tool-header">
         <h3>Clonador — Clonagem Offline de Paginas Web</h3>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button className={`btn ${mode === 'clone' ? 'btn-accent' : 'btn-secondary'}`} onClick={() => setMode('clone')} style={{ fontSize: 12 }}>
+          <button className="btn btn-accent" style={{ fontSize: 12 }}>
             ⇩ Clonar
-          </button>
-          <button className={`btn ${mode === 'editor' ? 'btn-accent' : 'btn-secondary'}`} onClick={() => setMode('editor')} style={{ fontSize: 12 }} disabled={!cloneHtml}>
-            ◎ Editor {cloneHtml ? '' : '(sem pagina)'}
           </button>
         </div>
       </div>
 
-      {mode === 'clone' ? (
       <>
       <div className="clone-url-bar">
         <div className="clone-url-input">
@@ -352,15 +347,6 @@ export default function PageVaultTool() {
         </div>
       </div>
       </>
-      ) : (
-        <div style={{ height: 'calc(100vh - 160px)' }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Editando: {cloneUrl}</span>
-            <button className="btn btn-secondary" onClick={() => setMode('clone')} style={{ marginLeft: 'auto', fontSize: 11 }}>✕ Fechar editor</button>
-          </div>
-          <PageEditor html={cloneHtml} sourceUrl={cloneUrl} onExtract={handleExtract} />
-        </div>
-      )}
     </div>
   )
 }

@@ -11,11 +11,8 @@ import PageVaultTool from './pages/PageVaultTool'
 import CloackerTool from './pages/CloackerTool'
 import CloakDetector from './pages/CloakDetector'
 import CreativeCamouflage from './pages/CreativeCamouflage'
-import MetadataCleaner from './pages/MetadataCleaner'
-import DashboardPages from './pages/DashboardPages'
-import PageEditor from './pages/PageEditor'
 import HostPage from './pages/HostPage'
-import PageBuilder from './pages/PageBuilder'
+import MetadataCleaner from './pages/MetadataCleaner'
 import Profile from './pages/Profile'
 import Settings from './pages/Settings'
 import Admin from './pages/Admin'
@@ -42,12 +39,8 @@ export default function App() {
         <Route path="cloacker" element={<CloackerTool />} />
         <Route path="cloacker/detector" element={<CloakDetector />} />
         <Route path="cloacker/camouflage" element={<CreativeCamouflage />} />
-        <Route path="cleaner" element={<MetadataCleaner />} />
-        <Route path="paginas" element={<DashboardPages />} />
-        <Route path="paginas/nova" element={<PageEditor />} />
-        <Route path="paginas/editar/:id" element={<PageEditor />} />
         <Route path="hospedar" element={<HostPage />} />
-        <Route path="hospedar/criar" element={<PageBuilder />} />
+        <Route path="cleaner" element={<MetadataCleaner />} />
         <Route path="perfil" element={<Profile />} />
         <Route path="configuracoes" element={<Settings />} />
         <Route path="admin" element={<Admin />} />

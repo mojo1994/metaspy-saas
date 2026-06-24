@@ -16,6 +16,7 @@ import mime from 'mime-types'
 import AdmZip from 'adm-zip'
 import { initDb, initSchema, one, query, run } from './db.js'
 import { uploadPageToR2, downloadPageFromR2, deletePageFromR2, getPageContentFromR2, getWorkerUrl } from './cloudflareStorage.js'
+
 const USE_CF_STORAGE = !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -963,152 +964,6 @@ function slugify(text) {
     .slice(0, 60) || 'pagina'
 }
 
-app.post('/api/pages', authMiddleware, async (req, res) => {
-  try {
-    const { title, html } = req.body
-    if (!title || !html) return res.status(400).json({ error: 'Titulo e HTML obrigatorios.' })
-    const id = randomUUID()
-    const baseSlug = slugify(title)
-    let slug = baseSlug
-    let exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
-    let counter = 1
-    while (exists) {
-      slug = `${baseSlug}-${counter}`
-      exists = await one('SELECT id FROM pages WHERE slug = $1', [slug])
-      counter++
-    }
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-    await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      [id, req.user.id, slug, title.trim(), html, 'page', 1, now, now])
-    const page = await one('SELECT * FROM pages WHERE id = $1', [id])
-    res.status(201).json(page)
-  } catch (err) {
-    console.error('Erro criar pagina:', err)
-    res.status(500).json({ error: 'Erro ao criar pagina.' })
-  }
-})
-
-app.get('/api/pages', authMiddleware, async (req, res) => {
-  try {
-    const pages = await query('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE user_id = $1 ORDER BY updated_at DESC', [req.user.id])
-    res.json(pages)
-  } catch {
-    res.status(500).json({ error: 'Erro ao listar paginas.' })
-  }
-})
-
-app.get('/api/pages/:id', authMiddleware, async (req, res) => {
-  try {
-    const page = await one('SELECT * FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
-    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
-    res.json(page)
-  } catch {
-    res.status(500).json({ error: 'Erro ao buscar pagina.' })
-  }
-})
-
-app.put('/api/pages/:id', authMiddleware, async (req, res) => {
-  try {
-    const { title, html } = req.body
-    const page = await one('SELECT id FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
-    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-    await run('UPDATE pages SET title = $1, html = $2, updated_at = $3 WHERE id = $4',
-      [title?.trim() || 'Sem titulo', html || '', now, req.params.id])
-    const updated = await one('SELECT * FROM pages WHERE id = $1', [req.params.id])
-    res.json(updated)
-  } catch {
-    res.status(500).json({ error: 'Erro ao atualizar pagina.' })
-  }
-})
-
-app.delete('/api/pages/:id', authMiddleware, async (req, res) => {
-  try {
-    const page = await one('SELECT slug, cf_url FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
-    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
-    await run('DELETE FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
-    if (USE_CF_STORAGE && page.slug) {
-      deletePageFromR2(page.slug).catch(() => {})
-    }
-    res.json({ ok: true })
-  } catch {
-    res.status(500).json({ error: 'Erro ao deletar pagina.' })
-  }
-})
-
-// Upload zip or folder page
-app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), async (req, res) => {
-  try {
-    const files = req.files
-    if (!files || files.length === 0) return res.status(400).json({ error: 'Arquivo(s) obrigatorio(s).' })
-
-    let entries = []
-    let title
-
-    // Single zip file
-    if (files.length === 1 && files[0].originalname.endsWith('.zip')) {
-      const zip = new AdmZip(files[0].buffer)
-      entries = zip.getEntries().filter(e => !e.isDirectory)
-      const hasIndex = entries.some(e => e.entryName === 'index.html' || e.entryName.endsWith('/index.html'))
-      if (!hasIndex) return res.status(400).json({ error: 'O ZIP deve conter um arquivo index.html na raiz.' })
-      title = req.body.title || files[0].originalname.replace(/\.zip$/i, '') || 'Pagina hospedada'
-    } else {
-      // Folder upload
-      entries = files.map(f => ({
-        entryName: f.originalname,
-        isDirectory: false,
-        getData: () => f.buffer,
-      }))
-      const hasIndex = files.some(f => f.originalname === 'index.html' || f.originalname.endsWith('/index.html'))
-      if (!hasIndex) return res.status(400).json({ error: 'A pasta deve conter um arquivo index.html.' })
-      title = req.body.title || files.find(f => f.originalname === 'index.html')?.originalname?.replace('/index.html', '') || 'Pagina hospedada'
-    }
-
-    const { id, slug } = await createPageRecord(req.user.id, title, req.body.slug)
-
-    // Always save to local disk
-    const pageDir = join(PAGES_DIR, slug)
-    mkdirSync(pageDir, { recursive: true })
-    let indexHtml = ''
-    for (const entry of entries) {
-      const entryPath = entry.entryName
-      const filePath = join(pageDir, entryPath)
-      mkdirSync(dirname(filePath), { recursive: true })
-      const data = entry.getData()
-      writeFileSync(filePath, data)
-      if (entryPath === 'index.html' || entryPath.endsWith('/index.html')) {
-        indexHtml = data.toString('utf-8')
-      }
-    }
-    // Store index.html content in DB for reliable serving
-    if (indexHtml) {
-      run('UPDATE pages SET html = $1 WHERE id = $2', [indexHtml, id]).catch(() => {})
-    }
-
-    // Save to R2 + update cf_url
-    if (USE_CF_STORAGE) {
-      const cfFiles = entries.map(e => ({
-        path: e.entryName,
-        buffer: e.getData(),
-        contentType: mime.lookup(e.entryName) || 'application/octet-stream',
-      }))
-      uploadPageToR2(slug, cfFiles).catch(err => console.error('Erro upload R2:', err))
-      const cfUrl = getWorkerUrl(slug)
-      run('UPDATE pages SET cf_url = $1 WHERE id = $2', [cfUrl, id]).catch(() => {})
-    }
-
-    res.status(201).json({
-      id, slug, title,
-      url: `https://centralspyads.netlify.app/p/${slug}`,
-    })
-  } catch (err) {
-    if (err.message === 'slug-exists') return res.status(409).json({ error: 'Este nome de pagina ja esta em uso. Escolha outro.' })
-    if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Arquivo muito grande. Maximo: 200MB.' })
-    console.error('Erro upload pagina:', err)
-    res.status(500).json({ error: 'Erro ao fazer upload da pagina.' })
-  }
-})
-
 async function createPageRecord(userId, title, customSlug, cfUrl) {
   const id = randomUUID()
   let slug
@@ -1132,488 +987,72 @@ async function createPageRecord(userId, title, customSlug, cfUrl) {
   return { id, slug }
 }
 
-// Public routes: serve page by slug (no auth) — serve from DB html column for all types
-// Attempt R2 first, fallback to DB, then set cache headers for edge/CDN caching
-app.get('/api/page/:slug/:path(*)', async (req, res) => {
+app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), async (req, res) => {
   try {
-    const { slug, path } = req.params
-    const mimeType = mime.lookup(path) || 'text/html; charset=utf-8'
+    const files = req.files
+    if (!files || files.length === 0) return res.status(400).json({ error: 'Arquivo(s) obrigatorio(s).' })
 
-    // Try R2 first for html pages
-    if (USE_CF_STORAGE && mimeType === 'text/html; charset=utf-8') {
-      try {
-        const r2Data = await getPageContentFromR2(slug, path || 'index.html')
-        if (r2Data) {
-          res.set('Content-Type', mimeType)
-          res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-          res.set('X-Cache', 'R2-HIT')
-          return res.send(r2Data.toString('utf-8'))
-        }
-      } catch {}
+    let entries = []
+    let title
+
+    if (files.length === 1 && files[0].originalname.endsWith('.zip')) {
+      const zip = new AdmZip(files[0].buffer)
+      entries = zip.getEntries().filter(e => !e.isDirectory)
+      const hasIndex = entries.some(e => e.entryName === 'index.html' || e.entryName.endsWith('/index.html'))
+      if (!hasIndex) return res.status(400).json({ error: 'O ZIP deve conter um arquivo index.html na raiz.' })
+      title = req.body.title || files[0].originalname.replace(/\.zip$/i, '') || 'Pagina hospedada'
+    } else {
+      entries = files.map(f => ({
+        entryName: f.originalname,
+        isDirectory: false,
+        getData: () => f.buffer,
+      }))
+      const hasIndex = files.some(f => f.originalname === 'index.html' || f.originalname.endsWith('/index.html'))
+      if (!hasIndex) return res.status(400).json({ error: 'A pasta deve conter um arquivo index.html.' })
+      title = req.body.title || files.find(f => f.originalname === 'index.html')?.originalname?.replace('/index.html', '') || 'Pagina hospedada'
     }
 
-    const page = await one('SELECT html, type, published FROM pages WHERE slug = $1 AND published = 1', [slug.toLowerCase()])
-    if (!page) return res.status(404).send('Pagina nao encontrada.')
-    res.set('Content-Type', mimeType)
-    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-    res.send(page.html || '')
-  } catch {
-    res.status(500).send('Erro ao carregar pagina.')
-  }
-})
+    const { id, slug } = await createPageRecord(req.user.id, title, req.body.slug)
 
-app.get('/api/page/:slug', async (req, res) => {
-  try {
-    const slug = req.params.slug.toLowerCase()
-
-    // Try R2 first
-    if (USE_CF_STORAGE) {
-      try {
-        const r2Data = await getPageContentFromR2(slug, 'index.html')
-        if (r2Data) {
-          res.set('Content-Type', 'text/html; charset=utf-8')
-          res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-          res.set('X-Cache', 'R2-HIT')
-          return res.send(r2Data.toString('utf-8'))
-        }
-      } catch {}
-    }
-
-    const page = await one('SELECT html, type, title FROM pages WHERE slug = $1 AND published = 1', [slug])
-    if (!page) return res.status(404).send('Pagina nao encontrada.')
-    res.set('Content-Type', 'text/html; charset=utf-8')
-    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-    res.send(page.html || '')
-  } catch {
-    res.status(500).send('Erro ao carregar pagina.')
-  }
-})
-
-// ─── Builder Routes ─────────────────────────────────────────────────
-const builderUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'video/mp4', 'video/webm', 'video/ogg']
-    if (allowed.includes(file.mimetype)) return cb(null, true)
-    cb(new Error('Formato de arquivo nao suportado. Aceito: JPEG, PNG, GIF, WebP, SVG, MP4, WebM, OGG.'))
-  },
-})
-
-app.post('/api/builder/upload', authMiddleware, builderUpload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem enviada.' })
-    const ext = extname(req.file.originalname) || '.jpg'
-    const fileName = `builder_${randomUUID()}${ext}`
-    const pageDir = join(PAGES_DIR, '_uploads')
-    if (!existsSync(pageDir)) mkdirSync(pageDir, { recursive: true })
-    writeFileSync(join(pageDir, fileName), req.file.buffer)
-    let url = `/api/builder/image/${fileName}`
-    if (USE_CF_STORAGE) {
-      try {
-        await uploadPageToR2(`_uploads/${fileName}`, [{
-          path: fileName,
-          buffer: req.file.buffer,
-          contentType: req.file.mimetype,
-        }])
-        url = getWorkerUrl(`_uploads/${fileName}`)
-      } catch (cfErr) {
-        console.error('Erro R2 upload image:', cfErr)
-      }
-    }
-    res.json({ url, fileName })
-  } catch (err) {
-    console.error('Erro upload builder image:', err)
-    res.status(500).json({ error: 'Erro ao fazer upload da imagem.' })
-  }
-})
-
-app.get('/api/builder/image/:fileName', async (req, res) => {
-  try {
-    const filePath = join(PAGES_DIR, '_uploads', req.params.fileName)
-    if (!existsSync(filePath)) return res.status(404).send('Imagem nao encontrada.')
-    const mimeType = mime.lookup(filePath) || 'image/jpeg'
-    res.set('Content-Type', mimeType)
-    res.sendFile(filePath)
-  } catch {
-    res.status(500).send('Erro ao carregar imagem.')
-  }
-})
-
-app.post('/api/builder/save', authMiddleware, async (req, res) => {
-  try {
-    const { id, name, slug, tree } = req.body
-    if (!name || !tree) return res.status(400).json({ error: 'Nome e arvore sao obrigatorios.' })
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-    const treeJson = JSON.stringify(tree)
-    const baseSlug = slug || slugify(name)
-
-    if (id) {
-      const existing = await one('SELECT id FROM pages WHERE id = $1 AND user_id = $2', [id, req.user.id])
-      if (!existing) return res.status(404).json({ error: 'Pagina nao encontrada.' })
-      await run('UPDATE pages SET title = $1, slug = $2, html = $3, type = $4, updated_at = $5 WHERE id = $6',
-        [name.trim(), baseSlug, treeJson, 'builder', now, id])
-      const page = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [id])
-      return res.json(page)
-    }
-
-    // Create new
-    const newId = randomUUID()
-    let finalSlug = baseSlug
-    let exists = await one('SELECT id FROM pages WHERE slug = $1', [finalSlug])
-    let counter = 1
-    while (exists) {
-      finalSlug = `${baseSlug}-${counter}`
-      exists = await one('SELECT id FROM pages WHERE slug = $1', [finalSlug])
-      counter++
-    }
-    await run('INSERT INTO pages (id, user_id, slug, title, html, type, published, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      [newId, req.user.id, finalSlug, name.trim(), treeJson, 'builder', 0, now, now])
-    const page = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [newId])
-    res.status(201).json(page)
-  } catch (err) {
-    console.error('Erro salvar builder:', err)
-    res.status(500).json({ error: 'Erro ao salvar pagina.' })
-  }
-})
-
-app.get('/api/builder', authMiddleware, async (req, res) => {
-  try {
-    const pages = await query('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE user_id = $1 AND type = $2 ORDER BY updated_at DESC', [req.user.id, 'builder'])
-    res.json(pages)
-  } catch {
-    res.status(500).json({ error: 'Erro ao listar paginas.' })
-  }
-})
-
-app.get('/api/builder/:id', authMiddleware, async (req, res) => {
-  try {
-    const page = await one('SELECT * FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
-    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
-    if (page.type !== 'builder' && page.type !== 'hosted') return res.status(400).json({ error: 'Tipo invalido.' })
-    res.json(page)
-  } catch {
-    res.status(500).json({ error: 'Erro ao buscar pagina.' })
-  }
-})
-
-app.delete('/api/builder/:id', authMiddleware, async (req, res) => {
-  try {
-    const result = await run('DELETE FROM pages WHERE id = $1 AND user_id = $2 AND type = $3', [req.params.id, req.user.id, 'builder'])
-    if (result.changes === 0) return res.status(404).json({ error: 'Pagina nao encontrada.' })
-    res.json({ ok: true })
-  } catch {
-    res.status(500).json({ error: 'Erro ao deletar pagina.' })
-  }
-})
-
-// Publish builder page: generate HTML, update record in-place to type='hosted' + embed tree
-app.post('/api/builder/:id/publish', authMiddleware, async (req, res) => {
-  try {
-    const page = await one('SELECT * FROM pages WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
-    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
-    if (page.type !== 'builder') return res.status(400).json({ error: 'Tipo invalido. Use uma pagina do builder.' })
-
-    const tree = JSON.parse(page.html)
-    const html = generateBuilderHtml(tree, page.title)
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-    const slug = page.slug
-
-    // Store generated HTML in the html column & embed tree JSON in a script tag for re-editing
-    const fullHtml = html.replace('</body>',
-      `<script id="__METASPY_TREE" type="application/json">${JSON.stringify(tree)}</script>\n</body>`)
-
-    // Update existing record to type='hosted' so it serves the rendered HTML
-    await run('UPDATE pages SET html = $1, type = $2, published = $3, updated_at = $4 WHERE id = $5',
-      [fullHtml, 'hosted', 1, now, page.id])
-
-    // Save files to disk
     const pageDir = join(PAGES_DIR, slug)
     mkdirSync(pageDir, { recursive: true })
-    writeFileSync(join(pageDir, 'index.html'), fullHtml)
-
-    // Upload to R2
-    if (USE_CF_STORAGE) {
-      const cfUrl = getWorkerUrl(slug)
-      await uploadPageToR2(slug, [{
-        path: 'index.html',
-        buffer: Buffer.from(fullHtml),
-        contentType: 'text/html; charset=utf-8',
-      }]).catch(err => console.error('Erro R2 publish:', err))
-      run('UPDATE pages SET cf_url = $1 WHERE id = $2', [cfUrl, page.id]).catch(() => {})
+    let indexHtml = ''
+    for (const entry of entries) {
+      const entryPath = entry.entryName
+      const filePath = join(pageDir, entryPath)
+      mkdirSync(dirname(filePath), { recursive: true })
+      const data = entry.getData()
+      writeFileSync(filePath, data)
+      if (entryPath === 'index.html' || entryPath.endsWith('/index.html')) {
+        indexHtml = data.toString('utf-8')
+      }
+    }
+    if (indexHtml) {
+      run('UPDATE pages SET html = $1 WHERE id = $2', [indexHtml, id]).catch(() => {})
     }
 
-    const updated = await one('SELECT id, slug, title, type, published, cf_url, created_at, updated_at FROM pages WHERE id = $1', [page.id])
-    res.json({
-      ...updated,
+    if (USE_CF_STORAGE) {
+      const cfFiles = entries.map(e => ({
+        path: e.entryName,
+        buffer: e.getData(),
+        contentType: mime.lookup(e.entryName) || 'application/octet-stream',
+      }))
+      uploadPageToR2(slug, cfFiles).catch(err => console.error('Erro upload R2:', err))
+      const cfUrl = getWorkerUrl(slug)
+      run('UPDATE pages SET cf_url = $1 WHERE id = $2', [cfUrl, id]).catch(() => {})
+    }
+
+    res.status(201).json({
+      id, slug, title,
       url: `https://centralspyads.netlify.app/p/${slug}`,
     })
   } catch (err) {
-    console.error('Erro publicar builder:', err)
-    res.status(500).json({ error: 'Erro ao publicar pagina.' })
+    if (err.message === 'slug-exists') return res.status(409).json({ error: 'Este nome de pagina ja esta em uso. Escolha outro.' })
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Arquivo muito grande. Maximo: 200MB.' })
+    console.error('Erro upload pagina:', err)
+    res.status(500).json({ error: 'Erro ao fazer upload da pagina.' })
   }
 })
-
-function generateBuilderHtml(tree, title) {
-  function hoverStyleToCss(hs) {
-    if (!hs) return ''
-    const p = []
-    if (hs.backgroundColor) p.push(`background-color: ${hs.backgroundColor}`)
-    if (hs.color) p.push(`color: ${hs.color}`)
-    if (hs.boxShadow) p.push(`box-shadow: ${hs.boxShadow}`)
-    if (hs.opacity !== undefined) p.push(`opacity: ${hs.opacity}`)
-    const t = []
-    if (hs.scale) t.push(`scale(${hs.scale})`)
-    if (hs.translateY) t.push(`translateY(${hs.translateY}px)`)
-    if (t.length) p.push(`transform: ${t.join(' ')}`)
-    return p.join('; ')
-  }
-  function stylesToCss(styles, layoutMode) {
-    if (!styles) return ''
-    const lines = []
-    const val = (s) => s ? `${s.value}${s.unit}` : '0'
-    if (layoutMode === 'freehand') {
-      if (styles.left) lines.push(`left: ${val(styles.left)}`)
-      if (styles.top) lines.push(`top: ${val(styles.top)}`)
-      if (styles.zIndex !== undefined) lines.push(`z-index: ${styles.zIndex}`)
-      if (styles.rotation) lines.push(`transform: rotate(${styles.rotation}deg)`)
-    }
-    const f = (k, v) => { if (v !== undefined && v !== '') lines.push(`${k}: ${v}`) }
-    f('display', styles.display); f('flex-direction', styles.flexDirection)
-    f('align-items', styles.alignItems); f('justify-content', styles.justifyContent)
-    f('gap', styles.gap ? val(styles.gap) : undefined); f('flex', styles.flex)
-    if (styles.width) { if (styles.width === 'fill') f('width', '100%'); else if (styles.width === 'hug') f('width', 'auto'); else f('width', val(styles.width)) }
-    if (styles.height) { if (styles.height === 'hug') f('height', 'auto'); else f('height', val(styles.height)) }
-    f('min-width', styles.minWidth ? val(styles.minWidth) : undefined)
-    f('max-width', styles.maxWidth ? val(styles.maxWidth) : undefined)
-    f('min-height', styles.minHeight ? val(styles.minHeight) : undefined)
-    ;['margin', 'padding'].forEach(p => { ['Top', 'Right', 'Bottom', 'Left'].forEach(s => { const key = `${p}${s}`; f(`${p}-${s.toLowerCase()}`, styles[key] ? val(styles[key]) : undefined) }) })
-    f('background-color', styles.backgroundColor)
-    f('background-image', styles.backgroundImage ? `url(${styles.backgroundImage})` : undefined)
-    f('background-size', styles.backgroundSize)
-    ;['border-width', 'border-style', 'border-color', 'border-radius'].forEach(p => { const key = p === 'border-width' ? 'borderWidth' : p === 'border-style' ? 'borderStyle' : p === 'border-color' ? 'borderColor' : 'borderRadius'; const v = styles[key]; if (v) f(p, typeof v === 'object' ? val(v) : v) })
-    f('box-shadow', styles.boxShadow); f('opacity', styles.opacity)
-    f('font-family', styles.fontFamily); f('font-size', styles.fontSize ? val(styles.fontSize) : undefined)
-    f('font-weight', styles.fontWeight); f('line-height', styles.lineHeight)
-    f('letter-spacing', styles.letterSpacing ? val(styles.letterSpacing) : undefined)
-    f('color', styles.color); f('text-align', styles.textAlign); f('text-decoration', styles.textDecoration)
-    return lines.join('; ')
-  }
-  const SCROLL_ANIMATION_KEYFRAMES = `
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes fadeInLeft { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes fadeInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes scaleIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
-@keyframes slideIn { from { opacity: 0; transform: translateY(60px); } to { opacity: 1; transform: translateY(0); } }
-`
-
-  function renderNode(node) {
-    const css = stylesToCss(node.styles, node.layoutMode)
-    const styleAttr = css ? ` style="${css}"` : ''
-    const animAttr = node.scrollAnimation ? ` data-scroll="${node.scrollAnimation.type}" data-duration="${node.scrollAnimation.duration}" data-delay="${node.scrollAnimation.delay}"` : ''
-    const clickAttr = node.clickAction?.type === 'link' ? ` onclick="window.open('${node.clickAction.linkUrl}','${node.clickAction.linkTarget || '_self'}')"` : node.clickAction?.type === 'scrollTo' ? ` onclick="document.querySelector('${node.clickAction.scrollSelector}')?.scrollIntoView({behavior:'smooth'})"` : ''
-
-    const hoverId = node.hoverStyle ? `_h_${node.id.replace(/[^a-zA-Z0-9]/g, '_')}` : ''
-
-    switch (node.type) {
-      case 'page':
-        return `<div${styleAttr}${animAttr}${clickAttr}>${node.children.map(renderNode).join('\n')}</div>`
-      case 'section':
-        return `<section${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.children.map(renderNode).join('\n')}</section>`
-      case 'container': case 'row': case 'column':
-        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.children.map(renderNode).join('\n')}</div>`
-      case 'heading': {
-        const level = node.props?.level || 'h2'
-        return `<${level}${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.props?.text || ''}</${level}>`
-      }
-      case 'text':
-        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.props?.html || ''}</div>`
-      case 'button': {
-        const link = node.props?.link || '#'
-        const target = node.props?.target || '_self'
-        return `<a href="${link}" target="${target}"${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.props?.text || ''}</a>`
-      }
-      case 'image':
-        return `<img src="${node.props?.src || ''}" alt="${node.props?.alt || ''}"${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} />`
-      case 'divider':
-        return `<hr${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} />`
-      case 'icon':
-        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><span class="material-icons">${node.props?.icon || 'star'}</span></div>`
-      case 'video': {
-        const src = node.props?.src || ''
-        if (node.props?.type === 'youtube') {
-          const vid = src.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]+)/)?.[1] || src
-          return `<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden"><iframe src="https://www.youtube.com/embed/${vid}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none" allowfullscreen></iframe></div>`
-        }
-        if (node.props?.type === 'vimeo') {
-          const vid = src.match(/vimeo\.com\/(\d+)/)?.[1] || src
-          return `<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden"><iframe src="https://player.vimeo.com/video/${vid}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none" allowfullscreen></iframe></div>`
-        }
-        return `<video src="${src}" ${node.props?.autoplay ? 'autoplay' : ''} controls style="width:100%;border-radius:8px"></video>`
-      }
-      case 'list': {
-        const listItems = node.props?.items || []
-        const listTag = node.props?.style === 'ordered' ? 'ol' : 'ul'
-        return `<${listTag}${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${listItems.map(i => `<li>${i}</li>`).join('')}</${listTag}>`
-      }
-      case 'form': {
-        const formFields = node.props?.fields || []
-        return `<form${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} action="${node.props?.action || ''}" method="POST">${formFields.map(f => `<div style="margin-bottom:8px"><label style="display:block;margin-bottom:4px;font-weight:500">${f.label}${f.required ? ' *' : ''}</label><input type="${f.type}" name="${(f.label || '').toLowerCase()}" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''} style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:14px"></div>`).join('')}<button type="submit" style="padding:12px 24px;background-color:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:16px;cursor:pointer;width:100%">${node.props?.submitText || 'Enviar'}</button></form>`
-      }
-      case 'nav': {
-        const navLinks = node.props?.links || []
-        return `<nav${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><div style="font-weight:700;font-size:20px">${node.props?.logo || 'Logo'}</div><div style="display:flex;gap:16px;align-items:center">${navLinks.map(l => `<a href="${l.href || '#'}" style="text-decoration:none;color:#333;font-size:14px">${l.label}</a>`).join('')}</div></nav>`
-      }
-      case 'hero':
-        return `<section${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><h1 style="font-size:48px;font-weight:800;color:#111;margin-bottom:0">${node.props?.title || ''}</h1><p style="font-size:20px;color:#666;max-width:600px">${node.props?.subtitle || ''}</p><a href="${node.props?.ctaLink || '#'}" style="display:inline-block;padding:16px 32px;background-color:#7c3aed;color:#fff;border-radius:8px;font-weight:600;text-decoration:none;margin-top:8px">${node.props?.ctaText || 'Comece Agora'}</a></section>`
-      case 'pricing': {
-        const pricingPlans = node.props?.plans || []
-        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center">${pricingPlans.map(p => {
-          const hl = p.highlighted
-          return `<div style="flex:1;min-width:250px;padding:24px;background:${hl ? '#7c3aed' : '#fff'};border-radius:12px;color:${hl ? '#fff' : '#111'};box-shadow:0 2px 12px rgba(0,0,0,0.08);border:${hl ? 'none' : '1px solid #e5e7eb'};text-align:center"><h3 style="font-size:18px;margin-bottom:8px">${p.name || ''}</h3><div style="font-size:36px;font-weight:800">${p.price || ''}<span style="font-size:14px;font-weight:400">${p.period || ''}</span></div><ul style="list-style:none;padding:0;margin:20px 0">${(p.features || []).map(f => `<li style="padding:6px 0">${f}</li>`).join('')}</ul><a href="#" style="display:inline-block;padding:12px 32px;background:${hl ? '#fff' : '#7c3aed'};color:${hl ? '#7c3aed' : '#fff'};border-radius:8px;font-weight:600;text-decoration:none">${p.cta || 'Escolher'}</a></div>`
-        }).join('')}</div>`
-      }
-      case 'faq': {
-        const faqItems = node.props?.items || []
-        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${faqItems.map(item => `<details style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px"><summary style="font-weight:600;cursor:pointer;font-size:16px">${item.question || ''}</summary><p style="margin-top:8px;color:#555;font-size:14px">${item.answer || ''}</p></details>`).join('')}</div>`
-      }
-      case 'testimonial':
-        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><div style="font-size:18px;line-height:1.6;color:#333;font-style:italic;margin-bottom:12px">${node.props?.quote || ''}</div>${node.props?.avatar ? `<img src="${node.props.avatar}" alt="" style="width:48px;height:48px;border-radius:50%;object-fit:cover;margin-bottom:8px">` : ''}<div style="font-weight:600">${node.props?.author || ''}</div><div style="font-size:14px;color:#888">${node.props?.role || ''}</div></div>`
-      case 'countdown': {
-        const targetDate = node.props?.targetDate || ''
-        return `<div class="metaspy-countdown"${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} data-target="${targetDate}"><div style="text-align:center;font-size:16px;font-weight:600;color:#555;margin-bottom:12px">${node.props?.label || ''}</div><div class="metaspy-countdown-units" style="display:flex;justify-content:center;gap:16px;font-size:36px;font-weight:700;color:#111"><div style="text-align:center"><span class="countdown-days">00</span>${node.props?.showLabels ? '<div style="font-size:12px;color:#888;font-weight:400">dias</div>' : ''}</div><div style="text-align:center"><span class="countdown-hours">00</span>${node.props?.showLabels ? '<div style="font-size:12px;color:#888;font-weight:400">horas</div>' : ''}</div><div style="text-align:center"><span class="countdown-minutes">00</span>${node.props?.showLabels ? '<div style="font-size:12px;color:#888;font-weight:400">min</div>' : ''}</div><div style="text-align:center"><span class="countdown-seconds">00</span>${node.props?.showLabels ? '<div style="font-size:12px;color:#888;font-weight:400">seg</div>' : ''}</div></div></div>`
-      }
-      case 'tabs': {
-        const tabItems = node.props?.tabs || []
-        return `<div data-tabs-container${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><div style="display:flex;border-bottom:2px solid #e5e7eb;margin-bottom:16px">${tabItems.map((t, i) => `<button data-tab="${i}" style="padding:10px 20px;border:none;background:${i === (node.props?.activeTab || 0) ? '#7c3aed' : 'transparent'};color:${i === (node.props?.activeTab || 0) ? '#fff' : '#555'};border-radius:6px 6px 0 0;font-weight:500;cursor:pointer">${t.label || ''}</button>`).join('')}</div>${tabItems.map((t, i) => `<div data-tab-content="${i}" style="display:${i === (node.props?.activeTab || 0) ? 'block' : 'none'}">${t.content || ''}</div>`).join('')}</div>`
-      }
-      case 'modal':
-        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><button onclick="document.getElementById('modal-${node.id}').style.display='flex'" style="padding:12px 24px;background-color:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">${node.props?.triggerText || 'Abrir Modal'}</button><div id="modal-${node.id}" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this&&${node.props?.closeOnOverlay !== false ? 'true' : 'false'})this.style.display='none'"><div style="background:#fff;border-radius:12px;padding:32px;max-width:500px;width:90%;position:relative"><button onclick="this.closest('[id^=modal-]').style.display='none'" style="position:absolute;top:12px;right:12px;border:none;background:transparent;font-size:24px;cursor:pointer;color:#888">&times;</button><h2 style="margin-bottom:12px;font-size:20px">${node.props?.title || ''}</h2><div>${node.props?.content || ''}</div></div></div></div>`
-      case 'embed':
-        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.props?.code || ''}</div>`
-      default:
-        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.children.map(renderNode).join('\n')}</div>`
-    }
-  }
-
-  // Collect hover styles
-  function collectHoverStyles(node) {
-    let css = ''
-    if (node.hoverStyle) {
-      const id = `_h_${node.id.replace(/[^a-zA-Z0-9]/g, '_')}`
-      css += `#${id}:hover { ${hoverStyleToCss(node.hoverStyle)} }\n`
-    }
-    if (node.scrollAnimation) {
-      const id = node.id.replace(/[^a-zA-Z0-9]/g, '_')
-      css += `[data-scroll="${node.scrollAnimation.type}"] { opacity: 0; }\n`
-    }
-    node.children.forEach(c => { css += collectHoverStyles(c) })
-    return css
-  }
-
-  const bodyContent = renderNode(tree)
-  const hoverCss = collectHoverStyles(tree)
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title || 'Minha Pagina'}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
-    ${hoverCss}
-    ${SCROLL_ANIMATION_KEYFRAMES}
-  </style>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      var observer = new IntersectionObserver(function(entries) {
-        entries.forEach(function(entry) {
-          if (entry.isIntersecting) {
-            var el = entry.target;
-            var anim = el.getAttribute('data-scroll');
-            var dur = el.getAttribute('data-duration') || 600;
-            var delay = el.getAttribute('data-delay') || 0;
-            el.style.animation = anim + ' ' + dur + 'ms ease ' + delay + 'ms both';
-            observer.unobserve(el);
-          }
-        });
-      }, { threshold: 0.1 });
-      document.querySelectorAll('[data-scroll]').forEach(function(el) { observer.observe(el); });
-
-      // Countdown timers
-      document.querySelectorAll('.metaspy-countdown').forEach(function(container) {
-        var targetStr = container.getAttribute('data-target');
-        if (!targetStr) return;
-        var target = new Date(targetStr).getTime();
-        function update() {
-          var now = new Date().getTime();
-          var diff = Math.max(0, target - now);
-          var d = Math.floor(diff / (1000*60*60*24));
-          var h = Math.floor((diff % (1000*60*60*24)) / (1000*60*60));
-          var m = Math.floor((diff % (1000*60*60)) / (1000*60));
-          var s = Math.floor((diff % (1000*60)) / 1000);
-          var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
-          var cd = container.querySelector('.countdown-days');
-          var ch = container.querySelector('.countdown-hours');
-          var cm = container.querySelector('.countdown-minutes');
-          var cs = container.querySelector('.countdown-seconds');
-          if (cd) cd.textContent = pad(d);
-          if (ch) ch.textContent = pad(h);
-          if (cm) cm.textContent = pad(m);
-          if (cs) cs.textContent = pad(s);
-        }
-        update();
-        setInterval(update, 1000);
-      });
-
-      // Tabs
-      document.querySelectorAll('[data-tab]').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          var idx = btn.getAttribute('data-tab');
-          var tabsContainer = btn.closest('[data-tab]') ? btn.parentElement.parentElement : btn.parentElement;
-          tabsContainer.querySelectorAll('[data-tab]').forEach(function(b) {
-            b.style.background = 'transparent';
-            b.style.color = '#555';
-          });
-          btn.style.background = '#7c3aed';
-          btn.style.color = '#fff';
-          var parent = btn.closest('[data-tabs-container]') || btn.parentElement.parentElement;
-          parent.querySelectorAll('[data-tab-content]').forEach(function(c) {
-            c.style.display = 'none';
-          });
-          var content = parent.querySelector('[data-tab-content="' + idx + '"]');
-          if (content) content.style.display = 'block';
-        });
-      });
-    });
-  </script>
-</head>
-<body>
-${bodyContent}
-</body>
-</html>`
-}
-
-// Cleanup cron: remove files older than 1 hour
-setInterval(async () => {
-  const oneHour = 60 * 60 * 1000
-  const now = Date.now()
-  try {
-    const { readdir, stat, unlink } = await import('node:fs/promises')
-    const files = await readdir(CLEANER_DIR).catch(() => [])
-    for (const file of files) {
-      const filePath = join(CLEANER_DIR, file)
-      try {
-        const stats = await stat(filePath)
-        if (now - stats.mtimeMs > oneHour) await unlink(filePath).catch(() => {})
-      } catch {}
-    }
-  } catch {}
-}, 60 * 60 * 1000)
 
 // ─── Error Handler ────────────────────────────────────────────────
 app.use((err, req, res, next) => {

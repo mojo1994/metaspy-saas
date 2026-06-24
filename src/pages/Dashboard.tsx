@@ -106,12 +106,6 @@ export default function Dashboard() {
               </NavLink>
             </div>
           </div>
-          <NavLink to="/dashboard/cleaner" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            Remover Metadados
-          </NavLink>
-          <NavLink to="/dashboard/paginas" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            Paginas
-          </NavLink>
           <div className="sidebar-group">
             <button
               className={`sidebar-link sidebar-group-toggle${location.pathname.startsWith('/dashboard/hospedar') ? ' active' : ''}`}
@@ -124,11 +118,11 @@ export default function Dashboard() {
               <NavLink to="/dashboard/hospedar" end className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
                 Hospedar Pagina
               </NavLink>
-              <NavLink to="/dashboard/hospedar/criar" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Criar Pagina
-              </NavLink>
             </div>
           </div>
+          <NavLink to="/dashboard/cleaner" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            Remover Metadados
+          </NavLink>
         </nav>
 
         <div className="sidebar-section-label">Conta</div>

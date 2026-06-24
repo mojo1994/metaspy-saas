@@ -111,4 +111,58 @@ export async function initSchema() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified INTEGER NOT NULL DEFAULT 0`).catch(() => {})
   await pool.query(`ALTER TABLE email_codes ADD COLUMN IF NOT EXISTS metadata TEXT`).catch(() => {})
   await pool.query(`ALTER TABLE pages ADD COLUMN IF NOT EXISTS cf_url TEXT`).catch(() => {})
+
+  // Pillar 1: Versioning
+  await pool.query(`ALTER TABLE pages ADD COLUMN IF NOT EXISTS draft_ast TEXT`).catch(() => {})
+  await pool.query(`ALTER TABLE pages ADD COLUMN IF NOT EXISTS published_ast TEXT`).catch(() => {})
+  await pool.query(`ALTER TABLE pages ADD COLUMN IF NOT EXISTS version INT DEFAULT 1`).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS page_history (
+      id TEXT PRIMARY KEY,
+      page_id TEXT NOT NULL,
+      ast_snapshot TEXT NOT NULL,
+      snapshot_hash TEXT,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_page_history_page_id ON page_history(page_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_page_history_created ON page_history(created_at)`).catch(() => {})
+
+  // Pillar 4: Media Assets
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS media_assets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      original_filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INT NOT NULL DEFAULT 0,
+      storage_path TEXT,
+      thumbnail_path TEXT,
+      uploaded_at TEXT NOT NULL,
+      last_used_at TEXT,
+      is_archived INT NOT NULL DEFAULT 0
+    )
+  `).catch(() => {})
+
+  // Pillar 6: Form Submissions
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS form_submissions (
+      id TEXT PRIMARY KEY,
+      page_id TEXT NOT NULL,
+      user_id TEXT,
+      form_data TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS webhook_failures (
+      id TEXT PRIMARY KEY,
+      submission_id TEXT NOT NULL,
+      attempt_count INT NOT NULL DEFAULT 0,
+      next_retry_at TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
 }

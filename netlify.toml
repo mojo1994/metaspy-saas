@@ -7,7 +7,4 @@
   to = "https://metaspy-saas.onrender.com/api/:splat"
   status = 200
 
-[[redirects]]
-  from = "/p/*"
-  to = "https://metaspy-host.09santos-felipe.workers.dev/p/:splat"
-  status = 200
+
