@@ -1,0 +1,138 @@
+DATA MODEL (The "Spinal Core" – AST Architecture)
+Objective: Move from raw HTML storage to a structured, queryable, and scalable Abstract Syntax Tree (AST) to enable true modular editing.
+
+Technical Requirements & Architecture:
+
+Hierarchical Data Structure: Define a strict, recursive JSON schema representing the page as a nested tree. The root must be a Page node, containing an array of Section nodes (full-width containers), each housing Row nodes (horizontal wrappers), which split into Column nodes (grid-based containers), finally holding Element nodes (the atomic visual units: Text, Image, Button, Video, Form).
+
+Separation of Concerns (Data vs. Presentation): The AST must enforce a strict dichotomy at every node level:
+
+Content Object: Stores semantic data (e.g., textContent, imageSrc, altText, buttonLabel, href).
+
+Styles Object: Stores visual presentation (e.g., padding, margin, backgroundColor, fontSize, borderRadius) mapped to specific breakpoints.
+
+Settings Object: Stores behavioral attributes (e.g., elementId, cssClasses, customAttributes, visibilityRules).
+
+Persistence Strategy: Store the complete AST as a JSONB column in PostgreSQL to leverage compression, indexing on specific paths, and fast retrieval. Separate tables for pages (holding the AST) and page_versions (holding historical snapshots).
+
+Immutable State Management: Implement a centralized state store (Zustand or Redux Toolkit) that treats the AST as immutable. All updates (style changes, reordering, deletion) must generate a new AST copy using structural sharing (Immer) to ensure optimal re-rendering performance.
+
+Version Control (Undo/Redo): Maintain a transient history stack (max 30-50 steps) in the client-side store. Each mutation pushes a deep-cloned snapshot of the entire AST or a compressed diff-patch (using libraries like jsondiffpatch) to the "Past" stack. Redo reverts by popping from the "Future" stack.
+
+Draft vs. Published States: The database must support concurrent versions: a draft_ast (working version) and a published_ast (live version). Publishing simply copies the draft to the published column without altering the production cache until explicitly triggered.
+
+2. COMPONENT SYSTEM (Mobile-First & Responsive Engine)
+Objective: Enable fluid, responsive design across Desktop, Tablet, and Mobile viewports without requiring the user to write a single media query.
+
+Technical Requirements & Architecture:
+
+Breakpoint-Aware Styling Schema: Extend the Styles object to be a nested map: { "desktop": { ... }, "tablet": { ... }, "mobile": { ... } }. The rendering engine must conditionally apply these styles using CSS-in-JS or inline style attributes dynamically computed based on the current canvas viewport.
+
+Advanced Spacing Visual Controller: Replace numeric inputs with a unified "Box Model" visualizer. Implement a 4-directional control (Top, Right, Bottom, Left) with a "Link/Unlink" toggle. When linked, a single input modifies all sides uniformly; when unlinked, each side adjusts independently. This applies to both Margin and Padding.
+
+Native Flexbox & Grid Configuration Panel: Instead of raw CSS text areas, build a visual configuration toolbar for:
+
+Alignment: 9-dot matrix selectors for justify-content (horizontal) and align-items (vertical).
+
+Direction: Toggle between row, row-reverse, column, column-reverse.
+
+Spacing: Slider controls for gap (row-gap & column-gap) and wrap behavior toggles.
+
+Responsive Visibility Toggles: For each element, provide an eye-icon toggle per breakpoint. When "hidden" on Mobile, the builder must inject display: none !important via inline styles specific to that viewport. The AST must store this as a boolean hidden flag per breakpoint.
+
+Dynamic Canvas Scaling: The preview iframe must adjust its width to match the selected breakpoint (e.g., 1200px for Desktop, 768px for Tablet, 375px for Mobile) while maintaining a zoom-to-fit scaling (using CSS transform: scale) so the entire page remains visible within the editor viewport.
+
+3. VISUAL vs. STRUCTURAL EDITING (WYSIWYG & Drag-Drop)
+Objective: Provide both direct manipulation on the canvas and structural management via an outliner, ensuring pixel-perfect accuracy and ease of selection.
+
+Technical Requirements & Architecture:
+
+Inline Content Editing (WYSIWYG): Implement a double-click interaction model. On canvas double-click, activate contentEditable for text-based elements. A floating toolbar must appear above the selected text, offering basic formatting controls (Bold, Italic, Underline, Hyperlink, Ordered/Unordered Lists). Upon blur, the edited innerText or innerHTML must sync back to the AST content.text field.
+
+True Structural Drag & Drop: Utilize a mouse/pointer event system (or a library like dnd-kit) to enable dragging of existing elements. The system must support cross-container dragging (e.g., dragging an Image from Column A to Column B).
+
+Visual Feedback (Drop Zones): During a drag, a semi-transparent blue insertion line or highlighted outline must appear between elements or inside columns to indicate exactly where the element will be placed upon drop.
+
+Drag Handles: Reserved hover zones (e.g., a 6-dot grid icon at the top-left of an element on hover) must serve as the exclusive drag trigger to prevent conflicts with text selection.
+
+Multi-Selection (Batch Editing): Enable Shift + Click functionality. Maintain a secondary array of selectedElementIds in the state. When multiple nodes are selected, the property panel must display common styles. If all selected elements share the same color or fontSize, show that value; otherwise, show a "Mixed" state. Updating a property will apply the change to all selected IDs in the AST simultaneously.
+
+Structural Outliner & Breadcrumb:
+
+Outliner: A dockable side panel rendering the AST as a nested, collapsible folder tree. Users can click a node to select it, drag nodes to reorder them structurally outside the canvas, or right-click to duplicate/delete.
+
+Breadcrumb: A bottom or top horizontal trail displaying the exact path from the Root to the currently selected element (e.g., Home Section > Hero Row > Left Column > CTA Button). Clicking any segment navigates and selects that ancestor node instantly.
+
+4. ASSET MANAGEMENT (Media Library & Optimization)
+Objective: Evolve from simple file uploading to a centralized, cloud-based, high-performance asset pipeline integrated with the existing Metadata Cleaner.
+
+Technical Requirements & Architecture:
+
+Centralized Media Repository: Create a server-side service that abstracts cloud storage (AWS S3 / Cloudinary). Implement a media_library database table mapping asset_id, user_id, original_filename, cloud_key, mime_type, size, and upload_timestamp. The frontend must pull this library via a paginated API to render a searchable grid modal.
+
+Automated Optimization Pipeline: Upon upload, trigger a server-side transformation that:
+
+Generates multiple derivative sizes (Thumbnail, Web-optimized, High-Res).
+
+Converts images to next-gen formats (WebP/AVIF) based on browser support, storing them alongside the original.
+
+Automatically extracts focal points (using face detection or dominant color analysis) to ensure smart cropping.
+
+Lazy Loading & Srcset Generation: When the user inserts an image into the canvas, the rendering engine must automatically populate the srcset and sizes attributes in the generated HTML output, derived from the derivative sizes stored in the cloud. The AST must store a reference to the cloud_key and the alt text, but not the raw Base64 data.
+
+Native Image Editor (Modal): On image selection, provide a "Crop/Edit" action that opens a lightweight modal. Integrate a client-side image manipulation library (e.g., react-easy-crop) to allow users to crop, rotate, or adjust brightness/contrast. Upon confirmation, the client uploads the new blob to the server, overwrites the existing cloud object, and updates the AST reference (triggering a preview refresh).
+
+5. INTERACTIVITY & LOGIC (The Conversion Differentiator)
+Objective: Embed dynamic marketing logic directly into the page structure to boost conversion without external scripts.
+
+Technical Requirements & Architecture:
+
+Conditional Visibility Engine (Rules): Augment the AST with a conditions array at the element level. Conditions are logic statements (e.g., { "type": "utm_param", "key": "source", "operator": "equals", "value": "facebook" }). The frontend rendering engine must evaluate these conditions against the current window.location or a mock environment variable object. If false, the element is rendered with display: none and its DOM footprint removed (not just hidden) to prevent bot detection.
+
+Dynamic Variable Placeholders (Mustache): Implement a parsing system that scans text content and HTML attributes for patterns like {{ user.name }} or {{ utm_campaign }}. During page preview, a JavaScript runtime replaces these with values from a global MetaSpyContext object (which reads URL params, local storage, or user session). The editor must provide an autocomplete dropdown when the user types {{ inside a text block.
+
+Native Countdown Timer Widget: Build a dedicated custom element (Widget). The AST must store its configuration: { "endDateTime": "ISO-String", "timezone": "America/Sao_Paulo", "expiryAction": "hide_element" }. The rendering engine uses requestAnimationFrame to calculate the time difference, updating the DOM in real-time. It must handle server-side timezone offsets to ensure consistency for global audiences.
+
+6. FORM BUILDER & LEAD CAPTURE
+Objective: Transform static pages into functional marketing funnels by embedding smart, integrated forms.
+
+Technical Requirements & Architecture:
+
+Visual Form Constructor: Introduce a dedicated "Form" Element Type. Inside the canvas, a form acts as a drop-zone container where users can drag specific sub-elements: Input (Text), Input (Email), Input (Tel), Textarea, Select, and Checkbox. The AST must store the form's configuration, including an array of fields, each with label, placeholder, required, and validation_rules.
+
+Native Integration Hub (Actions): In the form settings panel, allow the user to select an "Action Type" from a dropdown:
+
+Webhook (Custom): User inputs a URL; on submission, the client sends a POST request with the form data.
+
+Internal Database: Store leads directly in the MetaSpy leads table, visible in a new admin dashboard sub-section.
+
+Email Relay: Send form data via SMTP (using a server-side mailer) directly to the user's configured email address.
+
+CRM Connectors: Pre-configured auth flows for ActiveCampaign, Mailchimp, or HubSpot (Store OAuth refresh tokens encrypted in the database).
+
+Real-Time Validation & Masking (Client-Side): The builder must generate a JavaScript validation schema derived from the AST. For the Tel field, implement an input mask library to handle country codes and phone formatting (e.g., +55 (11) 99999-9999). For emails, enforce RFC-compliant regex validation. Error states must display immediately below the invalid field without requiring page reload.
+
+7. CODE OUTPUT & PERFORMANCE ENGINEERING
+Objective: Generate production-ready, ultra-lightweight, and obfuscated code that passes Core Web Vitals and Meta's ad policies.
+
+Technical Requirements & Architecture:
+
+AST to HTML Compiler: Build a server-side rendering (SSR) service that traverses the AST depth-first and emits pure HTML strings, integrating the responsive styles as inline CSS within <style> tags (for critical path) or as inline style attributes. The compiler must use streaming to handle large pages.
+
+On-the-fly Minification Pipeline: Chunk the generated HTML, extracted CSS, and inline JS through a minification layer:
+
+Use html-minifier-terser to strip comments, remove optional tags, and minify URLs.
+
+Use cssnano to collapse CSS rules and remove unused styles by cross-referencing the AST structure (PurgeCSS logic).
+
+Use terser to mangle variable names and remove whitespace from any inline JavaScript.
+
+Asset Preloading & Font Optimization: When a custom Google Font is selected in the typography panel, the compiler must inject preconnect tags for the Google Fonts domain and generate the exact @font-face rules with font-display: swap to prevent layout shifts (CLS). The system must hash the font list to generate a unique cache key.
+
+Multi-Format Export (ZIP Assembly): Implement a download endpoint that generates a .zip archive containing:
+
+index.html (with all critical CSS inlined for instant rendering).
+style.css (asynchronous, non-critical CSS).
+scripts.js (all behavioral JS, including form handling and cloaking logic).
+assets/ (downloaded images/videos referenced in the HTML, organized by folder).
+The server must utilize a streaming ZIP library to package these files on the fly, preventing memory overload on the Render instance.

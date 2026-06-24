@@ -41,12 +41,16 @@ export default function PropertyInspector({ node, onChange }: Props) {
   }
 
   function ColorInput({ label, value, onChange: oc }: { label: string; value?: string; onChange: (v: string) => void }) {
+    const colorRef = useRef<HTMLInputElement>(null)
     return (
       <div className="builder-prop-row">
         <label className="builder-prop-label">{label}</label>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <input type="color" value={value || '#000000'} onChange={e => oc(e.target.value)} style={{ width: 28, height: 28, padding: 0, border: 'none', borderRadius: 4, cursor: 'pointer' }} />
-          <input type="text" value={value || ''} onChange={e => oc(e.target.value)} className="builder-prop-input" style={{ width: 80 }} />
+          <div onClick={() => colorRef.current?.click()} style={{ width: 24, height: 24, borderRadius: 6, background: value || 'transparent', border: '2px solid var(--border)', cursor: 'pointer', flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+            {!value && <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.1) 3px, rgba(0,0,0,0.1) 6px)' }} />}
+            <input ref={colorRef} type="color" value={value || '#000000'} onChange={e => oc(e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+          </div>
+          <input type="text" value={value || ''} onChange={e => oc(e.target.value)} className="builder-prop-input" style={{ width: 80 }} placeholder="transparente" />
         </div>
       </div>
     )
@@ -203,13 +207,27 @@ export default function PropertyInspector({ node, onChange }: Props) {
           <StyleInput label="Imagem URL" value={n.styles.backgroundImage} onChange={v => setStyle('backgroundImage', v)} />
           <SelectInput label="Tamanho" value={n.styles.backgroundSize || 'auto'} options={[{ value: 'cover', label: 'Cobrir' }, { value: 'contain', label: 'Conter' }, { value: 'auto', label: 'Auto' }]} onChange={v => setStyle('backgroundSize', v)} />
           <div className="builder-section-title">Borda</div>
-          <UnitInput label="Largura" value={n.styles.borderWidth} onChange={v => setStyle('borderWidth', v)} />
-          <SelectInput label="Estilo" value={n.styles.borderStyle || 'none'} options={[{ value: 'none', label: 'Nenhuma' }, { value: 'solid', label: 'Solida' }, { value: 'dashed', label: 'Tracejada' }, { value: 'dotted', label: 'Pontilhada' }]} onChange={v => setStyle('borderStyle', v)} />
-          <ColorInput label="Cor" value={n.styles.borderColor} onChange={v => setStyle('borderColor', v)} />
+          <div className="builder-prop-row">
+            <label className="builder-prop-label">Borda</label>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', flex: 1 }}>
+              <input type="number" value={n.styles.borderWidth ? (typeof n.styles.borderWidth === 'object' ? n.styles.borderWidth.value : n.styles.borderWidth as any) : ''} onChange={e => setStyle('borderWidth', { value: Number(e.target.value), unit: 'px' } as StyleValue)} className="builder-prop-input" style={{ width: 40 }} placeholder="0" />
+              <select value={n.styles.borderStyle || 'none'} onChange={e => setStyle('borderStyle', e.target.value)} className="builder-prop-select" style={{ width: 70 }}>
+                <option value="none">-</option><option value="solid">Solida</option><option value="dashed">Tracejada</option><option value="dotted">Pontos</option>
+              </select>
+              <div onClick={() => { const el = document.getElementById('border-color-picker'); el?.click() }} style={{ width: 20, height: 20, borderRadius: 4, background: n.styles.borderColor || 'transparent', border: '2px solid var(--border)', cursor: 'pointer', flexShrink: 0 }} />
+              <input id="border-color-picker" type="color" value={n.styles.borderColor || '#000000'} onChange={e => setStyle('borderColor', e.target.value)} style={{ width: 0, height: 0, padding: 0, border: 'none', position: 'absolute', opacity: 0 }} />
+            </div>
+          </div>
           <UnitInput label="Raio" value={n.styles.borderRadius} onChange={v => setStyle('borderRadius', v)} />
           <div className="builder-section-title">Sombra</div>
           <StyleInput label="Box Shadow" value={n.styles.boxShadow} onChange={v => setStyle('boxShadow', v)} />
-          <StyleInput label="Opacidade" value={n.styles.opacity !== undefined ? n.styles.opacity : ''} onChange={v => setStyle('opacity', Number(v))} type="number" />
+          <div className="builder-prop-row">
+            <label className="builder-prop-label">Opacidade</label>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', flex: 1 }}>
+              <input type="range" min={0} max={1} step={0.05} value={n.styles.opacity ?? 1} onChange={e => setStyle('opacity', Number(e.target.value))} style={{ flex: 1, height: 4, accentColor: '#7c3aed' }} />
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', width: 30, textAlign: 'right' }}>{Math.round((n.styles.opacity ?? 1) * 100)}%</span>
+            </div>
+          </div>
         </div>
       )}
 

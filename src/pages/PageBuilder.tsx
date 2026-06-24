@@ -3,8 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import {
   PageData, DocumentNode, SavedComponent, createDefaultPage, createDefaultNode,
-  findNode, removeNode, insertNode, moveNode, cloneSubtree,
-  NodeType, stylesToCss, hoverStyleToCss, SCROLL_ANIMATION_KEYFRAMES,
+  findNode, findPath, removeNode, insertNode, moveNode, cloneSubtree,
+  NodeType, stylesToCss, hoverStyleToCss, SCROLL_ANIMATION_KEYFRAMES, nodeTypeLabel,
 } from '../components/builder/documentModel'
 import ElementTree from '../components/builder/ElementTree'
 import BuilderCanvas from '../components/builder/BuilderCanvas'
@@ -105,6 +105,7 @@ export default function PageBuilder() {
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
   const autoSaveRef = useRef<ReturnType<typeof setTimeout>>()
   const loadingRef = useRef(false)
   const historyRef = useRef<DocumentNode[]>([])
@@ -422,6 +423,27 @@ export default function PageBuilder() {
 
   function triggerImageUpload() { imageInputRef.current?.click() }
 
+  async function handleVideoUpload(file: File) {
+    if (!fetchWithAuth || !selectedId) return
+    const formData = new FormData()
+    formData.append('image', file)
+    try {
+      const res = await fetchWithAuth(apiUrl('/builder/upload'), {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) throw new Error('Falha ao fazer upload')
+      const data = await res.json()
+      handleUpdateNode(selectedId, { props: { ...selectedNode?.props, src: data.url, type: 'custom' } })
+      showToast('success', 'Video enviado!')
+    } catch (err) {
+      console.error('Erro upload:', err)
+      showToast('error', 'Erro ao enviar video.')
+    }
+  }
+
+  function triggerVideoUpload() { videoInputRef.current?.click() }
+
   // Components
   function handleSaveAsComponent() {
     if (!selectedNode || selectedNode.type === 'page') { showToast('error', 'Selecione um elemento para salvar como componente.'); return }
@@ -505,6 +527,12 @@ export default function PageBuilder() {
         .builder-tab:hover { color: var(--text-primary); }
         .builder-tab.active { color: var(--purple-400); border-bottom-color: var(--purple-400); }
         .builder-left-content { flex: 1; overflow-y: auto; padding: 4px 0; }
+        .builder-breadcrumb {
+          display: flex; align-items: center; gap: 4px; padding: 4px 12px;
+          background: var(--bg-secondary); border-top: 1px solid var(--border);
+          min-height: 24px; flex-shrink: 0; overflow-x: auto;
+        }
+        .builder-breadcrumb span:hover { opacity: 0.8; }
         .builder-widget-grid {
           display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 8px;
         }
@@ -722,6 +750,29 @@ export default function PageBuilder() {
             deviceWidth={currentDevice.width}
             previewMode={previewMode}
           />
+          {!previewMode && selectedId && (() => {
+            const path = findPath(page.tree, selectedId)
+            if (path.length <= 1) return null
+            return (
+              <div className="builder-breadcrumb">
+                {path.map((n, i) => (
+                  <span key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {i > 0 && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>›</span>}
+                    <span
+                      onClick={() => handleSelect(n.id)}
+                      style={{
+                        fontSize: 11, cursor: 'pointer', color: i === path.length - 1 ? 'var(--purple-400)' : 'var(--text-muted)',
+                        fontWeight: i === path.length - 1 ? 600 : 400,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {nodeTypeLabel(n.type)}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )
+          })()}
         </div>
 
         <div className="builder-right">
@@ -737,6 +788,20 @@ export default function PageBuilder() {
               />
               <button className="btn btn-secondary" onClick={triggerImageUpload} style={{ fontSize: 11, padding: '4px 10px', width: '100%' }}>
                 Enviar imagem
+              </button>
+            </div>
+          )}
+          {selectedNode?.type === 'video' && (
+            <div style={{ padding: '4px 12px 12px' }}>
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/*"
+                style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleVideoUpload(f) }}
+              />
+              <button className="btn btn-secondary" onClick={triggerVideoUpload} style={{ fontSize: 11, padding: '4px 10px', width: '100%' }}>
+                Enviar video (ate 100MB)
               </button>
             </div>
           )}

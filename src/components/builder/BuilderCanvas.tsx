@@ -1,4 +1,4 @@
-﻿import { useRef, useState, useCallback, memo, DragEvent } from 'react'
+﻿import { useRef, useState, useCallback, useEffect, memo, DragEvent } from 'react'
 import {
   DocumentNode, stylesToCss, hoverStyleToCss, scrollAnimationToCss,
   SCROLL_ANIMATION_KEYFRAMES, nodeTypeLabel,
@@ -18,10 +18,34 @@ interface Props {
   previewMode: boolean
 }
 
-export default function BuilderCanvas({ tree, selectedId, onSelect, onDropWidget, onDropComponent, onMoveNode, zoom, deviceWidth, previewMode }: Props) {
+export default function BuilderCanvas({ tree, selectedId, onSelect, onDropWidget, onDropComponent, onMoveNode, onUpdateNode, zoom, deviceWidth, previewMode }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const [dragOver, setDragOver] = useState<{ id: string; position: 'before' | 'after' | 'inside' } | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  useEffect(() => { setEditingId(null) }, [selectedId])
+
+  function handleWrapperDragOver(e: DragEvent) {
+    if (previewMode) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  function handleWrapperDrop(e: DragEvent) {
+    if (previewMode) return
+    e.preventDefault()
+    const widgetType = e.dataTransfer.getData('application/metaspy-widget')
+    const compJson = e.dataTransfer.getData('application/metaspy-component')
+    const sourceId = e.dataTransfer.getData('text/plain')
+    if (widgetType) onDropWidget(widgetType, tree.id, tree.children.length)
+    else if (compJson) {
+      try {
+        const compNode = JSON.parse(compJson) as DocumentNode
+        onDropComponent?.(compNode, tree.id, tree.children.length)
+      } catch {}
+    } else if (sourceId) onMoveNode(sourceId, tree.id, tree.children.length)
+  }
 
   return (
     <div
@@ -48,13 +72,17 @@ export default function BuilderCanvas({ tree, selectedId, onSelect, onDropWidget
         transition: 'transform 0.15s',
         borderRadius: deviceWidth < 1440 && !previewMode ? 12 : 0,
         overflow: 'hidden',
-      }}>
+      }}
+        onDragOver={handleWrapperDragOver}
+        onDrop={handleWrapperDrop}
+      >
         {tree.children.map(child => (
           <CanvasNode key={child.id} node={child} selectedId={selectedId} depth={1}
             onSelect={onSelect} onDropWidget={onDropWidget} onDropComponent={onDropComponent}
-            onMoveNode={onMoveNode} previewMode={previewMode}
+            onMoveNode={onMoveNode} onUpdateNode={onUpdateNode} previewMode={previewMode}
             dragOver={dragOver} hoveredId={hoveredId}
-            setHoveredId={setHoveredId} setDragOver={setDragOver} />
+            setHoveredId={setHoveredId} setDragOver={setDragOver}
+            editingId={editingId} setEditingId={setEditingId} />
         ))}
         {tree.children.length === 0 && !previewMode && (
           <div style={{ padding: 60, textAlign: 'center', fontSize: 14, color: '#999' }}>
@@ -66,17 +94,20 @@ export default function BuilderCanvas({ tree, selectedId, onSelect, onDropWidget
   )
 }
 
-const CanvasNode = memo(function CanvasNode({ node, selectedId, depth, onSelect, onDropWidget, onDropComponent, onMoveNode, previewMode, dragOver, hoveredId, setHoveredId, setDragOver }: {
+const CanvasNode = memo(function CanvasNode({ node, selectedId, depth, onSelect, onDropWidget, onDropComponent, onMoveNode, onUpdateNode, previewMode, dragOver, hoveredId, setHoveredId, setDragOver, editingId, setEditingId }: {
   node: DocumentNode; selectedId: string | null; depth: number;
   onSelect: (id: string) => void;
   onDropWidget: (type: string, parentId: string, index?: number) => void;
   onDropComponent?: (node: DocumentNode, parentId: string, index?: number) => void;
   onMoveNode: (nodeId: string, newParentId: string, newIndex: number) => void;
+  onUpdateNode: (id: string, changes: Partial<DocumentNode>) => void;
   previewMode: boolean;
   dragOver: { id: string; position: 'before' | 'after' | 'inside' } | null;
   hoveredId: string | null;
   setHoveredId: (id: string | null) => void;
   setDragOver: (d: { id: string; position: 'before' | 'after' | 'inside' } | null) => void;
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
 }) {
   const isSelected = node.id === selectedId
   const isDropTarget = dragOver?.id === node.id
@@ -106,6 +137,8 @@ const CanvasNode = memo(function CanvasNode({ node, selectedId, depth, onSelect,
   if (depth > 0 && !previewMode && !node.styles.paddingTop) baseStyle.padding = '8px'
 
   const isWidget = ['heading', 'text', 'image', 'button', 'divider', 'icon', 'video', 'list', 'form', 'hero', 'pricing', 'faq', 'testimonial', 'countdown', 'tabs', 'modal', 'embed', 'nav'].includes(node.type)
+  const isTextType = ['heading', 'text', 'button'].includes(node.type)
+  const isEditing = editingId === node.id && isTextType && !previewMode
 
   function handleDragOver(e: DragEvent) {
     e.preventDefault(); e.stopPropagation()
@@ -140,7 +173,13 @@ const CanvasNode = memo(function CanvasNode({ node, selectedId, depth, onSelect,
         ...baseStyle,
         animation: previewMode && animCss ? `${node.scrollAnimation!.type} ${node.scrollAnimation!.duration}ms ${node.scrollAnimation!.easing} ${node.scrollAnimation!.delay}ms both` : undefined,
       }}
-      onClick={e => { e.stopPropagation(); if (!previewMode) onSelect(node.id) }}
+      onClick={e => {
+        e.stopPropagation()
+        if (!previewMode) {
+          if (selectedId === node.id && isTextType) setEditingId(node.id)
+          else onSelect(node.id)
+        }
+      }}
       onMouseEnter={() => setHoveredId(node.id)}
       onMouseLeave={() => setHoveredId(null)}
       onDragOver={previewMode ? undefined : handleDragOver}
@@ -153,7 +192,22 @@ const CanvasNode = memo(function CanvasNode({ node, selectedId, depth, onSelect,
           {nodeTypeLabel(node.type)} — {node.name}
         </div>
       )}
-      {renderWidgetPreview(node, previewMode)}
+      {!previewMode && isHovered && (
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'rgba(124,58,237,0.04)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 'inherit', zIndex: 1, transition: 'all 0.15s' }}>
+          <div style={{ position: 'absolute', top: 2, left: 4, fontSize: 9, color: 'rgba(124,58,237,0.5)', fontWeight: 600 }}>
+            {nodeTypeLabel(node.type)}
+          </div>
+        </div>
+      )}
+      {!previewMode && isSelected && (
+        <>
+          <div style={{ position: 'absolute', top: -4, left: -4, width: 8, height: 8, borderRadius: '50%', background: '#7c3aed', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', zIndex: 10, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: -4, right: -4, width: 8, height: 8, borderRadius: '50%', background: '#7c3aed', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', zIndex: 10, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', bottom: -4, left: -4, width: 8, height: 8, borderRadius: '50%', background: '#7c3aed', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', zIndex: 10, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', bottom: -4, right: -4, width: 8, height: 8, borderRadius: '50%', background: '#7c3aed', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', zIndex: 10, pointerEvents: 'none' }} />
+        </>
+      )}
+      {isEditing ? renderEditableNode(node, onUpdateNode, setEditingId) : renderWidgetPreview(node, previewMode)}
       {!isWidget && node.children.length === 0 && !previewMode && (
         <div style={{ padding: 16, textAlign: 'center', fontSize: 11, color: 'rgba(128,128,128,0.4)' }}>
           {nodeTypeLabel(node.type)} — solte elementos aqui
@@ -162,9 +216,10 @@ const CanvasNode = memo(function CanvasNode({ node, selectedId, depth, onSelect,
       {!isWidget && node.children.map(child => (
         <CanvasNode key={child.id} node={child} selectedId={selectedId} depth={depth + 1}
           onSelect={onSelect} onDropWidget={onDropWidget} onDropComponent={onDropComponent}
-          onMoveNode={onMoveNode} previewMode={previewMode}
+          onMoveNode={onMoveNode} onUpdateNode={onUpdateNode} previewMode={previewMode}
           dragOver={dragOver} hoveredId={hoveredId}
-          setHoveredId={setHoveredId} setDragOver={setDragOver} />
+          setHoveredId={setHoveredId} setDragOver={setDragOver}
+          editingId={editingId} setEditingId={setEditingId} />
       ))}
     </div>
   )
@@ -283,6 +338,38 @@ function renderWidgetPreview(node: DocumentNode, previewMode: boolean): JSX.Elem
       </div>
     default:
       return null
+  }
+}
+
+function renderEditableNode(node: DocumentNode, onUpdateNode: (id: string, changes: Partial<DocumentNode>) => void, setEditingId: (id: string | null) => void): JSX.Element | null {
+  const w: React.CSSProperties = {
+    outline: 'none', cursor: 'text', minWidth: 20, minHeight: 20,
+    pointerEvents: 'auto',
+  }
+  function handleBlur(e: React.FocusEvent<HTMLElement>) {
+    if (node.type === 'text') {
+      onUpdateNode(node.id, { props: { ...node.props, html: e.currentTarget.innerHTML } })
+    } else {
+      onUpdateNode(node.id, { props: { ...node.props, text: e.currentTarget.textContent || '' } })
+    }
+    setEditingId(null)
+  }
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') (e.currentTarget as HTMLElement).blur()
+    if (e.key === 'Enter' && node.type !== 'text') (e.currentTarget as HTMLElement).blur()
+  }
+  switch (node.type) {
+    case 'heading': {
+      const sizes: Record<string, number> = { h1: 48, h2: 32, h3: 24, h4: 18 }
+      const level = node.props.level || 'h2'
+      return <div style={{ ...w, fontSize: sizes[level] || 32, fontWeight: 700, fontFamily: node.styles.fontFamily || 'Inter, sans-serif', color: node.styles.color || '#111', lineHeight: 1.2 }} contentEditable suppressContentEditableWarning onBlur={handleBlur} onKeyDown={handleKeyDown}>{node.props.text || ''}</div>
+    }
+    case 'text':
+      return <div style={{ ...w, fontSize: 16, fontFamily: node.styles.fontFamily || 'Inter, sans-serif', color: node.styles.color || '#333', lineHeight: 1.6 }} contentEditable suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: node.props.html || '' }} onBlur={handleBlur} onKeyDown={handleKeyDown} />
+    case 'button':
+      return <div style={{ ...w, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '10px 20px', borderRadius: 8, fontWeight: 600, fontSize: 14, backgroundColor: '#7c3aed', color: '#fff', border: 'none' }} contentEditable suppressContentEditableWarning onBlur={handleBlur} onKeyDown={handleKeyDown}>{node.props.text || ''}</div>
+    default:
+      return renderWidgetPreview(node, false)
   }
 }
 

@@ -6,123 +6,127 @@
 - **Banco**: PostgreSQL (Render)
 - **Email**: Maileroo (free tier, 3000/mês, domínio compartilhado: 9f92bbda64b9ecca.maileroo.org)
 - **Pagamentos**: Kirvano webhooks
+- **Cloudflare**: R2 bucket (metaspy-pages) + Worker (metaspy-host) para edge serving
 - **GitHub**: mojo1994/metaspy-saas (main auto-deploy)
 
 ## URLs Importantes
 - Frontend: https://centralspyads.netlify.app
+  - Admin: 09santos.felipe@gmail.com
 - Backend API: https://metaspy-saas.onrender.com
-- Pages hospedadas: https://centralspyads.netlify.app/p/{slug}
+- Pages hospedadas: https://centralspyads.netlify.app/p/{slug} (proxy Render)
+- Worker: https://metaspy-host.09santos-felipe.workers.dev (não usado no caminho crítico)
+
+## Credenciais Cloudflare
+- Account ID: ca76259cfc427c01cded1237bad0b7df
+- API Token: <removed> (R2 + Workers perms)
+- R2 Bucket: metaspy-pages
+- Worker: metaspy-host
 
 ## Estrutura
-- `/server/index.js` → todas as rotas Express (auth, email, subscription, pages, public hosting, camouflage)
+- `/server/index.js` → todas as rotas Express (auth, email, subscription, pages, builder, public hosting, camouflage, cleaner)
 - `/server/email.js` → templates HTML + envio Maileroo
-- `/server/db.js` → pool PostgreSQL + schema init
-- `/server/package.json` → dependências Node
-- `/src/` → frontend React (páginas, componentes, contexto)
-- `/netlify.toml` → redirects: `/api/*` e `/p/*` → Render
+- `/server/db.js` → pool PostgreSQL + schema init (7 tabelas: users, pages, cloaker_scripts, cloak_detections, camouflage_scripts, cleaned_assets, email_codes)
+- `/server/cloudflareStorage.js` → upload/download/delete R2 via S3 API + getWorkerUrl()
+- `/src/pages/` → frontend React
+- `/src/components/builder/` → visual Page Builder (drag-and-drop)
+- `/netlify.toml` + `/public/_redirects` → redirects: `/api/*` e `/p/*` → Render
+- `/cloudflare-worker.js` + `/wrangler.toml` → Worker code + config
 
 ## O que já foi implementado
 
 ### 1. Autenticação
 - Signup com verificação de email (código de 6 dígitos via Maileroo)
-- Login com JWT
-- Recuperação de senha (email com link mágico + token JWT)
+- Login com JWT + refresh token
+- Recuperação de senha (código por email)
 - Middleware `authMiddleware` que decodifica JWT e anexa `req.user`
 
 ### 2. Planos e Pagamentos (Kirvano)
-- Tabela `users` com `plano` (nenhum/mensal/anual), `plano_expira` (data), `email_verified`
-- Checkout: `POST /api/checkout` gera link Kirvano + salva `pending_checkout` com trigger de 15min
-- Webhook `POST /api/kirvano-webhook`:
-  - `checkout.expired` → limpa pending_checkout
-  - `payment.approved` / `subscription.approved` → ativa plano, salva comprovante, envia **email de confirmação**
-  - Valida IP (144.22.128.0/17) + `x-kirvano-signature` HMAC-SHA256
-- Comprovantes salvos em `comprovantes/` no Render
+- Tabela `users` com `plan` (nenhum/mensal/anual), `subscription_expiry`, `email_verified`
+- Checkout: links estáticos Kirvano por plano
+- Webhook Kirvano: ativa/desativa planos, envia email de confirmação
+- Rate limiting, admin middleware (email específico)
 
 ### 3. Email (Maileroo)
-- Templates: verificação, recuperação de senha, confirmação de compra, pending checkout
+- Templates: verificação, recuperação, confirmação de compra, pending checkout
 - Todos templates incluem: "⚠ Não encontrou? Verifique sua caixa de spam."
-- Banner de spam warning no frontend: Signup, ForgotPassword, Dashboard
 - Endpoint `POST /api/send-email` para disparos programáticos
 
 ### 4. Páginas / Hospedagem
 - **Paginas** (`DashboardPages.tsx` + `PageEditor.tsx`): criar/editar HTML puro com textarea + preview ao vivo
 - **Hospedar** (`HostPage.tsx`): upload de pasta `.zip` com arrastar-e-soltar (200MB, requer `index.html`)
-- Tabela `pages` (id, user_id, slug, title, html, type, published, timestamps)
-- Servidas em `centralspyads.netlify.app/p/{slug}` via redirect do Netlify + Render
-- Assets servidos com MIME type correto
-- `type='hosted'` para páginas com arquivos extraídos em `/tmp/metaspy/pages/{slug}/`
-- `type='page'` para páginas com HTML colado no banco
+- Upload ZIP extrai `index.html` para a coluna `html` do banco (não depende de disco)
+- Servidas em `centralspyads.netlify.app/p/{slug}` via redirect do Netlify → Render → coluna `html`
+- Tipos: `'page'` (HTML colado), `'hosted'` (upload ZIP), `'builder'` (árvore do Page Builder)
 
-### 5. Ferramentas
-- Metadata Cleaner (remover metadados de fotos)
-- Cloacker Detector e Camuflagem
+### 5. Visual Page Builder (Criar Pagina)
+- Página: `PageBuilder.tsx`, rota `/dashboard/hospedar/criar`
+- Modelo de documento: `documentModel.ts` (23 tipos de nó, sistema de estilos, CSS generator)
+- Painel esquerdo: árvore de elementos (`ElementTree.tsx`) + paleta de widgets
+- Canvas central (`BuilderCanvas.tsx`): drag-and-drop, preview responsivo, zoom, drop zones
+- Painel direito (`PropertyInspector.tsx`): editor contextual (conteúdo, layout, aparência, tipografia, interações, animação)
+- **6 features implementadas:**
+  1. Salvar no backend (API + auto-save 30s)
+  2. Carregar do backend (`?edit={id}`)
+  3. Componentes reutilizáveis (localStorage)
+  4. Upload de imagem (multer + R2)
+  5. Animações scroll + hover/interações click
+  6. Publicar como página hospedada (gera HTML, salva no banco, disco + R2)
+
+### 6. Ferramentas
+- Metadata Cleaner (remover metadados de fotos com exiftool)
+- Cloaker: gerador de script JS + detector multi-user-agent + camuflagem de criativos
 - Page Vault Tool
 - MetaSpy Tool (gerador de pixel)
-
-### 6. UI/UX
-- Sidebar: links organizados, "Remover Metadados", "Paginas", "Hospedar"
-- DashboardHome: somente saudação + "Acesso rápido" (sem stats cards)
-- Sessão expira → login, mas dashboard público ainda acessível
+- Deep Clone: download de site completo + tree viewer + ZIP
 
 ### 7. Infra
-- Render: `ssl: { rejectUnauthorized: false }` na conexão PG, `app.set('trust proxy', 1)` para rate limiter
-- Netlify redirects: `/api/*` e `/p/*` → Render
+- Render: PostgreSQL, `ssl: rejectUnauthorized: false`, `app.set('trust proxy', 1)`
+- Netlify: `_redirects` + `netlify.toml`, proxy `/api/*` e `/p/*` → Render
+- Cloudflare Worker (metaspy-host): lê do R2, não usado no caminho crítico (fallback)
 - Render free tier dorme após 15min (cold start ~30-60s)
+- Auto-deploy: push na main → Render + Netlify
 
-## Schema do Banco
+## Schema do Banco (tabela `pages`)
 ```sql
-CREATE TABLE users (
-  id TEXT PRIMARY KEY, nome TEXT, email TEXT UNIQUE, senha TEXT,
-  plano TEXT DEFAULT 'nenhum', plano_expira TIMESTAMP,
-  email_verified INTEGER DEFAULT 0, created_at TIMESTAMP, updated_at TIMESTAMP
-);
-CREATE TABLE email_codes (
-  id SERIAL PRIMARY KEY, email TEXT, code TEXT, type TEXT, expires_at TIMESTAMP
-);
 CREATE TABLE pages (
-  id TEXT PRIMARY KEY, user_id TEXT, slug TEXT, title TEXT, html TEXT,
-  type TEXT DEFAULT 'page', published INTEGER DEFAULT 1,
-  created_at TIMESTAMP, updated_at TIMESTAMP
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL DEFAULT 'Sem titulo', html TEXT NOT NULL DEFAULT '',
+  type TEXT NOT NULL DEFAULT 'page', published INTEGER NOT NULL DEFAULT 0,
+  cf_url TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 ```
 
 ## Variáveis de Ambiente (Render)
 - `DATABASE_URL` (PostgreSQL)
 - `JWT_SECRET`
-- `MAILEROO_API_KEY`
-- `MAILEROO_FROM` (9f92bbda64b9ecca.maileroo.org)
+- `MAILEROO_API_KEY` + `MAILEROO_FROM`
 - `FRONTEND_URL` (https://centralspyads.netlify.app)
-- `KIRVANO_TOKEN` + `KIRVANO_SECRET`
+- `KIRVANO_API_KEY` + `KIRVANO_WEBHOOK_SECRET` + `KIRVANO_SUCCESS_URL` + `KIRVANO_CANCEL_URL`
+- `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_R2_BUCKET`
+- `PAGES_WORKER_HOST` (metaspy-host.09santos-felipe.workers.dev)
+- `FB_TOKEN` (opcional)
 
-## O que falta / próximos passos
+## Problemas Conhecidos / Histórico de Fixes
+### Resolvidos
+- [x] Netlify build falhando com TS errors (`onDropComponent`, `ClickAction`, `process.env`) → corrigidos no commit 2926d31
+- [x] Publish de página do builder falhava (UNIQUE slug) → agora update in-place com tree embutida em `<script id="__METASPY_TREE">`
+- [x] Páginas "Not found" no Netlify → redirect mudou de Worker → Render, servindo da coluna `html` do banco
+- [x] `dist/_redirects` desatualizado → rebuild local não commita dist/, Netlify faz próprio build
+- [x] Servidor tentava ler do disco (`/tmp` efêmero) → agora serve direto do banco
+- [x] Render deploy falhou (`let slug` redeclared) → renomeado para `finalSlug`
+- [x] Worker implantado e testado (responde 404 para slugs inexistentes)
+
 ### Pendências
-- [ ] Testar upload zip → assets (CSS/JS/imagens) carregam corretamente
-- [ ] Verificar se emails Maileroo caem na caixa de entrada (domínio compartilhado pode ir pra spam)
+- [ ] Otimizar: cache R2 + Worker para páginas públicas (reduzir latência)
 - [ ] Verificar domínio `metaspy.com` no Maileroo para custom sender
-
-### Melhorias desejadas
 - [ ] Quiz builder (ferramenta de quiz)
 - [ ] Upload de pasta via `webkitdirectory` como alternativa ao ZIP
-- [ ] Persistência de arquivos das páginas (fora do `/tmp/`)
 - [ ] Dashboard admin com listagem de usuários
 - [ ] Custom domain nas páginas hospedadas
 
 ### Manutenção
 - Render reinicia a cada deploy → arquivos em `/tmp/` são perdidos (aceitável para MVP)
 - Lembrar de setar env vars no painel do Render ao adicionar novas
-- Netlify deploy automático no push para main
+- Netlify deploy automático no push para main (build falha com TS error → corrigir local antes)
 - Kirvano webhook precisa estar configurado no painel Kirvano apontando para `https://metaspy-saas.onrender.com/api/kirvano-webhook`
-
-## Arquivos Relevantes
-- `server/index.js` (rotas principais)
-- `server/email.js` (templates de email)
-- `server/db.js` (banco + schema)
-- `server/package.json` (dependências)
-- `src/pages/DashboardHome.tsx` (dashboard)
-- `src/pages/Dashboard.tsx` (sidebar + layout)
-- `src/pages/HostPage.tsx` (upload zip)
-- `src/pages/DashboardPages.tsx` (lista páginas)
-- `src/pages/PageEditor.tsx` (editor HTML)
-- `src/pages/MetadataCleaner.tsx`
-- `src/App.tsx` (rotas)
-- `netlify.toml` (redirects)
+- Para testar pages: criar no builder → salvar → publicar → acessar `centralspyads.netlify.app/p/{slug}`

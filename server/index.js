@@ -1192,11 +1192,11 @@ app.get('/api/page/:slug', async (req, res) => {
 // ─── Builder Routes ─────────────────────────────────────────────────
 const builderUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 30 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'video/mp4', 'video/webm', 'video/ogg']
     if (allowed.includes(file.mimetype)) return cb(null, true)
-    cb(new Error('Formato de imagem nao suportado.'))
+    cb(new Error('Formato de arquivo nao suportado. Aceito: JPEG, PNG, GIF, WebP, SVG, MP4, WebM, OGG.'))
   },
 })
 

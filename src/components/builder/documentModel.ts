@@ -230,6 +230,15 @@ export function createDefaultPage(name: string, slug: string): PageData {
   return { id: generateId(), name, slug, tree: page, breakpoints: ['1440', '768', '375'], globalStyles: {} }
 }
 
+export function findPath(tree: DocumentNode, id: string): DocumentNode[] {
+  if (tree.id === id) return [tree]
+  for (const child of tree.children) {
+    const path = findPath(child, id)
+    if (path.length > 0) return [tree, ...path]
+  }
+  return []
+}
+
 export function findNode(tree: DocumentNode, id: string): DocumentNode | null {
   if (tree.id === id) return tree
   for (const child of tree.children) {
