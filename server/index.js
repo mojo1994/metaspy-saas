@@ -15,7 +15,7 @@ import { exiftool } from 'exiftool-vendored'
 import mime from 'mime-types'
 import AdmZip from 'adm-zip'
 import { initDb, initSchema, one, query, run } from './db.js'
-import { uploadPageToR2, downloadPageFromR2, deletePageFromR2, getWorkerUrl } from './cloudflareStorage.js'
+import { uploadPageToR2, downloadPageFromR2, deletePageFromR2, getPageContentFromR2, getWorkerUrl } from './cloudflareStorage.js'
 const USE_CF_STORAGE = !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -1133,13 +1133,29 @@ async function createPageRecord(userId, title, customSlug, cfUrl) {
 }
 
 // Public routes: serve page by slug (no auth) — serve from DB html column for all types
+// Attempt R2 first, fallback to DB, then set cache headers for edge/CDN caching
 app.get('/api/page/:slug/:path(*)', async (req, res) => {
   try {
     const { slug, path } = req.params
+    const mimeType = mime.lookup(path) || 'text/html; charset=utf-8'
+
+    // Try R2 first for html pages
+    if (USE_CF_STORAGE && mimeType === 'text/html; charset=utf-8') {
+      try {
+        const r2Data = await getPageContentFromR2(slug, path || 'index.html')
+        if (r2Data) {
+          res.set('Content-Type', mimeType)
+          res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+          res.set('X-Cache', 'R2-HIT')
+          return res.send(r2Data.toString('utf-8'))
+        }
+      } catch {}
+    }
+
     const page = await one('SELECT html, type, published FROM pages WHERE slug = $1 AND published = 1', [slug.toLowerCase()])
     if (!page) return res.status(404).send('Pagina nao encontrada.')
-    const mimeType = mime.lookup(path) || 'text/html; charset=utf-8'
     res.set('Content-Type', mimeType)
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
     res.send(page.html || '')
   } catch {
     res.status(500).send('Erro ao carregar pagina.')
@@ -1148,9 +1164,25 @@ app.get('/api/page/:slug/:path(*)', async (req, res) => {
 
 app.get('/api/page/:slug', async (req, res) => {
   try {
-    const page = await one('SELECT html, type, title FROM pages WHERE slug = $1 AND published = 1', [req.params.slug.toLowerCase()])
+    const slug = req.params.slug.toLowerCase()
+
+    // Try R2 first
+    if (USE_CF_STORAGE) {
+      try {
+        const r2Data = await getPageContentFromR2(slug, 'index.html')
+        if (r2Data) {
+          res.set('Content-Type', 'text/html; charset=utf-8')
+          res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+          res.set('X-Cache', 'R2-HIT')
+          return res.send(r2Data.toString('utf-8'))
+        }
+      } catch {}
+    }
+
+    const page = await one('SELECT html, type, title FROM pages WHERE slug = $1 AND published = 1', [slug])
     if (!page) return res.status(404).send('Pagina nao encontrada.')
     res.set('Content-Type', 'text/html; charset=utf-8')
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
     res.send(page.html || '')
   } catch {
     res.status(500).send('Erro ao carregar pagina.')
@@ -1406,6 +1438,60 @@ function generateBuilderHtml(tree, title) {
         return `<img src="${node.props?.src || ''}" alt="${node.props?.alt || ''}"${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} />`
       case 'divider':
         return `<hr${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} />`
+      case 'icon':
+        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><span class="material-icons">${node.props?.icon || 'star'}</span></div>`
+      case 'video': {
+        const src = node.props?.src || ''
+        if (node.props?.type === 'youtube') {
+          const vid = src.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]+)/)?.[1] || src
+          return `<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden"><iframe src="https://www.youtube.com/embed/${vid}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none" allowfullscreen></iframe></div>`
+        }
+        if (node.props?.type === 'vimeo') {
+          const vid = src.match(/vimeo\.com\/(\d+)/)?.[1] || src
+          return `<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden"><iframe src="https://player.vimeo.com/video/${vid}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none" allowfullscreen></iframe></div>`
+        }
+        return `<video src="${src}" ${node.props?.autoplay ? 'autoplay' : ''} controls style="width:100%;border-radius:8px"></video>`
+      }
+      case 'list': {
+        const listItems = node.props?.items || []
+        const listTag = node.props?.style === 'ordered' ? 'ol' : 'ul'
+        return `<${listTag}${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${listItems.map(i => `<li>${i}</li>`).join('')}</${listTag}>`
+      }
+      case 'form': {
+        const formFields = node.props?.fields || []
+        return `<form${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} action="${node.props?.action || ''}" method="POST">${formFields.map(f => `<div style="margin-bottom:8px"><label style="display:block;margin-bottom:4px;font-weight:500">${f.label}${f.required ? ' *' : ''}</label><input type="${f.type}" name="${(f.label || '').toLowerCase()}" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''} style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:14px"></div>`).join('')}<button type="submit" style="padding:12px 24px;background-color:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:16px;cursor:pointer;width:100%">${node.props?.submitText || 'Enviar'}</button></form>`
+      }
+      case 'nav': {
+        const navLinks = node.props?.links || []
+        return `<nav${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><div style="font-weight:700;font-size:20px">${node.props?.logo || 'Logo'}</div><div style="display:flex;gap:16px;align-items:center">${navLinks.map(l => `<a href="${l.href || '#'}" style="text-decoration:none;color:#333;font-size:14px">${l.label}</a>`).join('')}</div></nav>`
+      }
+      case 'hero':
+        return `<section${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><h1 style="font-size:48px;font-weight:800;color:#111;margin-bottom:0">${node.props?.title || ''}</h1><p style="font-size:20px;color:#666;max-width:600px">${node.props?.subtitle || ''}</p><a href="${node.props?.ctaLink || '#'}" style="display:inline-block;padding:16px 32px;background-color:#7c3aed;color:#fff;border-radius:8px;font-weight:600;text-decoration:none;margin-top:8px">${node.props?.ctaText || 'Comece Agora'}</a></section>`
+      case 'pricing': {
+        const pricingPlans = node.props?.plans || []
+        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center">${pricingPlans.map(p => {
+          const hl = p.highlighted
+          return `<div style="flex:1;min-width:250px;padding:24px;background:${hl ? '#7c3aed' : '#fff'};border-radius:12px;color:${hl ? '#fff' : '#111'};box-shadow:0 2px 12px rgba(0,0,0,0.08);border:${hl ? 'none' : '1px solid #e5e7eb'};text-align:center"><h3 style="font-size:18px;margin-bottom:8px">${p.name || ''}</h3><div style="font-size:36px;font-weight:800">${p.price || ''}<span style="font-size:14px;font-weight:400">${p.period || ''}</span></div><ul style="list-style:none;padding:0;margin:20px 0">${(p.features || []).map(f => `<li style="padding:6px 0">${f}</li>`).join('')}</ul><a href="#" style="display:inline-block;padding:12px 32px;background:${hl ? '#fff' : '#7c3aed'};color:${hl ? '#7c3aed' : '#fff'};border-radius:8px;font-weight:600;text-decoration:none">${p.cta || 'Escolher'}</a></div>`
+        }).join('')}</div>`
+      }
+      case 'faq': {
+        const faqItems = node.props?.items || []
+        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${faqItems.map(item => `<details style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px"><summary style="font-weight:600;cursor:pointer;font-size:16px">${item.question || ''}</summary><p style="margin-top:8px;color:#555;font-size:14px">${item.answer || ''}</p></details>`).join('')}</div>`
+      }
+      case 'testimonial':
+        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><div style="font-size:18px;line-height:1.6;color:#333;font-style:italic;margin-bottom:12px">${node.props?.quote || ''}</div>${node.props?.avatar ? `<img src="${node.props.avatar}" alt="" style="width:48px;height:48px;border-radius:50%;object-fit:cover;margin-bottom:8px">` : ''}<div style="font-weight:600">${node.props?.author || ''}</div><div style="font-size:14px;color:#888">${node.props?.role || ''}</div></div>`
+      case 'countdown': {
+        const targetDate = node.props?.targetDate || ''
+        return `<div class="metaspy-countdown"${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''} data-target="${targetDate}"><div style="text-align:center;font-size:16px;font-weight:600;color:#555;margin-bottom:12px">${node.props?.label || ''}</div><div class="metaspy-countdown-units" style="display:flex;justify-content:center;gap:16px;font-size:36px;font-weight:700;color:#111"><div style="text-align:center"><span class="countdown-days">00</span>${node.props?.showLabels ? '<div style="font-size:12px;color:#888;font-weight:400">dias</div>' : ''}</div><div style="text-align:center"><span class="countdown-hours">00</span>${node.props?.showLabels ? '<div style="font-size:12px;color:#888;font-weight:400">horas</div>' : ''}</div><div style="text-align:center"><span class="countdown-minutes">00</span>${node.props?.showLabels ? '<div style="font-size:12px;color:#888;font-weight:400">min</div>' : ''}</div><div style="text-align:center"><span class="countdown-seconds">00</span>${node.props?.showLabels ? '<div style="font-size:12px;color:#888;font-weight:400">seg</div>' : ''}</div></div></div>`
+      }
+      case 'tabs': {
+        const tabItems = node.props?.tabs || []
+        return `<div data-tabs-container${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><div style="display:flex;border-bottom:2px solid #e5e7eb;margin-bottom:16px">${tabItems.map((t, i) => `<button data-tab="${i}" style="padding:10px 20px;border:none;background:${i === (node.props?.activeTab || 0) ? '#7c3aed' : 'transparent'};color:${i === (node.props?.activeTab || 0) ? '#fff' : '#555'};border-radius:6px 6px 0 0;font-weight:500;cursor:pointer">${t.label || ''}</button>`).join('')}</div>${tabItems.map((t, i) => `<div data-tab-content="${i}" style="display:${i === (node.props?.activeTab || 0) ? 'block' : 'none'}">${t.content || ''}</div>`).join('')}</div>`
+      }
+      case 'modal':
+        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}><button onclick="document.getElementById('modal-${node.id}').style.display='flex'" style="padding:12px 24px;background-color:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">${node.props?.triggerText || 'Abrir Modal'}</button><div id="modal-${node.id}" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this&&${node.props?.closeOnOverlay !== false ? 'true' : 'false'})this.style.display='none'"><div style="background:#fff;border-radius:12px;padding:32px;max-width:500px;width:90%;position:relative"><button onclick="this.closest('[id^=modal-]').style.display='none'" style="position:absolute;top:12px;right:12px;border:none;background:transparent;font-size:24px;cursor:pointer;color:#888">&times;</button><h2 style="margin-bottom:12px;font-size:20px">${node.props?.title || ''}</h2><div>${node.props?.content || ''}</div></div></div></div>`
+      case 'embed':
+        return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.props?.code || ''}</div>`
       default:
         return `<div${styleAttr}${animAttr}${clickAttr}${hoverId ? ` id="${hoverId}"` : ''}>${node.children.map(renderNode).join('\n')}</div>`
     }
@@ -1444,7 +1530,7 @@ function generateBuilderHtml(tree, title) {
   </style>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      const observer = new IntersectionObserver(function(entries) {
+      var observer = new IntersectionObserver(function(entries) {
         entries.forEach(function(entry) {
           if (entry.isIntersecting) {
             var el = entry.target;
@@ -1457,6 +1543,52 @@ function generateBuilderHtml(tree, title) {
         });
       }, { threshold: 0.1 });
       document.querySelectorAll('[data-scroll]').forEach(function(el) { observer.observe(el); });
+
+      // Countdown timers
+      document.querySelectorAll('.metaspy-countdown').forEach(function(container) {
+        var targetStr = container.getAttribute('data-target');
+        if (!targetStr) return;
+        var target = new Date(targetStr).getTime();
+        function update() {
+          var now = new Date().getTime();
+          var diff = Math.max(0, target - now);
+          var d = Math.floor(diff / (1000*60*60*24));
+          var h = Math.floor((diff % (1000*60*60*24)) / (1000*60*60));
+          var m = Math.floor((diff % (1000*60*60)) / (1000*60));
+          var s = Math.floor((diff % (1000*60)) / 1000);
+          var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+          var cd = container.querySelector('.countdown-days');
+          var ch = container.querySelector('.countdown-hours');
+          var cm = container.querySelector('.countdown-minutes');
+          var cs = container.querySelector('.countdown-seconds');
+          if (cd) cd.textContent = pad(d);
+          if (ch) ch.textContent = pad(h);
+          if (cm) cm.textContent = pad(m);
+          if (cs) cs.textContent = pad(s);
+        }
+        update();
+        setInterval(update, 1000);
+      });
+
+      // Tabs
+      document.querySelectorAll('[data-tab]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var idx = btn.getAttribute('data-tab');
+          var tabsContainer = btn.closest('[data-tab]') ? btn.parentElement.parentElement : btn.parentElement;
+          tabsContainer.querySelectorAll('[data-tab]').forEach(function(b) {
+            b.style.background = 'transparent';
+            b.style.color = '#555';
+          });
+          btn.style.background = '#7c3aed';
+          btn.style.color = '#fff';
+          var parent = btn.closest('[data-tabs-container]') || btn.parentElement.parentElement;
+          parent.querySelectorAll('[data-tab-content]').forEach(function(c) {
+            c.style.display = 'none';
+          });
+          var content = parent.querySelector('[data-tab-content="' + idx + '"]');
+          if (content) content.style.display = 'block';
+        });
+      });
     });
   </script>
 </head>

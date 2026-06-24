@@ -8,16 +8,20 @@ interface Props {
   onDelete: (id: string) => void
   onRename: (id: string, name: string) => void
   onMove: (nodeId: string, newParentId: string, newIndex: number) => void
+  onDuplicate?: (id: string) => void
+  onCopy?: (id: string) => void
+  onPaste?: () => void
 }
 
 const TYPE_ICONS: Record<string, string> = {
-  page: '📄', section: '📐', container: '🔲', row: '➡️', column: '⬇️',
-  heading: '📰', text: '📝', image: '🖼️', button: '🔘', icon: '⭐',
-  video: '🎬', divider: '➖', form: '📋', nav: '🧭', hero: '🏆',
-  pricing: '💰', faq: '❓', testimonial: '💬',
+  page: 'Pg', section: 'Sec', container: 'Ctn', row: '→', column: '↓',
+  heading: 'H', text: 'T', image: 'Img', button: 'Btn', icon: '★',
+  video: 'Vid', divider: '—', form: 'Frm', nav: 'Nav', hero: 'Hero',
+  pricing: '$', faq: '?', testimonial: 'Qte', countdown: 'Timer',
+  tabs: 'Tbs', modal: 'Modal', embed: 'Embed', list: 'Lista',
 }
 
-export default function ElementTree({ tree, selectedId, onSelect, onDelete, onRename, onMove }: Props) {
+export default function ElementTree({ tree, selectedId, onSelect, onDelete, onRename, onMove, onDuplicate, onCopy, onPaste }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
@@ -45,6 +49,35 @@ export default function ElementTree({ tree, selectedId, onSelect, onDelete, onRe
   function handleDragStart(e: React.DragEvent, id: string) {
     e.dataTransfer.setData('text/plain', id)
     e.dataTransfer.effectAllowed = 'move'
+  }
+
+  function handleContextMenu(e: React.MouseEvent, nodeId: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    onSelect(nodeId)
+    const el = e.currentTarget as HTMLElement
+    const rect = el.getBoundingClientRect()
+    const menu = document.createElement('div')
+    menu.className = 'builder-context-menu'
+    menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:10000;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px;min-width:160px;box-shadow:0 8px 30px rgba(0,0,0,0.2);font-size:12px;`
+    const items = [
+      { label: 'Duplicar', action: () => onDuplicate?.(nodeId) },
+      { label: 'Copiar', action: () => onCopy?.(nodeId) },
+      { label: 'Colar', action: () => onPaste?.() },
+      { label: 'Remover', action: () => onDelete(nodeId), danger: true },
+    ]
+    items.forEach(item => {
+      const btn = document.createElement('button')
+      btn.textContent = item.label
+      btn.style.cssText = `display:block;width:100%;padding:6px 12px;border:none;background:none;color:${(item as any).danger ? '#dc2626' : 'var(--text-primary)'};border-radius:4px;cursor:pointer;text-align:left;`
+      btn.onmouseenter = () => btn.style.background = 'rgba(124,58,237,0.1)'
+      btn.onmouseleave = () => btn.style.background = 'none'
+      btn.onclick = () => { item.action(); menu.remove() }
+      menu.appendChild(btn)
+    })
+    document.body.appendChild(menu)
+    const close = (ev: MouseEvent) => { if (!menu.contains(ev.target as Node)) { menu.remove(); document.removeEventListener('click', close) } }
+    setTimeout(() => document.addEventListener('click', close), 0)
   }
 
   function handleDragOver(e: React.DragEvent, id: string) {
@@ -90,6 +123,7 @@ export default function ElementTree({ tree, selectedId, onSelect, onDelete, onRe
             transition: 'background 0.15s',
           }}
           onClick={() => onSelect(node.id)}
+          onContextMenu={e => handleContextMenu(e, node.id)}
           draggable={node.type !== 'page'}
           onDragStart={e => handleDragStart(e, node.id)}
           onDragOver={e => handleDragOver(e, node.id)}
@@ -114,7 +148,7 @@ export default function ElementTree({ tree, selectedId, onSelect, onDelete, onRe
           )}
           {!hasChildren && <span style={{ width: 16 }} />}
 
-          <span style={{ fontSize: 12 }}>{TYPE_ICONS[node.type] || '📦'}</span>
+          <span style={{ fontSize: 12 }}>{TYPE_ICONS[node.type] || '●'}</span>
 
           {editingId === node.id ? (
             <input
@@ -149,10 +183,10 @@ export default function ElementTree({ tree, selectedId, onSelect, onDelete, onRe
           </span>
 
           {!node.visible && (
-            <span style={{ fontSize: 10, opacity: 0.4 }}>👁️</span>
+            <span style={{ fontSize: 10, opacity: 0.4 }}>⊙</span>
           )}
           {node.locked && (
-            <span style={{ fontSize: 10, opacity: 0.4 }}>🔒</span>
+            <span style={{ fontSize: 10, opacity: 0.4 }}>⊠</span>
           )}
 
           {node.id !== tree.id && (

@@ -104,6 +104,70 @@ export default function PropertyInspector({ node, onChange }: Props) {
             <SelectInput label="Abrir em" value={n.props.target || '_self'} options={[{ value: '_self', label: 'Mesma janela' }, { value: '_blank', label: 'Nova janela' }]} onChange={v => setProp('target', v)} />
           </>)}
           {n.type === 'image' && (<><div className="builder-section-title">Imagem</div><StyleInput label="URL" value={n.props.src} onChange={v => setProp('src', v)} /><StyleInput label="Alt" value={n.props.alt} onChange={v => setProp('alt', v)} /></>)}
+          {n.type === 'icon' && (<><div className="builder-section-title">Icone</div><SelectInput label="Icone" value={n.props.icon || 'star'} onChange={v => setProp('icon', v)} options={[
+            { value: 'star', label: 'Estrela' }, { value: 'heart', label: 'Coracao' }, { value: 'check', label: 'Check' },
+            { value: 'arrow', label: 'Seta' }, { value: 'bolt', label: 'Raio' }, { value: 'flag', label: 'Bandeira' },
+          ]} /><StyleInput label="Tamanho" value={n.props.size} onChange={v => setProp('size', Number(v))} type="number" suffix="px" /></>)}
+          {n.type === 'video' && (<><div className="builder-section-title">Video</div><StyleInput label="URL (YouTube)" value={n.props.src} onChange={v => setProp('src', v)} /><SelectInput label="Tipo" value={n.props.type || 'youtube'} onChange={v => setProp('type', v)} options={[
+            { value: 'youtube', label: 'YouTube' }, { value: 'vimeo', label: 'Vimeo' }, { value: 'custom', label: 'URL direta' },
+          ]} /></>)}
+          {n.type === 'list' && (<><div className="builder-section-title">Lista</div><SelectInput label="Estilo" value={n.props.style || 'unordered'} onChange={v => setProp('style', v)} options={[
+            { value: 'unordered', label: 'Com pontos' }, { value: 'ordered', label: 'Numerada' },
+          ]} /><div style={{ padding: '4px 12px' }}>{((n.props.items || []) as string[]).map((item: string, i: number) => (
+            <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+              <input value={item} onChange={e => { const items = [...(n.props.items || [])]; items[i] = e.target.value; setProp('items', items) }} className="builder-prop-input" style={{ flex: 1 }} />
+              <button onClick={() => { const items = [...(n.props.items || [])]; items.splice(i, 1); setProp('items', items) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 14 }}>×</button>
+            </div>
+          ))}<button onClick={() => setProp('items', [...(n.props.items || []), 'Novo item'])} style={{ fontSize: 11, color: 'var(--purple-400)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 4 }}>+ Adicionar item</button></div></>)}
+          {n.type === 'form' && (<><div className="builder-section-title">Formulario</div><StyleInput label="Texto do botao" value={n.props.submitText} onChange={v => setProp('submitText', v)} /><StyleInput label="Action URL" value={n.props.action} onChange={v => setProp('action', v)} />
+            <div className="builder-section-title">Campos</div><div style={{ padding: '4px 12px' }}>
+              {((n.props.fields || []) as any[]).map((f: any, i: number) => (
+                <div key={i} style={{ padding: 8, background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 6 }}>
+                  <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}><input value={f.label} onChange={e => { const fields = [...(n.props.fields || [])]; fields[i] = { ...fields[i], label: e.target.value }; setProp('fields', fields) }} className="builder-prop-input" placeholder="Label" style={{ flex: 1 }} /><button onClick={() => { const fields = [...(n.props.fields || [])]; fields.splice(i, 1); setProp('fields', fields) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 14 }}>×</button></div>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <select value={f.type || 'text'} onChange={e => { const fields = [...(n.props.fields || [])]; fields[i] = { ...fields[i], type: e.target.value }; setProp('fields', fields) }} className="builder-prop-select" style={{ flex: 1 }}><option value="text">Texto</option><option value="email">Email</option><option value="tel">Telefone</option><option value="textarea">Texto longo</option></select>
+                    <label style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 2 }}><input type="checkbox" checked={!!f.required} onChange={e => { const fields = [...(n.props.fields || [])]; fields[i] = { ...fields[i], required: e.target.checked }; setProp('fields', fields) }} />Req</label>
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => setProp('fields', [...(n.props.fields || []), { label: 'Campo', type: 'text', required: false, placeholder: '' }])} style={{ fontSize: 11, color: 'var(--purple-400)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Adicionar campo</button>
+            </div>
+          </>)}
+          {n.type === 'nav' && (<><div className="builder-section-title">Nav Bar</div><StyleInput label="Logo" value={n.props.logo} onChange={v => setProp('logo', v)} /><div className="builder-section-title">Links</div><div style={{ padding: '4px 12px' }}>
+            {((n.props.links || []) as any[]).map((l: any, i: number) => (
+              <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                <input value={l.label} onChange={e => { const links = [...(n.props.links || [])]; links[i] = { ...links[i], label: e.target.value }; setProp('links', links) }} className="builder-prop-input" placeholder="Label" style={{ flex: 1 }} />
+                <input value={l.href} onChange={e => { const links = [...(n.props.links || [])]; links[i] = { ...links[i], href: e.target.value }; setProp('links', links) }} className="builder-prop-input" placeholder="#link" style={{ width: 80 }} />
+                <button onClick={() => { const links = [...(n.props.links || [])]; links.splice(i, 1); setProp('links', links) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 14 }}>×</button>
+              </div>
+            ))}<button onClick={() => setProp('links', [...(n.props.links || []), { label: 'Link', href: '#' }])} style={{ fontSize: 11, color: 'var(--purple-400)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Adicionar link</button></div></>)}
+          {n.type === 'hero' && (<><div className="builder-section-title">Hero</div><StyleInput label="Titulo" value={n.props.title} onChange={v => setProp('title', v)} /><StyleInput label="Subtitulo" value={n.props.subtitle} onChange={v => setProp('subtitle', v)} /><StyleInput label="Texto CTA" value={n.props.ctaText} onChange={v => setProp('ctaText', v)} /><StyleInput label="Link CTA" value={n.props.ctaLink} onChange={v => setProp('ctaLink', v)} /></>)}
+          {n.type === 'pricing' && (<><div className="builder-section-title">Planos</div><div style={{ padding: '4px 12px' }}>
+            {((n.props.plans || []) as any[]).map((plan: any, i: number) => (
+              <div key={i} style={{ padding: 8, background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 6 }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}><input value={plan.name} onChange={e => { const plans = [...(n.props.plans || [])]; plans[i] = { ...plans[i], name: e.target.value }; setProp('plans', plans) }} className="builder-prop-input" placeholder="Nome" style={{ flex: 1 }} /><button onClick={() => { const plans = [...(n.props.plans || [])]; plans.splice(i, 1); setProp('plans', plans) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 14 }}>×</button></div>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}><input value={plan.price} onChange={e => { const plans = [...(n.props.plans || [])]; plans[i] = { ...plans[i], price: e.target.value }; setProp('plans', plans) }} className="builder-prop-input" placeholder="Preco" style={{ width: 80 }} /><input value={plan.period} onChange={e => { const plans = [...(n.props.plans || [])]; plans[i] = { ...plans[i], period: e.target.value }; setProp('plans', plans) }} className="builder-prop-input" placeholder="/mes" style={{ width: 60 }} /><label style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 2 }}><input type="checkbox" checked={!!plan.highlighted} onChange={e => { const plans = [...(n.props.plans || [])]; plans[i] = { ...plans[i], highlighted: e.target.checked }; setProp('plans', plans) }} />Dest</label></div>
+                <div><span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Features (separadas por virgula): </span><input value={(plan.features || []).join(', ')} onChange={e => { const plans = [...(n.props.plans || [])]; plans[i] = { ...plans[i], features: e.target.value.split(',').map((s: string) => s.trim()) }; setProp('plans', plans) }} className="builder-prop-input" /></div>
+              </div>
+            ))}<button onClick={() => setProp('plans', [...(n.props.plans || []), { name: 'Novo Plano', price: 'R$0', period: '/mes', features: [], cta: 'Escolher', highlighted: false }])} style={{ fontSize: 11, color: 'var(--purple-400)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Adicionar plano</button></div></>)}
+          {n.type === 'faq' && (<><div className="builder-section-title">FAQ</div><div style={{ padding: '4px 12px' }}>
+            {((n.props.items || []) as any[]).map((item: any, i: number) => (
+              <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4, flexDirection: 'column' }}>
+                <div style={{ display: 'flex', gap: 4 }}><input value={item.question} onChange={e => { const items = [...(n.props.items || [])]; items[i] = { ...items[i], question: e.target.value }; setProp('items', items) }} className="builder-prop-input" placeholder="Pergunta" style={{ flex: 1 }} /><button onClick={() => { const items = [...(n.props.items || [])]; items.splice(i, 1); setProp('items', items) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 14 }}>×</button></div>
+                <textarea value={item.answer} onChange={e => { const items = [...(n.props.items || [])]; items[i] = { ...items[i], answer: e.target.value }; setProp('items', items) }} className="builder-prop-input" placeholder="Resposta" style={{ minHeight: 40, resize: 'vertical' }} />
+              </div>
+            ))}<button onClick={() => setProp('items', [...(n.props.items || []), { question: 'Nova pergunta?', answer: 'Resposta aqui.' }])} style={{ fontSize: 11, color: 'var(--purple-400)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Adicionar pergunta</button></div></>)}
+          {n.type === 'testimonial' && (<><div className="builder-section-title">Depoimento</div><StyleInput label="Citacao" value={n.props.quote} onChange={v => setProp('quote', v)} /><StyleInput label="Autor" value={n.props.author} onChange={v => setProp('author', v)} /><StyleInput label="Cargo" value={n.props.role} onChange={v => setProp('role', v)} /><StyleInput label="Avatar URL" value={n.props.avatar} onChange={v => setProp('avatar', v)} /></>)}
+          {n.type === 'countdown' && (<><div className="builder-section-title">Timer</div><StyleInput label="Texto" value={n.props.label} onChange={v => setProp('label', v)} /><StyleInput label="Data alvo" value={n.props.targetDate} onChange={v => setProp('targetDate', v)} /><label style={{ padding: '4px 12px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}><input type="checkbox" checked={!!n.props.showLabels} onChange={e => setProp('showLabels', e.target.checked)} />Mostrar labels</label></>)}
+          {n.type === 'tabs' && (<><div className="builder-section-title">Abas</div><div style={{ padding: '4px 12px' }}>
+            {((n.props.tabs || []) as any[]).map((tab: any, i: number) => (
+              <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                <input value={tab.label} onChange={e => { const tabs = [...(n.props.tabs || [])]; tabs[i] = { ...tabs[i], label: e.target.value }; setProp('tabs', tabs) }} className="builder-prop-input" placeholder="Nome da aba" style={{ flex: 1 }} />
+                <button onClick={() => { const tabs = [...(n.props.tabs || [])]; tabs.splice(i, 1); setProp('tabs', tabs) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 14 }}>×</button>
+              </div>
+            ))}<button onClick={() => setProp('tabs', [...(n.props.tabs || []), { label: 'Nova Aba', content: 'Conteudo da aba.' }])} style={{ fontSize: 11, color: 'var(--purple-400)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Adicionar aba</button></div></>)}
+          {n.type === 'embed' && (<><div className="builder-section-title">Incorporar</div><div style={{ padding: '4px 12px' }}><textarea value={n.props.code || ''} onChange={e => setProp('code', e.target.value)} className="builder-prop-input" placeholder="Cole o codigo HTML/iframe aqui..." style={{ minHeight: 100, fontFamily: 'monospace', fontSize: 11, resize: 'vertical' }} /></div></>)}
+          {n.type === 'modal' && (<><div className="builder-section-title">Modal</div><StyleInput label="Titulo" value={n.props.title} onChange={v => setProp('title', v)} /><div style={{ padding: '4px 12px' }}><textarea value={n.props.content || ''} onChange={e => setProp('content', e.target.value)} className="builder-prop-input" placeholder="Conteudo do modal..." style={{ minHeight: 60, resize: 'vertical' }} /></div><StyleInput label="Texto do gatilho" value={n.props.triggerText} onChange={v => setProp('triggerText', v)} /></>)}
         </div>
       )}
 
@@ -176,11 +240,12 @@ export default function PropertyInspector({ node, onChange }: Props) {
           <StyleInput label="Mover Y" value={n.hoverStyle?.translateY} onChange={v => setHover({ ...n.hoverStyle, translateY: Number(v) })} type="number" suffix="px" />
           <div className="builder-section-title">Ao Clicar</div>
           <SelectInput label="Acao" value={n.clickAction?.type || 'none'} onChange={v => setClick({ ...n.clickAction, type: v as ClickAction['type'] })} options={[
-            { value: 'none', label: 'Nenhuma' }, { value: 'link', label: 'Ir para link' }, { value: 'scrollTo', label: 'Rolar ate' },
+            { value: 'none', label: 'Nenhuma' }, { value: 'link', label: 'Ir para link' }, { value: 'scrollTo', label: 'Rolar ate' }, { value: 'openModal', label: 'Abrir modal' },
           ]} />
           {n.clickAction?.type === 'link' && (<><StyleInput label="URL" value={n.clickAction.linkUrl} onChange={v => setClick({ ...n.clickAction, linkUrl: v })} />
             <SelectInput label="Target" value={n.clickAction.linkTarget || '_self'} onChange={v => setClick({ ...n.clickAction, linkTarget: v as '_self' | '_blank' })} options={[{ value: '_self', label: 'Mesma janela' }, { value: '_blank', label: 'Nova janela' }]} /></>)}
           {n.clickAction?.type === 'scrollTo' && <StyleInput label="Seletor CSS" value={n.clickAction.scrollSelector} onChange={v => setClick({ ...n.clickAction, scrollSelector: v })} />}
+          {n.clickAction?.type === 'openModal' && <StyleInput label="ID do Modal" value={n.clickAction.modalId} onChange={v => setClick({ ...n.clickAction, modalId: v })} />}
         </div>
       )}
 
@@ -206,15 +271,21 @@ function nodeTypeLabel(type: string): string {
 
 function RichTextEditor({ html, onChange }: { html: string; onChange: (html: string) => void }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [showToolbar, setShowToolbar] = useState(false)
+  const isInternal = useRef(false)
 
   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== html) ref.current.innerHTML = html
+    if (ref.current && !isInternal.current) {
+      ref.current.innerHTML = html
+    }
+    isInternal.current = false
   }, [html])
 
   function exec(cmd: string, val?: string) {
     document.execCommand(cmd, false, val)
-    if (ref.current) onChange(ref.current.innerHTML)
+    if (ref.current) {
+      isInternal.current = true
+      onChange(ref.current.innerHTML)
+    }
   }
 
   return (
@@ -233,8 +304,13 @@ function RichTextEditor({ html, onChange }: { html: string; onChange: (html: str
       <div
         ref={ref}
         contentEditable
-        onInput={() => { if (ref.current) onChange(ref.current.innerHTML) }}
-        onFocus={() => setShowToolbar(true)}
+        onInput={() => {
+          if (ref.current) {
+            isInternal.current = true
+            onChange(ref.current.innerHTML)
+          }
+        }}
+        onFocus={() => {}}
         className="builder-prop-input"
         style={{ width: '100%', minHeight: 80, padding: 8, outline: 'none', overflow: 'auto' }}
       />

@@ -74,6 +74,23 @@ export async function downloadPageFromR2(slug, pagesDir) {
   return found
 }
 
+export async function getPageContentFromR2(slug, filePath = 'index.html') {
+  const client = getS3Client()
+  try {
+    const key = `pages/${slug}/${filePath}`
+    const result = await client.send(new GetObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+    }))
+    const chunks = []
+    for await (const chunk of result.Body) chunks.push(chunk)
+    return Buffer.concat(chunks)
+  } catch (err) {
+    if (err.name === 'NoSuchKey') return null
+    throw err
+  }
+}
+
 export async function deletePageFromR2(slug) {
   const client = getS3Client()
   try {

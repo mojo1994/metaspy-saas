@@ -18,39 +18,51 @@ const WIDGET_CATEGORIES = [
   {
     name: 'Estrutura',
     items: [
-      { type: 'section', label: 'Secao', icon: '📐' },
-      { type: 'container', label: 'Container', icon: '🔲' },
-      { type: 'row', label: 'Linha', icon: '➡️' },
-      { type: 'column', label: 'Coluna', icon: '⬇️' },
+      { type: 'section', label: 'Secao', icon: 'Sec' },
+      { type: 'container', label: 'Container', icon: 'Ctn' },
+      { type: 'row', label: 'Linha', icon: '→' },
+      { type: 'column', label: 'Coluna', icon: '↓' },
     ],
   },
   {
     name: 'Conteudo',
     items: [
-      { type: 'heading', label: 'Titulo', icon: '📰' },
-      { type: 'text', label: 'Texto', icon: '📝' },
-      { type: 'image', label: 'Imagem', icon: '🖼️' },
-      { type: 'button', label: 'Botao', icon: '🔘' },
-      { type: 'divider', label: 'Divisor', icon: '➖' },
+      { type: 'heading', label: 'Titulo', icon: 'H' },
+      { type: 'text', label: 'Texto', icon: 'T' },
+      { type: 'image', label: 'Imagem', icon: 'Img' },
+      { type: 'button', label: 'Botao', icon: 'Btn' },
+      { type: 'divider', label: 'Divisor', icon: '—' },
+      { type: 'icon', label: 'Icone', icon: '★' },
+      { type: 'video', label: 'Video', icon: 'Vid' },
+      { type: 'list', label: 'Lista', icon: 'Lista' },
     ],
   },
   {
     name: 'Marketing',
     items: [
-      { type: 'hero', label: 'Hero', icon: '🏆' },
-      { type: 'pricing', label: 'Tabela', icon: '💰' },
-      { type: 'faq', label: 'FAQ', icon: '❓' },
-      { type: 'testimonial', label: 'Depoimento', icon: '💬' },
-      { type: 'countdown', label: 'Timer', icon: '⏱️' },
-      { type: 'tabs', label: 'Abas', icon: '📑' },
+      { type: 'hero', label: 'Hero', icon: 'Hero' },
+      { type: 'pricing', label: 'Tabela', icon: '$' },
+      { type: 'faq', label: 'FAQ', icon: '?' },
+      { type: 'testimonial', label: 'Depoimento', icon: 'Qte' },
+      { type: 'countdown', label: 'Timer', icon: 'Timer' },
+      { type: 'tabs', label: 'Abas', icon: 'Tbs' },
+      { type: 'form', label: 'Formulario', icon: 'Frm' },
+      { type: 'nav', label: 'Nav Bar', icon: 'Nav' },
+    ],
+  },
+  {
+    name: 'Avancado',
+    items: [
+      { type: 'modal', label: 'Modal', icon: 'Modal' },
+      { type: 'embed', label: 'Incorporar', icon: 'Embed' },
     ],
   },
 ]
 
 const DEVICES = [
-  { width: 1440, label: 'Desktop', icon: '🖥️' },
-  { width: 768, label: 'Tablet', icon: '📱' },
-  { width: 375, label: 'Mobile', icon: '📲' },
+  { width: 1440, label: 'Desktop', icon: 'PC' },
+  { width: 768, label: 'Tablet', icon: 'Tab' },
+  { width: 375, label: 'Mobile', icon: 'Mob' },
 ]
 
 const COMPONENTS_KEY = 'metaspy_builder_components'
@@ -63,13 +75,18 @@ function saveComponents(components: SavedComponent[]) {
   localStorage.setItem(COMPONENTS_KEY, JSON.stringify(components))
 }
 
+const MAX_HISTORY = 50
+
 export default function PageBuilder() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { fetchWithAuth, user } = useAuth()
 
   const editId = searchParams.get('edit')
-  const [page, setPage] = useState<PageData>(() => createDefaultPage('Minha Pagina', 'minha-pagina'))
+  const [page, setPage] = useState<PageData>(() => {
+    const p = createDefaultPage('Minha Pagina', 'minha-pagina')
+    return p
+  })
   const [dbId, setDbId] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>(page.tree.id)
   const [zoom, setZoom] = useState(1)
@@ -84,15 +101,61 @@ export default function PageBuilder() {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [savedComponents, setSavedComponents] = useState<SavedComponent[]>(loadComponents)
   const [publishUrl, setPublishUrl] = useState<string | null>(null)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const autoSaveRef = useRef<ReturnType<typeof setTimeout>>()
   const loadingRef = useRef(false)
+  const historyRef = useRef<DocumentNode[]>([])
+  const historyIdxRef = useRef(-1)
+  const clipboardRef = useRef<DocumentNode | null>(null)
+  const hasUnsavedRef = useRef(false)
+  const pageRootIdRef = useRef(page.tree.id)
+  const lastHistoryPushRef = useRef(0)
 
   const selectedNode = selectedId ? findNode(page.tree, selectedId) : null
 
   function showToast(type: 'success' | 'error', message: string) {
     setToast({ type, message })
     setTimeout(() => setToast(null), 3000)
+  }
+
+  function pushHistory(tree: DocumentNode) {
+    const clone = JSON.parse(JSON.stringify(tree))
+    historyRef.current = historyRef.current.slice(0, historyIdxRef.current + 1)
+    historyRef.current.push(clone)
+    if (historyRef.current.length > MAX_HISTORY) historyRef.current.shift()
+    historyIdxRef.current = historyRef.current.length - 1
+    setCanUndo(historyIdxRef.current > 0)
+    setCanRedo(false)
+  }
+
+  function pushHistoryStructured(tree: DocumentNode) {
+    const now = Date.now()
+    if (now - lastHistoryPushRef.current > 800) {
+      pushHistory(tree)
+      lastHistoryPushRef.current = now
+    }
+  }
+
+  function handleUndo() {
+    if (historyIdxRef.current <= 0) return
+    historyIdxRef.current--
+    const snapshot = JSON.parse(JSON.stringify(historyRef.current[historyIdxRef.current]))
+    setPage(prev => ({ ...prev, tree: snapshot }))
+    setCanUndo(historyIdxRef.current > 0)
+    setCanRedo(true)
+    hasUnsavedRef.current = true
+  }
+
+  function handleRedo() {
+    if (historyIdxRef.current >= historyRef.current.length - 1) return
+    historyIdxRef.current++
+    const snapshot = JSON.parse(JSON.stringify(historyRef.current[historyIdxRef.current]))
+    setPage(prev => ({ ...prev, tree: snapshot }))
+    setCanUndo(true)
+    setCanRedo(historyIdxRef.current < historyRef.current.length - 1)
+    hasUnsavedRef.current = true
   }
 
   // Load from backend
@@ -124,6 +187,12 @@ export default function PageBuilder() {
         setPageName(data.title)
         setDbId(data.id)
         setSelectedId(tree.id)
+        pageRootIdRef.current = tree.id
+        historyRef.current = [JSON.parse(JSON.stringify(tree))]
+        historyIdxRef.current = 0
+        setCanUndo(false)
+        setCanRedo(false)
+        hasUnsavedRef.current = false
         loadingRef.current = false
       })
       .catch(err => {
@@ -139,27 +208,144 @@ export default function PageBuilder() {
       updater(next.tree)
       return next
     })
+    hasUnsavedRef.current = true
   }
 
   const handleSelect = useCallback((id: string) => setSelectedId(id), [])
   const handleDelete = useCallback((id: string) => {
+    setPage(prev => { pushHistory(prev.tree); return prev })
     updatePageTree(tree => removeNode(tree, id))
-    if (selectedId === id) setSelectedId(page.tree.id)
-  }, [selectedId])
+    setSelectedId(pageRootIdRef.current)
+  }, [])
   const handleRename = useCallback((id: string, name: string) => {
+    setPage(prev => { pushHistory(prev.tree); return prev })
     updatePageTree(tree => { const node = findNode(tree, id); if (node) node.name = name })
   }, [])
   const handleMove = useCallback((nodeId: string, newParentId: string, newIndex: number) => {
+    setPage(prev => { pushHistory(prev.tree); return prev })
     updatePageTree(tree => moveNode(tree, nodeId, newParentId, newIndex))
   }, [])
   const handleDropWidget = useCallback((type: string, parentId: string, index?: number) => {
+    setPage(prev => { pushHistory(prev.tree); return prev })
     const node = createDefaultNode(type as NodeType)
     updatePageTree(tree => insertNode(tree, parentId, node, index ?? 0))
     setSelectedId(node.id)
   }, [])
   const handleUpdateNode = useCallback((id: string, changes: Partial<DocumentNode>) => {
+    setPage(prev => { pushHistoryStructured(prev.tree); return prev })
     updatePageTree(tree => { const node = findNode(tree, id); if (node) Object.assign(node, changes) })
   }, [])
+
+  // Keyboard shortcuts
+  const handleSaveRef = useRef(handleSave)
+  handleSaveRef.current = handleSave
+  const deleteRef = useRef(handleDelete)
+  deleteRef.current = handleDelete
+  const duplicateRef = useRef(handleDuplicate)
+  duplicateRef.current = handleDuplicate
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+      if (e.key === 'Escape' && !isInput) {
+        setPreviewMode(false)
+        setSelectedId(pageRootIdRef.current)
+        return
+      }
+      if (isInput) return
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const sid = selectedId
+        if (sid && sid !== pageRootIdRef.current) {
+          e.preventDefault()
+          deleteRef.current(sid)
+        }
+        return
+      }
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'z':
+            e.preventDefault()
+            if (e.shiftKey) handleRedo()
+            else handleUndo()
+            break
+          case 'y':
+            e.preventDefault()
+            handleRedo()
+            break
+          case 's':
+            e.preventDefault()
+            handleSaveRef.current()
+            break
+          case 'c': {
+            const sn = findNode(page.tree, selectedId)
+            if (sn) {
+              clipboardRef.current = JSON.parse(JSON.stringify(sn))
+              showToast('success', 'Elemento copiado!')
+            }
+            break
+          }
+          case 'v':
+            if (clipboardRef.current) {
+              const cloned = cloneSubtree(clipboardRef.current)
+              pushHistory(page.tree)
+              updatePageTree(tree => insertNode(tree, selectedId || pageRootIdRef.current, cloned, 0))
+              setSelectedId(cloned.id)
+              showToast('success', 'Elemento colado!')
+            }
+            break
+          case 'd':
+            e.preventDefault()
+            const sn = findNode(page.tree, selectedId)
+            if (sn && sn.id !== pageRootIdRef.current) {
+              duplicateRef.current(sn.id)
+            }
+            break
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedId, page.tree])
+
+  // Beforeunload
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (hasUnsavedRef.current) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
+
+  function handleDuplicate(nodeId: string) {
+    const rootId = pageRootIdRef.current
+    const node = findNode(page.tree, nodeId)
+    if (!node) return
+    const cloned = cloneSubtree(node)
+    setPage(prev => { pushHistory(prev.tree); return prev })
+    updatePageTree(tree => insertNode(tree, rootId, cloned, 0))
+    setSelectedId(cloned.id)
+  }
+
+  function handleCopy(nodeId: string) {
+    const node = findNode(page.tree, nodeId)
+    if (node) {
+      clipboardRef.current = JSON.parse(JSON.stringify(node))
+      showToast('success', 'Elemento copiado!')
+    }
+  }
+
+  function handlePaste() {
+    if (clipboardRef.current) {
+      const cloned = cloneSubtree(clipboardRef.current)
+      setPage(prev => { pushHistory(prev.tree); return prev })
+      updatePageTree(tree => insertNode(tree, selectedId || page.tree.id, cloned, 0))
+      setSelectedId(cloned.id)
+      showToast('success', 'Elemento colado!')
+    }
+  }
 
   // Save to backend
   async function handleSave() {
@@ -177,6 +363,7 @@ export default function PageBuilder() {
       const data = await res.json()
       if (!dbId) setDbId(data.id)
       setLastSaved(new Date())
+      hasUnsavedRef.current = false
       showToast('success', 'Salvo com sucesso!')
     } catch (err) {
       console.error('Erro salvar:', err)
@@ -190,7 +377,7 @@ export default function PageBuilder() {
   useEffect(() => {
     if (!dbId) return
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current)
-    autoSaveRef.current = setTimeout(() => { handleSave() }, 30000)
+    autoSaveRef.current = setTimeout(() => { handleSave() }, 10000)
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current) }
   }, [page.tree, dbId])
 
@@ -402,8 +589,13 @@ export default function PageBuilder() {
           <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14 }}>+</button>
         </div>
 
-        <button className={`builder-device-btn ${previewMode ? 'active' : ''}`} onClick={() => setPreviewMode(p => !p)} style={{ marginLeft: 8 }}>
-          👁️ Preview
+        <div style={{ display: 'flex', gap: 2, marginLeft: 8 }}>
+          <button className="builder-device-btn" onClick={handleUndo} disabled={!canUndo} title="Desfazer (Ctrl+Z)" style={{ opacity: canUndo ? 1 : 0.3 }}>↩</button>
+          <button className="builder-device-btn" onClick={handleRedo} disabled={!canRedo} title="Refazer (Ctrl+Shift+Z)" style={{ opacity: canRedo ? 1 : 0.3 }}>↪</button>
+        </div>
+
+        <button className={`builder-device-btn ${previewMode ? 'active' : ''}`} onClick={() => setPreviewMode(p => !p)} style={{ marginLeft: 4 }}>
+          ⊡ Preview
         </button>
 
         <div style={{ flex: 1 }} />
@@ -444,6 +636,9 @@ export default function PageBuilder() {
                 onDelete={handleDelete}
                 onRename={handleRename}
                 onMove={handleMove}
+                onDuplicate={handleDuplicate}
+                onCopy={handleCopy}
+                onPaste={handlePaste}
               />
             )}
 
@@ -494,7 +689,7 @@ export default function PageBuilder() {
                 {savedComponents.map(comp => (
                   <div key={comp.id} className="builder-comp-item" draggable onDragStart={e => handleComponentDragStart(e, comp)}>
                     <span style={{ flex: 1, cursor: 'grab' }} onClick={() => handleInsertComponent(comp.node)}>
-                      🧩 {comp.name}
+                      ⊕ {comp.name}
                     </span>
                     <button
                       onClick={() => handleDeleteComponent(comp.id)}

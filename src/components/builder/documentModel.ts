@@ -5,7 +5,7 @@ export type NodeType =
   | 'faq' | 'testimonial' | 'countdown' | 'tabs' | 'modal' | 'embed'
 
 export type LayoutMode = 'structured' | 'freehand'
-export type Unit = 'px' | '%' | 'vw' | 'vh' | 'auto'
+export type Unit = 'px' | '%' | 'vw' | 'vh'
 
 export interface StyleValue { value: number | string; unit: Unit }
 
@@ -154,6 +154,58 @@ export function createDefaultNode(type: NodeType, name?: string): DocumentNode {
     case 'divider':
       base.styles = { width: { value: 100, unit: '%' }, height: { value: 1, unit: 'px' }, backgroundColor: '#e0e0e0', marginTop: { value: 24, unit: 'px' }, marginBottom: { value: 24, unit: 'px' } }
       break
+    case 'icon':
+      base.styles = { fontSize: { value: 32, unit: 'px' }, color: '#7c3aed', textAlign: 'center', width: { value: 48, unit: 'px' }, height: { value: 48, unit: 'px' }, display: 'flex', alignItems: 'center', justifyContent: 'center' }
+      base.props = { icon: 'star', size: 32 }
+      break
+    case 'video':
+      base.styles = { width: { value: 100, unit: '%' }, maxWidth: { value: 720, unit: 'px' }, borderRadius: { value: 8, unit: 'px' } }
+      base.props = { src: '', type: 'youtube', autoplay: false }
+      break
+    case 'list':
+      base.styles = { width: { value: 100, unit: '%' }, fontFamily: 'Inter, sans-serif', fontSize: { value: 16, unit: 'px' }, color: '#333333', lineHeight: 1.8, paddingLeft: { value: 24, unit: 'px' } }
+      base.props = { items: ['Item 1', 'Item 2', 'Item 3'], style: 'unordered' }
+      break
+    case 'form':
+      base.styles = { width: { value: 100, unit: '%' }, maxWidth: { value: 500, unit: 'px' }, paddingTop: { value: 24, unit: 'px' }, paddingBottom: { value: 24, unit: 'px' }, paddingLeft: { value: 24, unit: 'px' }, paddingRight: { value: 24, unit: 'px' }, backgroundColor: '#f9fafb', borderRadius: { value: 8, unit: 'px' }, display: 'flex', flexDirection: 'column', gap: { value: 12, unit: 'px' } }
+      base.props = { fields: [{ label: 'Nome', type: 'text', required: true, placeholder: 'Seu nome' }, { label: 'Email', type: 'email', required: true, placeholder: 'seu@email.com' }], submitText: 'Enviar', action: '' }
+      break
+    case 'nav':
+      base.styles = { width: { value: 100, unit: '%' }, display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: { value: 12, unit: 'px' }, paddingBottom: { value: 12, unit: 'px' }, paddingLeft: { value: 24, unit: 'px' }, paddingRight: { value: 24, unit: 'px' }, backgroundColor: '#ffffff', borderWidth: { value: 0, unit: 'px' }, borderStyle: 'solid', borderColor: '#e5e7eb' }
+      base.props = { logo: 'Logo', links: [{ label: 'Inicio', href: '#' }, { label: 'Sobre', href: '#' }, { label: 'Contato', href: '#' }] }
+      break
+    case 'hero':
+      base.styles = { width: { value: 100, unit: '%' }, paddingTop: { value: 100, unit: 'px' }, paddingBottom: { value: 100, unit: 'px' }, paddingLeft: { value: 24, unit: 'px' }, paddingRight: { value: 24, unit: 'px' }, backgroundColor: '#f0f0ff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: { value: 16, unit: 'px' } }
+      base.props = { title: 'Sua Marc registrada', subtitle: 'Crie algo incrivel hoje', ctaText: 'Comece Agora', ctaLink: '#' }
+      break
+    case 'pricing':
+      base.styles = { width: { value: 100, unit: '%' }, paddingTop: { value: 60, unit: 'px' }, paddingBottom: { value: 60, unit: 'px' }, paddingLeft: { value: 24, unit: 'px' }, paddingRight: { value: 24, unit: 'px' }, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: { value: 24, unit: 'px' } }
+      base.props = { plans: [{ name: 'Basico', price: 'R$29', period: '/mes', features: ['Feature 1', 'Feature 2'], cta: 'Escolher', highlighted: false }, { name: 'Pro', price: 'R$79', period: '/mes', features: ['Feature 1', 'Feature 2', 'Feature 3'], cta: 'Escolher', highlighted: true }] }
+      break
+    case 'faq':
+      base.styles = { width: { value: 100, unit: '%' }, maxWidth: { value: 800, unit: 'px' }, paddingTop: { value: 40, unit: 'px' }, paddingBottom: { value: 40, unit: 'px' }, display: 'flex', flexDirection: 'column', gap: { value: 12, unit: 'px' } }
+      base.props = { items: [{ question: 'Como funciona?', answer: 'E simples e rapido. Comece agora.' }, { question: 'Quanto custa?', answer: 'Temos planos para todos os tamanhos.' }] }
+      break
+    case 'testimonial':
+      base.styles = { width: { value: 100, unit: '%' }, maxWidth: { value: 600, unit: 'px' }, paddingTop: { value: 32, unit: 'px' }, paddingBottom: { value: 32, unit: 'px' }, paddingLeft: { value: 32, unit: 'px' }, paddingRight: { value: 32, unit: 'px' }, backgroundColor: '#ffffff', borderRadius: { value: 12, unit: 'px' }, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: { value: 12, unit: 'px' } }
+      base.props = { quote: 'Este produto transformou meu negocio!', author: 'Joao Silva', role: 'CEO, Exemplo Ltda', avatar: '' }
+      break
+    case 'countdown':
+      base.styles = { width: { value: 100, unit: '%' }, paddingTop: { value: 32, unit: 'px' }, paddingBottom: { value: 32, unit: 'px' }, paddingLeft: { value: 32, unit: 'px' }, paddingRight: { value: 32, unit: 'px' }, display: 'flex', justifyContent: 'center', gap: { value: 16, unit: 'px' }, fontFamily: 'Inter, sans-serif', fontSize: { value: 24, unit: 'px' }, fontWeight: 700, color: '#111111' }
+      base.props = { targetDate: new Date(Date.now() + 7 * 86400000).toISOString(), label: 'Oferta termina em:', showLabels: true }
+      break
+    case 'tabs':
+      base.styles = { width: { value: 100, unit: '%' }, maxWidth: { value: 800, unit: 'px' }, display: 'flex', flexDirection: 'column', gap: { value: 0, unit: 'px' } }
+      base.props = { tabs: [{ label: 'Tab 1', content: 'Conteudo da primeira aba.' }, { label: 'Tab 2', content: 'Conteudo da segunda aba.' }], activeTab: 0 }
+      break
+    case 'modal':
+      base.styles = { width: { value: 100, unit: '%' }, maxWidth: { value: 500, unit: 'px' }, paddingTop: { value: 32, unit: 'px' }, paddingBottom: { value: 32, unit: 'px' }, paddingLeft: { value: 32, unit: 'px' }, paddingRight: { value: 32, unit: 'px' }, backgroundColor: '#ffffff', borderRadius: { value: 12, unit: 'px' }, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }
+      base.props = { title: 'Titulo do Modal', content: 'Conteudo do modal aqui.', triggerText: 'Abrir Modal', closeOnOverlay: true }
+      break
+    case 'embed':
+      base.styles = { width: { value: 100, unit: '%' }, maxWidth: { value: 800, unit: 'px' }, minHeight: { value: 200, unit: 'px' }, borderRadius: { value: 8, unit: 'px' } }
+      base.props = { code: '<iframe src="https://example.com" width="100%" height="400"></iframe>', type: 'iframe' }
+      break
   }
   return base
 }
@@ -222,7 +274,11 @@ export function cloneSubtree(node: DocumentNode): DocumentNode {
 
 export function stylesToCss(styles: NodeStyles, layoutMode: LayoutMode): string {
   const lines: string[] = []
-  const val = (s?: StyleValue) => s ? `${s.value}${s.unit}` : '0'
+  const val = (s?: StyleValue | string) => {
+    if (s === undefined) return '0'
+    if (typeof s === 'string') return s
+    return `${s.value}${s.unit}`
+  }
   if (layoutMode === 'freehand') {
     if (styles.left) lines.push(`left: ${val(styles.left)}`)
     if (styles.top) lines.push(`top: ${val(styles.top)}`)
@@ -241,7 +297,8 @@ export function stylesToCss(styles: NodeStyles, layoutMode: LayoutMode): string 
   ;['margin', 'padding'].forEach(p => {
     ;['Top', 'Right', 'Bottom', 'Left'].forEach(s => {
       const key = `${p}${s}` as keyof NodeStyles
-      f(`${p}-${s.toLowerCase()}`, styles[key] ? val(styles[key] as StyleValue) : undefined)
+      const v = styles[key]
+      if (v) f(`${p}-${s.toLowerCase()}`, val(v as StyleValue | string))
     })
   })
   f('background-color', styles.backgroundColor)
@@ -254,9 +311,9 @@ export function stylesToCss(styles: NodeStyles, layoutMode: LayoutMode): string 
   })
   f('box-shadow', styles.boxShadow); f('opacity', styles.opacity)
   f('font-family', styles.fontFamily)
-  f('font-size', styles.fontSize ? val(styles.fontSize) : undefined)
+  f('font-size', styles.fontSize ? val(styles.fontSize as StyleValue) : undefined)
   f('font-weight', styles.fontWeight); f('line-height', styles.lineHeight)
-  f('letter-spacing', styles.letterSpacing ? val(styles.letterSpacing) : undefined)
+  f('letter-spacing', styles.letterSpacing ? val(styles.letterSpacing as StyleValue) : undefined)
   f('color', styles.color); f('text-align', styles.textAlign); f('text-decoration', styles.textDecoration)
   return lines.join('; ')
 }
