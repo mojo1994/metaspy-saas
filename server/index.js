@@ -18,9 +18,24 @@ import AdmZip from 'adm-zip'
 import sanitizeHtml from 'sanitize-html'
 import { z } from 'zod'
 import pino from 'pino'
-import ffmpeg from 'fluent-ffmpeg'
-import ffmpegPath from 'ffmpeg-static'
-if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath)
+import { FFmpeg } from '@ffmpeg/ffmpeg'
+
+let ffmpegInstance = null
+let ffmpegLoading = false
+let ffmpegLoadQueue = []
+async function getFFmpeg() {
+  if (ffmpegInstance) return ffmpegInstance
+  if (ffmpegLoading) return new Promise(r => ffmpegLoadQueue.push(r))
+  ffmpegLoading = true
+  const ff = new FFmpeg()
+  ff.on('log', ({ message }) => logger.debug({ msg: message }, 'ffmpeg'))
+  await ff.load()
+  ffmpegInstance = ff
+  ffmpegLoading = false
+  ffmpegLoadQueue.forEach(r => r(ff))
+  ffmpegLoadQueue = []
+  return ff
+}
 import { initDb, initSchema, one, query, run } from './db.js'
 import { uploadPageToR2, downloadPageFromR2, deletePageFromR2, getPageContentFromR2, getWorkerUrl } from './cloudflareStorage.js'
 
@@ -893,37 +908,44 @@ async function cleanFileMeta(filePath, mimeType) {
 }
 
 async function generateSpoofedVideo(realPath, disguisePath, realMime, disguiseMime, outputPath) {
-  return new Promise((resolve, reject) => {
-    const isRealVideo = realMime?.startsWith('video/')
-    const isDisguiseVideo = disguiseMime?.startsWith('video/')
+  const ff = await getFFmpeg()
+  const realData = readFileSync(realPath)
+  const disguiseData = readFileSync(disguisePath)
 
-    const command = ffmpeg()
+  const isRealVid = realMime?.startsWith('video/')
+  const isDisgVid = disguiseMime?.startsWith('video/')
 
-    if (isDisguiseVideo) {
-      command.input(disguisePath).duration(2)
-    } else {
-      command.input(disguisePath).loop(1).duration(2)
-    }
+  ff.writeFile('input0.mp4', new Uint8Array(disguiseData))
+  ff.writeFile('input1.mp4', new Uint8Array(realData))
 
-    if (isRealVideo) {
-      command.input(realPath)
-    } else {
-      command.input(realPath).loop(1)
-    }
+  const args = []
 
-    const complex = [
-      { inputs: ['0:v'], filter: 'scale=trunc(iw/2)*2:trunc(ih/2)*2, setsar=1', output: '0v' },
-      { inputs: ['1:v'], filter: 'scale=trunc(iw/2)*2:trunc(ih/2)*2, setsar=1', output: '1v' },
-      { inputs: ['0v', '1v'], filter: 'concat=n=2:v=1:a=0', output: 'out' },
-    ]
+  if (isDisgVid) {
+    args.push('-i', 'input0.mp4')
+  } else {
+    args.push('-loop', '1', '-framerate', '1', '-i', 'input0.mp4', '-t', '2')
+  }
 
-    command
-      .complexFilter(complex)
-      .outputOptions(['-c:v libx264', '-preset fast', '-crf 23', '-pix_fmt yuv420p', '-movflags +faststart'])
-      .output(outputPath)
-      .on('end', () => resolve(outputPath))
-      .on('error', reject)
-  })
+  if (isRealVid) {
+    args.push('-i', 'input1.mp4')
+  } else {
+    args.push('-loop', '1', '-i', 'input1.mp4')
+  }
+
+  args.push(
+    '-filter_complex',
+    '[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1[0v];' +
+    '[1:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1[1v];' +
+    '[0v][1v]concat=n=2:v=1:a=0',
+    '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+    '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+    '-y', 'output.mp4'
+  )
+
+  await ff.exec(args)
+  const outData = ff.readFile('output.mp4')
+  writeFileSync(outputPath, Buffer.from(outData))
+  return outputPath
 }
 
 function generateClickToRevealHTML(realB64, disguiseB64, realMime, disguiseMime, safeUrl) {
