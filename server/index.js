@@ -1,9 +1,10 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import multer from 'multer'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createReadStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync } from 'node:fs'
@@ -14,6 +15,9 @@ import { Archiver } from 'archiver'
 import { exiftool } from 'exiftool-vendored'
 import mime from 'mime-types'
 import AdmZip from 'adm-zip'
+import sanitizeHtml from 'sanitize-html'
+import { z } from 'zod'
+import pino from 'pino'
 import { initDb, initSchema, one, query, run } from './db.js'
 import { uploadPageToR2, downloadPageFromR2, deletePageFromR2, getPageContentFromR2, getWorkerUrl } from './cloudflareStorage.js'
 
@@ -21,7 +25,7 @@ const USE_CF_STORAGE = !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUD
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3001
-const JWT_SECRET = process.env.JWT_SECRET || 'metaspy-dev-secret-change-in-prod'
+const JWT_SECRET = process.env.JWT_SECRET
 const FB_TOKEN = process.env.FB_TOKEN
 const KIRVANO_API_KEY = process.env.KIRVANO_API_KEY || ''
 const KIRVANO_WEBHOOK_SECRET = process.env.KIRVANO_WEBHOOK_SECRET || ''
@@ -30,9 +34,18 @@ const KIRVANO_CANCEL_URL = process.env.KIRVANO_CANCEL_URL || 'https://metaspy.ap
 const IS_RENDER = !!process.env.RENDER || process.env.NODE_ENV === 'production'
 const DATABASE_URL = process.env.DATABASE_URL
 
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty', options: { colorize: true } } : undefined,
+})
+
 if (!DATABASE_URL) {
-  console.error('DATABASE_URL nao definida. Configure a variavel de ambiente com a URL do PostgreSQL.')
+  logger.fatal('DATABASE_URL nao definida. Configure a variavel de ambiente com a URL do PostgreSQL.')
   process.exit(1)
+}
+
+if (!JWT_SECRET || JWT_SECRET.length < 64) {
+  logger.warn('JWT_SECRET fraca ou nao definida. Gere uma chave de 64+ caracteres aleatorios.')
 }
 
 // ─── Database ───────────────────────────────────────────────────
@@ -94,6 +107,23 @@ async function authMiddleware(req, res, next) {
 const app = express()
 app.set('trust proxy', 1)
 app.use(cors({ origin: process.env.FRONTEND_URL || '*', credentials: true }))
+
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://*.kirvano.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      connectSrc: ["'self'", "https://api.kirvano.com", "https://graph.facebook.com"],
+      frameSrc: ["'self'", "https://*.kirvano.com"],
+      mediaSrc: ["'self'", "blob:"],
+    },
+  },
+}))
+
 app.use(cookieParser())
 app.use(express.json({ limit: '10mb' }))
 
@@ -101,6 +131,64 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: process.env.NODE_
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, message: { error: 'Muitas requisicoes. Tente novamente mais tarde.' } })
 app.use('/api/auth', authLimiter)
 app.use('/api', apiLimiter)
+
+// ─── Helpers de Seguranca ────────────────────────────────────────
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const resp = await fetch(url, { ...options, signal: controller.signal })
+    return resp
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function sanitizeHtmlStrict(dirty) {
+  return sanitizeHtml(dirty, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'video', 'source', 'audio', 'figure', 'figcaption', 'picture', 'iframe']),
+    allowedAttributes: {
+      '*': ['style', 'class', 'id', 'data-*'],
+      'a': ['href', 'target', 'rel'],
+      'img': ['src', 'alt', 'width', 'height', 'loading'],
+      'video': ['src', 'controls', 'autoplay', 'muted', 'loop', 'width', 'height'],
+      'source': ['src', 'type'],
+      'iframe': ['src', 'width', 'height', 'frameborder', 'allowfullscreen'],
+    },
+    allowedSchemes: ['http', 'https', 'mailto', 'data'],
+    disallowedTagsMode: 'discard',
+    allowedSchemesByTag: { img: ['http', 'https', 'data'] },
+  })
+}
+
+const IDEMPOTENCY_TTL = 5 * 60 * 1000
+
+// ─── Zod Schemas ────────────────────────────────────────────────
+const signupSchema = z.object({ email: z.string().email().max(255), name: z.string().min(1).max(100), password: z.string().min(6).max(128) })
+const loginSchema = z.object({ email: z.string().email().max(255), password: z.string().min(1).max(128) })
+const verifyCodeSchema = z.object({ email: z.string().email().max(255), code: z.string().length(6) }).or(z.object({ code: z.string().length(6) }))
+const forgotPasswordSchema = z.object({ email: z.string().email().max(255) })
+const resetPasswordSchema = z.object({ email: z.string().email().max(255), code: z.string().length(6), new_password: z.string().min(6).max(128) })
+const profileSchema = z.object({ name: z.string().min(1).max(100), email: z.string().email().max(255) })
+const passwordSchema = z.object({ current_password: z.string().min(1), new_password: z.string().min(6).max(128) })
+const cloneSchema = z.object({ url: z.string().url().max(2000) })
+const cloakerSchema = z.object({ target_url: z.string().url().max(2000), safe_url: z.string().url().max(2000) })
+const camouflageSchema = z.object({ texto_original: z.string().min(1).max(50000), url_destino: z.string().url().max(2000), palavras_sensiveis: z.array(z.string()).optional() })
+const detectSchema = z.object({ url: z.string().url().max(2000) })
+const checkoutSchema = z.object({ plan: z.enum(['basico', 'gold', 'premium']) })
+
+function validate(schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.body)
+    if (!result.success) {
+      const msgs = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')
+      logger.warn({ path: req.path, errors: msgs }, 'Validacao falhou')
+      return res.status(400).json({ error: `Dados invalidos: ${msgs}` })
+    }
+    req.body = result.data
+    next()
+  }
+}
 
 // ─── File Upload Config ──────────────────────────────────────────
 const CAMO_DIR = join('/tmp', 'metaspy-camouflage')
@@ -132,10 +220,9 @@ const upload = multer({
 })
 
 // ─── Auth Routes ─────────────────────────────────────────────────
-app.post('/api/auth/signup', async (req, res) => {
+app.post('/api/auth/signup', validate(signupSchema), async (req, res) => {
   try {
     const { email, name, password } = req.body
-    if (!email || !name || !password) return res.status(400).json({ error: 'Preencha todos os campos' })
     const emailLower = email.toLowerCase().trim()
     const existing = await one('SELECT id FROM users WHERE email = $1', [emailLower])
     if (existing) return res.status(409).json({ error: 'Email ja cadastrado' })
@@ -154,12 +241,12 @@ app.post('/api/auth/signup', async (req, res) => {
     await sendEmail({ to: emailLower, subject: 'MetaSpy - Confirme seu cadastro', html: verificationEmailHtml(code) })
     res.json({ ok: true, message: 'Codigo de confirmacao enviado para seu email.' })
   } catch (err) {
-    console.error('Erro signup:', err)
+    logger.error({ err }, 'Erro signup')
     res.status(500).json({ error: 'Erro ao enviar codigo de confirmacao.' })
   }
 })
 
-app.post('/api/auth/verify-signup', async (req, res) => {
+app.post('/api/auth/verify-signup', validate(verifyCodeSchema), async (req, res) => {
   try {
     const { email, code } = req.body
     if (!email || !code) return res.status(400).json({ error: 'Preencha todos os campos.' })
@@ -181,12 +268,12 @@ app.post('/api/auth/verify-signup', async (req, res) => {
     const refreshToken = generateRefreshToken(id)
     res.json({ user, accessToken, refreshToken })
   } catch (err) {
-    console.error('Erro verify-signup:', err)
+    logger.error({ err }, 'Erro verify-signup')
     res.status(500).json({ error: 'Erro ao confirmar cadastro.' })
   }
 })
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', validate(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body
     if (!email || !password) return res.status(400).json({ error: 'Preencha todos os campos' })
@@ -234,7 +321,7 @@ function generateCode() {
   return String(Math.floor(100000 + Math.random() * 900000))
 }
 
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', validate(forgotPasswordSchema), async (req, res) => {
   try {
     const { email } = req.body
     if (!email) return res.status(400).json({ error: 'Email obrigatorio.' })
@@ -254,12 +341,12 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     await sendEmail({ to: user.email, subject: 'MetaSpy - Codigo de Recuperacao', html: recoveryEmailHtml(code) })
     res.json({ ok: true, message: 'Codigo enviado para seu email.' })
   } catch (err) {
-    console.error('Erro forgot-password:', err)
+    logger.error({ err }, 'Erro forgot-password')
     res.status(500).json({ error: 'Erro ao enviar codigo.' })
   }
 })
 
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post('/api/auth/reset-password', validate(resetPasswordSchema), async (req, res) => {
   try {
     const { email, code, new_password } = req.body
     if (!email || !code || !new_password) return res.status(400).json({ error: 'Preencha todos os campos.' })
@@ -274,7 +361,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
     await run('UPDATE email_codes SET used = 1 WHERE id = $1', [record.id])
     res.json({ ok: true, message: 'Senha redefinida com sucesso.' })
   } catch (err) {
-    console.error('Erro reset-password:', err)
+    logger.error({ err }, 'Erro reset-password')
     res.status(500).json({ error: 'Erro ao redefinir senha.' })
   }
 })
@@ -296,7 +383,7 @@ app.post('/api/auth/send-verification', authMiddleware, async (req, res) => {
     await sendEmail({ to: user.email, subject: 'MetaSpy - Confirme seu Email', html: verificationEmailHtml(code) })
     res.json({ ok: true, message: 'Codigo enviado para seu email.' })
   } catch (err) {
-    console.error('Erro send-verification:', err)
+    logger.error({ err }, 'Erro send-verification')
     res.status(500).json({ error: 'Erro ao enviar codigo.' })
   }
 })
@@ -312,13 +399,13 @@ app.post('/api/auth/verify-code', authMiddleware, async (req, res) => {
     await run('UPDATE users SET email_verified = 1 WHERE id = $1', [req.user.id])
     res.json({ ok: true, message: 'Email verificado com sucesso.' })
   } catch (err) {
-    console.error('Erro verify-code:', err)
+    logger.error({ err }, 'Erro verify-code')
     res.status(500).json({ error: 'Erro ao verificar codigo.' })
   }
 })
 
 // ─── Clone Routes ────────────────────────────────────────────────
-app.post('/api/clone', authMiddleware, async (req, res) => {
+app.post('/api/clone', authMiddleware, validate(cloneSchema), async (req, res) => {
   const { url } = req.body
   if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
   const features = PLAN_FEATURES[req.user.plan]
@@ -409,10 +496,7 @@ app.get('/api/page-fetch', async (req, res) => {
   const { url } = req.query
   if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
   try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 30000)
-    const resp = await fetch(url.toString(), { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' } })
-    clearTimeout(timer)
+    const resp = await fetchWithTimeout(url.toString(), { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' } }, 30000)
     if (!resp.ok) return res.status(resp.status).json({ error: `HTTP ${resp.status}` })
     const html = await resp.text()
     res.type('text/html; charset=utf-8').send(html)
@@ -434,7 +518,7 @@ const KIRVANO_CHECKOUT_UUIDS = {
   '2498bd06-c4e9-412f-ab0d-bd9cededb5ad': 'gold',
 }
 
-app.post('/api/subscription/create-checkout', authMiddleware, async (req, res) => {
+app.post('/api/subscription/create-checkout', authMiddleware, validate(checkoutSchema), async (req, res) => {
   try {
     const { plan } = req.body
     const config = PLAN_CONFIG[plan]
@@ -450,7 +534,7 @@ app.post('/api/subscription/create-checkout', authMiddleware, async (req, res) =
         html: pendingCheckoutEmailHtml({ name: req.user.name, email: req.user.email }),
       })
     } catch (emailErr) {
-      console.error('Erro ao enviar email de checkout pendente:', emailErr)
+      logger.error({ err: emailErr }, 'Erro ao enviar email de checkout pendente')
     }
 
     res.json({ checkoutUrl })
@@ -459,14 +543,25 @@ app.post('/api/subscription/create-checkout', authMiddleware, async (req, res) =
   }
 })
 
-const WEBHOOK_LOG = []
-
 app.post('/api/subscription/webhook', async (req, res) => {
   try {
     const event = req.body
-    WEBHOOK_LOG.unshift({ time: new Date().toISOString(), event })
-    if (WEBHOOK_LOG.length > 20) WEBHOOK_LOG.length = 20
-    console.log('WEBHOOK RECEBIDO:', JSON.stringify(event).slice(0, 500))
+    const eventId = event.id || event.subscription_id || event.transaction_id || randomUUID()
+
+    // Idempotency: deduplicate webhook events
+    const idempotencyKey = createHash('sha256').update(`webhook:${eventId}:${event.event}`).digest('hex')
+    const existing = await one('SELECT key FROM idempotency_keys WHERE key = $1', [idempotencyKey])
+    if (existing) {
+      logger.info({ eventId, event: event.event }, 'Webhook duplicado ignorado (idempotency)')
+      return res.json({ received: true, dedup: true })
+    }
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + IDEMPOTENCY_TTL)
+    await run('INSERT INTO idempotency_keys (key, expires_at, created_at) VALUES ($1, $2, $3)',
+      [idempotencyKey, expiresAt.toISOString(), now.toISOString()]).catch(() => {})
+
+    logger.info({ event: event.event, eventId: eventId.slice(0, 20) }, 'Webhook recebido')
+
     if (event.event === 'payment.approved' || event.event === 'subscription.approved') {
       const metadata = event.metadata || {}
       let userId = metadata.user_id
@@ -476,16 +571,14 @@ app.post('/api/subscription/webhook', async (req, res) => {
       }
       if (userId) {
         const user = await one('SELECT pending_plan FROM users WHERE id = $1', [userId])
-        const plan = user?.pending_plan || 'gratuito'
+        const plan = user?.pending_plan || 'nenhum'
         const config = PLAN_CONFIG[plan]
         if (config) {
-          const now = new Date()
           const expiry = new Date(now.getTime() + config.days * 24 * 60 * 60 * 1000)
           const expiryStr = expiry.toISOString().replace('T', ' ').slice(0, 19)
           await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4, pending_plan = NULL WHERE id = $5',
-            ['active', event.id || event.subscription_id || '', expiryStr, plan, userId])
+            ['active', eventId, expiryStr, plan, userId])
 
-          // Send purchase confirmation email
           try {
             const userInfo = await one('SELECT name, email FROM users WHERE id = $1', [userId])
             if (userInfo) {
@@ -496,7 +589,7 @@ app.post('/api/subscription/webhook', async (req, res) => {
               })
             }
           } catch (emailErr) {
-            console.error('Erro ao enviar email de confirmacao:', emailErr)
+            logger.error({ err: emailErr }, 'Erro ao enviar email de confirmacao')
           }
         }
       }
@@ -510,7 +603,8 @@ app.post('/api/subscription/webhook', async (req, res) => {
       }
     }
     res.json({ received: true })
-  } catch {
+  } catch (err) {
+    logger.error({ err }, 'Erro no webhook')
     res.json({ received: true })
   }
 })
@@ -527,7 +621,7 @@ app.get('/api/subscription/status', authMiddleware, async (req, res) => {
 })
 
 // ─── Cloaker Routes ──────────────────────────────────────────────
-app.post('/api/cloaker/generate', authMiddleware, async (req, res) => {
+app.post('/api/cloaker/generate', authMiddleware, validate(cloakerSchema), async (req, res) => {
   const features = PLAN_FEATURES[req.user.plan]
   if (!features?.cloaker) return res.status(403).json({ error: 'Disponivel apenas nos planos Gold e Premium' })
   try {
@@ -594,7 +688,7 @@ const USER_AGENTS = {
   bot_facebook: 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
 }
 
-app.post('/api/cloaker/detect', authMiddleware, async (req, res) => {
+app.post('/api/cloaker/detect', authMiddleware, validate(detectSchema), async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
     if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
@@ -602,16 +696,12 @@ app.post('/api/cloaker/detect', authMiddleware, async (req, res) => {
     if (!url) return res.status(400).json({ erro: 'URL e obrigatoria.' })
     const resultados = {}
     for (const [tipo, ua] of Object.entries(USER_AGENTS)) {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 8000)
       try {
-        const resposta = await fetch(url, { headers: { 'User-Agent': ua }, redirect: 'manual', signal: controller.signal })
-        clearTimeout(timeout)
+        const resposta = await fetchWithTimeout(url, { headers: { 'User-Agent': ua }, redirect: 'manual' }, 8000)
         const corpoBuffer = await resposta.arrayBuffer()
         const corpo = Buffer.from(corpoBuffer).toString('utf-8').slice(0, 50000)
         resultados[tipo] = { status: resposta.status, statusText: resposta.statusText, urlFinal: resposta.url, headers: Object.fromEntries(resposta.headers.entries()), corpo, tamanho: corpo.length }
       } catch (erro) {
-        clearTimeout(timeout)
         resultados[tipo] = { erro: erro.message || 'Falha na requisicao' }
       }
     }
@@ -627,13 +717,13 @@ app.post('/api/cloaker/detect', authMiddleware, async (req, res) => {
       resumo: temCloaking ? 'Cloaking detectado! A pagina entrega conteudo diferente para robos e humanos.' : 'Nenhum cloaking significativo detectado.'
     })
   } catch (erro) {
-    console.error('Erro no detect cloaker:', erro)
+    logger.error({ err: erro }, 'Erro no detect cloaker')
     res.status(500).json({ erro: 'Erro interno ao analisar a URL.' })
   }
 })
 
 // ─── Creative Camouflage ─────────────────────────────────────────
-app.post('/api/cloaker/camouflage', authMiddleware, async (req, res) => {
+app.post('/api/cloaker/camouflage', authMiddleware, validate(camouflageSchema), async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
     if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
@@ -670,7 +760,7 @@ app.post('/api/cloaker/camouflage', authMiddleware, async (req, res) => {
     await run(`INSERT INTO camouflage_scripts (id, user_id, url_destino, script_code, created_at) VALUES ($1, $2, $3, $4, $5)`, [id, req.user.id, url_destino, scriptCamuflado, new Date().toISOString()])
     res.json({ id, script: scriptCamuflado, instrucoes: 'Copie e cole este script no <head> da sua landing page. O script detectara automaticamente se o visitante e humano ou robo.' })
   } catch (erro) {
-    console.error('Erro ao gerar camuflagem:', erro)
+    logger.error({ err: erro }, 'Erro ao gerar camuflagem')
     res.status(500).json({ erro: 'Erro ao gerar script de camuflagem.' })
   }
 })
@@ -733,7 +823,7 @@ app.post('/api/cloaker/upload-camouflage', authMiddleware, (req, res, next) => {
       tamanho: fileSize
     })
   } catch (erro) {
-    console.error('Erro no upload camouflage:', erro)
+    logger.error({ err: erro }, 'Erro no upload camouflage')
     res.status(500).json({ erro: 'Erro ao processar arquivo.' })
   }
 })
@@ -766,7 +856,7 @@ app.get('/api/user/profile', authMiddleware, (req, res) => {
   res.json({ user: req.user })
 })
 
-app.put('/api/user/profile', authMiddleware, async (req, res) => {
+app.put('/api/user/profile', authMiddleware, validate(profileSchema), async (req, res) => {
   const { name, email } = req.body
   if (!name || !email) return res.status(400).json({ error: 'Nome e email sao obrigatorios' })
   await run('UPDATE users SET name = $1, email = $2 WHERE id = $3', [name.trim(), email.toLowerCase().trim(), req.user.id])
@@ -774,7 +864,7 @@ app.put('/api/user/profile', authMiddleware, async (req, res) => {
   res.json({ user })
 })
 
-app.put('/api/user/password', authMiddleware, async (req, res) => {
+app.put('/api/user/password', authMiddleware, validate(passwordSchema), async (req, res) => {
   try {
     const { current_password, new_password } = req.body
     if (!current_password || !new_password) return res.status(400).json({ error: 'Senha atual e nova senha sao obrigatorias' })
@@ -924,12 +1014,12 @@ app.post('/api/cleaner/upload', authMiddleware, async (req, res) => {
           metadataRemoved: tagsRemoved
         })
       } catch (cleanErr) {
-        console.error('Clean error:', cleanErr)
+        logger.error({ err: cleanErr }, 'Clean error')
         res.status(500).json({ error: 'Erro ao limpar metadados.' })
       }
     })
   } catch (error) {
-    console.error('Cleaner route error:', error)
+    logger.error({ err: error }, 'Cleaner route error')
     res.status(500).json({ error: 'Erro interno.' })
   }
 })
@@ -950,7 +1040,7 @@ app.get('/api/cleaner/download/:id', authMiddleware, async (req, res) => {
     const stream = createReadStream(asset.cleaned_file_path)
     stream.pipe(res)
   } catch (error) {
-    console.error('Download error:', error)
+    logger.error({ err: error }, 'Download error')
     res.status(500).json({ error: 'Erro ao baixar arquivo.' })
   }
 })
@@ -1030,7 +1120,8 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
       }
     }
     if (indexHtml) {
-      run('UPDATE pages SET html = $1 WHERE id = $2', [indexHtml, id]).catch(() => {})
+      const sanitizedHtml = sanitizeHtmlStrict(indexHtml)
+      run('UPDATE pages SET html = $1 WHERE id = $2', [sanitizedHtml, id]).catch(() => {})
     }
 
     if (USE_CF_STORAGE) {
@@ -1039,7 +1130,7 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
         buffer: e.getData(),
         contentType: mime.lookup(e.entryName) || 'application/octet-stream',
       }))
-      uploadPageToR2(slug, cfFiles).catch(err => console.error('Erro upload R2:', err))
+      uploadPageToR2(slug, cfFiles).catch(err => logger.error({ err }, 'Erro upload R2'))
       const cfUrl = getWorkerUrl(slug)
       run('UPDATE pages SET cf_url = $1 WHERE id = $2', [cfUrl, id]).catch(() => {})
     }
@@ -1051,7 +1142,7 @@ app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), as
   } catch (err) {
     if (err.message === 'slug-exists') return res.status(409).json({ error: 'Este nome de pagina ja esta em uso. Escolha outro.' })
     if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Arquivo muito grande. Maximo: 200MB.' })
-    console.error('Erro upload pagina:', err)
+    logger.error({ err }, 'Erro upload pagina')
     res.status(500).json({ error: 'Erro ao fazer upload da pagina.' })
   }
 })
@@ -1111,16 +1202,23 @@ app.get('/api/page/:slug', async (req, res) => {
 app.use((err, req, res, next) => {
   if (err?.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ erro: 'Arquivo muito grande. Maximo: 200MB.' })
   if (err?.message?.includes('formato')) return res.status(400).json({ erro: err.message })
-  console.error('Erro nao tratado:', err)
+  logger.error({ err }, 'Erro nao tratado')
   next(err)
 })
 
 // ─── Start ───────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`MetaSpy Server rodando na porta ${PORT}`)
-  console.log(`Frontend URL: ${process.env.FRONTEND_URL || '*'}`)
-  console.log(`Kirvano: ${KIRVANO_API_KEY ? 'configurado' : 'NÃO configurado'}`)
-  console.log(`Facebook: ${FB_TOKEN ? 'configurado' : 'NÃO configurado'}`)
-  console.log(`Database: PostgreSQL`)
-  console.log(`Environment: ${IS_RENDER ? 'Render (production)' : 'development'}`)
+  logger.info({ port: PORT, frontend: process.env.FRONTEND_URL || '*', kirvano: !!KIRVANO_API_KEY, facebook: !!FB_TOKEN, db: 'PostgreSQL', env: IS_RENDER ? 'Render' : 'dev' }, 'MetaSpy Server iniciado')
 })
+
+// Keep-Alive: ping a cada 60s para evitar cold start no Render
+if (IS_RENDER) {
+  const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `http://localhost:${PORT}/api/health`
+  setInterval(async () => {
+    try {
+      const resp = await fetch(KEEP_ALIVE_URL, { signal: AbortSignal.timeout(5000) })
+      if (resp.ok) logger.debug('Keep-Alive OK')
+    } catch { /* silent */ }
+  }, 60000)
+  logger.info('Keep-Alive ativado (60s)')
+}

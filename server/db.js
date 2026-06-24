@@ -144,6 +144,18 @@ export async function initSchema() {
     )
   `).catch(() => {})
 
+  // Security: Idempotency keys for webhook
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      key TEXT PRIMARY KEY,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+
+  // Performance: Index on pages.slug for public queries
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_pages_slug ON pages(slug)`).catch(() => {})
+
   // Pillar 6: Form Submissions
   await pool.query(`
     CREATE TABLE IF NOT EXISTS form_submissions (
