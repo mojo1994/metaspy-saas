@@ -10,7 +10,8 @@ import MetaSpyTool from './pages/MetaSpyTool'
 import PageVaultTool from './pages/PageVaultTool'
 import CloackerTool from './pages/CloackerTool'
 import CloakDetector from './pages/CloakDetector'
-import CreativeCamouflage from './pages/CreativeCamouflage'
+import CamuflagemTexto from './pages/CamuflagemTexto'
+import CamuflagemMidia from './pages/CamuflagemMidia'
 import HostPage from './pages/HostPage'
 import MetadataCleaner from './pages/MetadataCleaner'
 import Profile from './pages/Profile'
@@ -38,7 +39,8 @@ export default function App() {
         <Route path="pagevault" element={<PageVaultTool />} />
         <Route path="cloacker" element={<CloackerTool />} />
         <Route path="cloacker/detector" element={<CloakDetector />} />
-        <Route path="cloacker/camouflage" element={<CreativeCamouflage />} />
+        <Route path="cloacker/camouflage/texto" element={<CamuflagemTexto />} />
+        <Route path="cloacker/camouflage/midia" element={<CamuflagemMidia />} />
         <Route path="hospedar" element={<HostPage />} />
         <Route path="cleaner" element={<MetadataCleaner />} />
         <Route path="perfil" element={<Profile />} />

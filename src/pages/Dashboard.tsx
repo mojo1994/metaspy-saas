@@ -58,12 +58,18 @@ export default function Dashboard() {
 
   const isCloackerSub = location.pathname.startsWith('/dashboard/cloacker')
   const [cloackerOpen, setCloackerOpen] = useState(isCloackerSub)
+  const isCamoSub = location.pathname.startsWith('/dashboard/cloacker/camouflage')
+  const [camoOpen, setCamoOpen] = useState(isCamoSub)
   const isHospedarSub = location.pathname.startsWith('/dashboard/hospedar')
   const [hospedarOpen, setHospedarOpen] = useState(isHospedarSub)
 
   useEffect(() => {
     if (isCloackerSub) setCloackerOpen(true)
   }, [isCloackerSub])
+
+  useEffect(() => {
+    if (isCamoSub) setCamoOpen(true)
+  }, [isCamoSub])
 
   useEffect(() => {
     if (isHospedarSub) setHospedarOpen(true)
@@ -102,9 +108,24 @@ export default function Dashboard() {
               <NavLink to="/dashboard/cloacker/detector" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
                 Quebra de Cloacker
               </NavLink>
-              <NavLink to="/dashboard/cloacker/camouflage" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Camuflagem
-              </NavLink>
+              <div className="sidebar-group">
+                <button
+                  className={`sidebar-link sidebar-group-toggle${location.pathname.startsWith('/dashboard/cloacker/camouflage') ? ' active' : ''}`}
+                  onClick={() => setCamoOpen(!camoOpen)}
+                  style={{ paddingLeft: 16, fontSize: 12 }}
+                >
+                  <span>Camuflagem</span>
+                  <span className="sidebar-arrow" data-open={camoOpen}>›</span>
+                </button>
+                <div className={`sidebar-subnav${camoOpen ? ' open' : ''}`}>
+                  <NavLink to="/dashboard/cloacker/camouflage/texto" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                    Texto
+                  </NavLink>
+                  <NavLink to="/dashboard/cloacker/camouflage/midia" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                    Midia
+                  </NavLink>
+                </div>
+              </div>
             </div>
           </div>
           <div className="sidebar-group">
