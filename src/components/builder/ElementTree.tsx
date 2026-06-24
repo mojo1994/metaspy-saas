@@ -14,11 +14,11 @@ interface Props {
 }
 
 const TYPE_ICONS: Record<string, string> = {
-  page: 'Pg', section: 'Sec', container: 'Ctn', row: '→', column: '↓',
-  heading: 'H', text: 'T', image: 'Img', button: 'Btn', icon: '★',
-  video: 'Vid', divider: '—', form: 'Frm', nav: 'Nav', hero: 'Hero',
-  pricing: '$', faq: '?', testimonial: 'Qte', countdown: 'Timer',
-  tabs: 'Tbs', modal: 'Modal', embed: 'Embed', list: 'Lista',
+  page: '\u25a3', section: '\u00a7', container: '\u25ad', row: '\u2192', column: '\u2193',
+  heading: '\u25a4', text: '\u00b6', image: '\u22a1', button: '\u229f', icon: '\u2726',
+  video: '\u25b6', divider: '\u2014', list: '\u2630', form: '\u2328', nav: '\u2261',
+  hero: '\u2605', pricing: '$', faq: '?', testimonial: '\u275d',
+  countdown: '\u25f7', tabs: '\u25a5', modal: '\u229e', embed: '\u27e6',
 }
 
 export default function ElementTree({ tree, selectedId, onSelect, onDelete, onRename, onMove, onDuplicate, onCopy, onPaste }: Props) {

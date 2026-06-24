@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, memo, DragEvent } from 'react'
+﻿import { useRef, useState, useCallback, memo, DragEvent } from 'react'
 import {
   DocumentNode, stylesToCss, hoverStyleToCss, scrollAnimationToCss,
   SCROLL_ANIMATION_KEYFRAMES, nodeTypeLabel,
@@ -186,7 +186,7 @@ function renderWidgetPreview(node: DocumentNode, previewMode: boolean): JSX.Elem
     case 'divider':
       return <hr style={{ ...w, border: 'none', height: 1, backgroundColor: '#e0e0e0', margin: 0 }} />
     case 'icon':
-      return <div style={{ ...w, fontSize: node.props.size || 32, color: node.styles.color || '#7c3aed', textAlign: 'center' }}>★</div>
+      return <div style={{ ...w, fontSize: node.props.size || 32, color: node.styles.color || '#7c3aed', textAlign: 'center' }}>✦</div>
     case 'video': {
       const src = node.props.src
       if (src && node.props.type === 'youtube') {

@@ -18,51 +18,51 @@ const WIDGET_CATEGORIES = [
   {
     name: 'Estrutura',
     items: [
-      { type: 'section', label: 'Secao', icon: 'Sec' },
-      { type: 'container', label: 'Container', icon: 'Ctn' },
-      { type: 'row', label: 'Linha', icon: '→' },
-      { type: 'column', label: 'Coluna', icon: '↓' },
+      { type: 'section', label: 'Secao', icon: '\u00a7' },
+      { type: 'container', label: 'Container', icon: '\u25ad' },
+      { type: 'row', label: 'Linha', icon: '\u2192' },
+      { type: 'column', label: 'Coluna', icon: '\u2193' },
     ],
   },
   {
     name: 'Conteudo',
     items: [
-      { type: 'heading', label: 'Titulo', icon: 'H' },
-      { type: 'text', label: 'Texto', icon: 'T' },
-      { type: 'image', label: 'Imagem', icon: 'Img' },
-      { type: 'button', label: 'Botao', icon: 'Btn' },
-      { type: 'divider', label: 'Divisor', icon: '—' },
-      { type: 'icon', label: 'Icone', icon: '★' },
-      { type: 'video', label: 'Video', icon: 'Vid' },
-      { type: 'list', label: 'Lista', icon: 'Lista' },
+      { type: 'heading', label: 'Titulo', icon: '\u25a4' },
+      { type: 'text', label: 'Texto', icon: '\u00b6' },
+      { type: 'image', label: 'Imagem', icon: '\u22a1' },
+      { type: 'button', label: 'Botao', icon: '\u229f' },
+      { type: 'divider', label: 'Divisor', icon: '\u2014' },
+      { type: 'icon', label: 'Icone', icon: '\u2726' },
+      { type: 'video', label: 'Video', icon: '\u25b6' },
+      { type: 'list', label: 'Lista', icon: '\u2630' },
     ],
   },
   {
     name: 'Marketing',
     items: [
-      { type: 'hero', label: 'Hero', icon: 'Hero' },
+      { type: 'hero', label: 'Hero', icon: '\u2605' },
       { type: 'pricing', label: 'Tabela', icon: '$' },
       { type: 'faq', label: 'FAQ', icon: '?' },
-      { type: 'testimonial', label: 'Depoimento', icon: 'Qte' },
-      { type: 'countdown', label: 'Timer', icon: 'Timer' },
-      { type: 'tabs', label: 'Abas', icon: 'Tbs' },
-      { type: 'form', label: 'Formulario', icon: 'Frm' },
-      { type: 'nav', label: 'Nav Bar', icon: 'Nav' },
+      { type: 'testimonial', label: 'Depoimento', icon: '\u275d' },
+      { type: 'countdown', label: 'Timer', icon: '\u25f7' },
+      { type: 'tabs', label: 'Abas', icon: '\u25a5' },
+      { type: 'form', label: 'Formulario', icon: '\u2328' },
+      { type: 'nav', label: 'Nav Bar', icon: '\u2261' },
     ],
   },
   {
     name: 'Avancado',
     items: [
-      { type: 'modal', label: 'Modal', icon: 'Modal' },
-      { type: 'embed', label: 'Incorporar', icon: 'Embed' },
+      { type: 'modal', label: 'Modal', icon: '\u229e' },
+      { type: 'embed', label: 'Incorporar', icon: '\u27e6' },
     ],
   },
 ]
 
 const DEVICES = [
-  { width: 1440, label: 'Desktop', icon: 'PC' },
-  { width: 768, label: 'Tablet', icon: 'Tab' },
-  { width: 375, label: 'Mobile', icon: 'Mob' },
+  { width: 1440, label: 'Desktop', icon: '\u2610' },
+  { width: 768, label: 'Tablet', icon: '\u25f1' },
+  { width: 375, label: 'Mobile', icon: '\u25f0' },
 ]
 
 const COMPONENTS_KEY = 'metaspy_builder_components'
