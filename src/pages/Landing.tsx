@@ -13,7 +13,6 @@ import {
   ArrowRight,
   Check,
   Minus,
-  Sparkles,
   Layers3,
 } from 'lucide-react'
 
@@ -131,7 +130,7 @@ export default function Landing() {
       <nav className="landing-nav" data-reveal style={delayStyle(0)}>
         <div className="landing-brand">
           <div className="sidebar-logo-icon landing-brand-mark">
-            <Sparkles size={16} strokeWidth={2} />
+            <Radar size={16} strokeWidth={2} />
           </div>
           <span className="landing-brand-name">MetaSpy</span>
         </div>

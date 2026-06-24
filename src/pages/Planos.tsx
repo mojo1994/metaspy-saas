@@ -53,9 +53,9 @@ const ALL_FEATURES = [
 ]
 
 const DEPOIMENTOS = [
-  { nome: 'Rafael M.', cargo: 'Afiliado, 2 anos', texto: 'O MetaSpy mudou completamente minha forma de analisar ofertas. Em 3 meses passei de R$3k para R$15k/mÃªs.' },
-  { nome: 'Camila S.', cargo: 'Media Buyer', texto: 'O clonador + editor Ã© absurdo de bom. Editar pÃ¡gina em tempo real direto no canvas Ã© outro nÃ­vel.' },
-  { nome: 'Lucas O.', cargo: 'Diretor de TrÃ¡fego', texto: 'Uso o cloacker em todas as campanhas. Zero denÃºncias desde que comecei a usar. Vale cada centavo.' },
+  { nome: 'Rafael M.', cargo: 'Afiliado, 2 anos', texto: 'O MetaSpy mudou completamente minha forma de analisar ofertas. Em 3 meses passei de R$3k para R$15k/mês.' },
+  { nome: 'Camila S.', cargo: 'Media Buyer', texto: 'O clonador + editor é absurdo de bom. Editar página em tempo real direto no canvas é outro nível.' },
+  { nome: 'Lucas O.', cargo: 'Diretor de Tráfego', texto: 'Uso o cloacker em todas as campanhas. Zero denúncias desde que comecei a usar. Vale cada centavo.' },
 ]
 
 const PLAN_CARD_DATA = [
@@ -172,7 +172,7 @@ export default function Planos() {
           </h1>
           <p className="planos-subtitle reveal-lift" data-reveal style={revealStyle(240)}>
             As ferramentas que os top players usam para escalar ofertas no Meta Ads. <br />
-            Sem plano free. Sem enrolaÃ§Ã£o. Resultado do primeiro dia.
+            Sem plano free. Sem enrolação. Resultado do primeiro dia.
           </p>
           <div className="planos-hero-cta-row" data-reveal style={revealStyle(360)}>
             {isAuthenticated ? (
