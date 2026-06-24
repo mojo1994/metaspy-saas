@@ -1,83 +1,36 @@
-10:44:55 AM: Netlify Build                                                 
-10:44:55 AM: ────────────────────────────────────────────────────────────────
-10:44:55 AM: ​
-10:44:55 AM: ❯ Version
-10:44:55 AM:   @netlify/build 36.0.0
-10:44:55 AM: ​
-10:44:55 AM: ❯ Flags
-10:44:55 AM:   accountId: 68b705ccda4b2977313fa0bf
-10:44:55 AM:   baseRelDir: true
-10:44:55 AM:   buildId: 6a3a8dcdc8a38a00083460f2
-10:44:55 AM:   deployId: 6a3a8dcdc8a38a00083460f4
-10:44:56 AM: ​
-10:44:56 AM: ❯ Current directory
-10:44:56 AM:   /opt/build/repo
-10:44:56 AM: ​
-10:44:56 AM: ❯ Config file
-10:44:56 AM:   /opt/build/repo/netlify.toml
-10:44:56 AM: ​
-10:44:56 AM: ❯ Context
-10:44:56 AM:   production
-10:44:56 AM: ​
-10:44:56 AM: ❯ Installing extensions
-10:44:56 AM:    - neon
-10:44:56 AM: ​
-10:44:56 AM: ❯ Loading extensions
-10:44:56 AM:    - neon
-10:44:58 AM: ​
-10:44:58 AM: build.command from netlify.toml                               
-10:44:58 AM: ────────────────────────────────────────────────────────────────
-10:44:58 AM: ​
-10:44:58 AM: $ npm run build
-10:44:58 AM: > metaspy-saas@3.0.0 build
-10:44:58 AM: > tsc -b && vite build
-10:45:01 AM: src/components/builder/BuilderCanvas.tsx(45,9): error TS2304: Cannot find name 'onDropComponent'.
-10:45:01 AM: src/components/builder/BuilderCanvas.tsx(50,21): error TS2304: Cannot find name 'onDropComponent'.
-10:45:01 AM: src/components/builder/PropertyInspector.tsx(181,127): error TS2345: Argument of type '{ linkUrl: any; type?: "link" | "none" | "scrollTo" | "openModal" | undefined; linkTarget?: "_self" | "_blank"; scrollSelector?: string; modalId?: string; }' is not assignable to parameter of type 'ClickAction'.
-10:45:01 AM:   Types of property 'type' are incompatible.
-10:45:01 AM:     Type '"link" | "none" | "scrollTo" | "openModal" | undefined' is not assignable to type '"link" | "none" | "scrollTo" | "openModal"'.
-10:45:01 AM:       Type 'undefined' is not assignable to type '"link" | "none" | "scrollTo" | "openModal"'.
-10:45:01 AM: src/components/builder/PropertyInspector.tsx(182,109): error TS2345: Argument of type '{ linkTarget: "_self" | "_blank"; type?: "link" | "none" | "scrollTo" | "openModal" | undefined; linkUrl?: string; scrollSelector?: string; modalId?: string; }' is not assignable to parameter of type 'ClickAction'.
-10:45:01 AM:   Types of property 'type' are incompatible.
-10:45:01 AM:     Type '"link" | "none" | "scrollTo" | "openModal" | undefined' is not assignable to type '"link" | "none" | "scrollTo" | "openModal"'.
-10:45:01 AM:       Type 'undefined' is not assignable to type '"link" | "none" | "scrollTo" | "openModal"'.
-10:45:01 AM: src/components/builder/PropertyInspector.tsx(183,143): error TS2345: Argument of type '{ scrollSelector: any; type?: "link" | "none" | "scrollTo" | "openModal" | undefined; linkUrl?: string; linkTarget?: "_self" | "_blank"; modalId?: string; }' is not assignable to parameter of type 'ClickAction'.
-10:45:01 AM:   Types of property 'type' are incompatible.
-10:45:01 AM:     Type '"link" | "none" | "scrollTo" | "openModal" | undefined' is not assignable to type '"link" | "none" | "scrollTo" | "openModal"'.
-10:45:01 AM:       Type 'undefined' is not assignable to type '"link" | "none" | "scrollTo" | "openModal"'.
-10:45:01 AM: src/pages/PageBuilder.tsx(15,13): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
-10:45:02 AM: Failed during stage 'building site': Build script returned non-zero exit code: 2 (https://ntl.fyi/exit-code-2)
-10:45:02 AM: ​
-10:45:02 AM: "build.command" failed                                        
-10:45:02 AM: ────────────────────────────────────────────────────────────────
-10:45:02 AM: ​
-10:45:02 AM:   Error message
-10:45:02 AM:   Command failed with exit code 1: npm run build (https://ntl.fyi/exit-code-1)
-10:45:02 AM: ​
-10:45:02 AM:   Error location
-10:45:02 AM:   In build.command from netlify.toml:
-10:45:02 AM:   npm run build
-10:45:02 AM: ​
-10:45:02 AM:   Resolved config
-10:45:02 AM:   build:
-10:45:02 AM:     command: npm run build
-10:45:02 AM:     commandOrigin: config
-10:45:02 AM:     publish: /opt/build/repo/dist
-10:45:02 AM:     publishOrigin: config
-10:45:02 AM:   redirects:
-10:45:02 AM:     - from: /p/*
-      status: 200
-      to: https://metaspy-host.09santos-felipe.workers.dev/p/:splat
-    - from: /*
-      status: 200
-      to: /index.html
-    - from: /api/*
-      status: 200
-      to: https://metaspy-saas.onrender.com/api/:splat
-    - from: /p/*
-      status: 200
-      to: https://metaspy-saas.onrender.com/api/page/:splat
-  redirectsOrigin: config
-10:45:02 AM: Build failed due to a user error: Build script returned non-zero exit code: 2
-10:45:02 AM: Failing build: Failed to build site
-10:45:03 AM: Finished processing build request in 15.597s
+==> Downloading cache...
+==> Cloning from https://github.com/mojo1994/metaspy-saas
+==> Checking out commit e404219dc9ce1a6fb111b12642512f92520d9db5 in branch main
+==> Downloaded 25MB in 6s. Extraction took 0s.
+==> Requesting Node.js version 20
+==> Using Node.js version 20.20.2 via environment variable NODE_VERSION
+==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+==> Installing Node.js version 20.20.2...
+==> Running build command 'npm install'...
+removed 2 packages, and audited 211 packages in 523ms
+26 packages are looking for funding
+  run `npm fund` for details
+found 0 vulnerabilities
+==> Uploading build...
+==> Uploaded in 2.0s. Compression took 1.4s
+==> Build successful 🎉
+==> Deploying...
+==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+==> Exited with status 1
+==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
+==> Running 'node index.js'
+node:internal/modules/esm/resolve:873
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'adm-zip' imported from /opt/render/project/src/server/index.js
+    at packageResolve (node:internal/modules/esm/resolve:873:9)
+    at moduleResolve (node:internal/modules/esm/resolve:946:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+    at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+Node.js v20.20.2
