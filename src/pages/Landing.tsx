@@ -149,6 +149,12 @@ export default function Landing() {
 
       <section className="landing-hero">
         <div className="landing-hero-inner">
+          <div className="landing-hero-badge" data-reveal style={delayStyle(40)}>
+            <div className="landing-brand-mark landing-hero-mark">
+              <Radar size={14} strokeWidth={2} />
+            </div>
+            <span>MetaSpy</span>
+          </div>
           <h1 data-reveal style={delayStyle(120)}>
             Inteligência de Ofertas em Escala
           </h1>

@@ -61,7 +61,7 @@ export default function ForgotPassword() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div style={{ textAlign: 'center' }}>
+        <div className="auth-header">
           <div className="sidebar-logo-icon" style={{ margin: '0 auto 12px', width: 48, height: 48, fontSize: 24 }}>
             <IconLogo size={24} />
           </div>
@@ -92,7 +92,7 @@ export default function ForgotPassword() {
           <form className="auth-form" onSubmit={resetPassword}>
             <label>
               Codigo de 6 digitos
-              <input type="text" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" maxLength={6} style={{ textAlign: 'center', fontSize: 24, letterSpacing: 8, fontFamily: 'monospace' }} />
+              <input className="auth-code-input" type="text" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" maxLength={6} />
             </label>
             <label>
               Nova senha

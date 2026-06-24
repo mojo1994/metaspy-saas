@@ -25,7 +25,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div style={{ textAlign: 'center' }}>
+        <div className="auth-header">
           <div className="sidebar-logo-icon" style={{ margin: '0 auto 12px', width: 48, height: 48, fontSize: 24 }}>
             <IconLogo size={24} />
           </div>
