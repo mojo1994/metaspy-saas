@@ -160,6 +160,14 @@ export function IconChevronRight({ size = 14, className }: Props) {
   </svg>
 }
 
+export function IconDownload({ size = 18, className }: Props) {
+  return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+}
+
 export function IconArrowUp({ size = 14, className }: Props) {
   return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <style>{`@keyframes __upBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}.__up{animation:__upBounce 1.5s ease-in-out infinite;transform-origin:12px 12px}`}</style>

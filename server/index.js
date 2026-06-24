@@ -7,7 +7,7 @@ import multer from 'multer'
 import { randomUUID, createHash } from 'node:crypto'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createReadStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync } from 'node:fs'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
@@ -18,6 +18,9 @@ import AdmZip from 'adm-zip'
 import sanitizeHtml from 'sanitize-html'
 import { z } from 'zod'
 import pino from 'pino'
+import ffmpeg from 'fluent-ffmpeg'
+import ffmpegPath from 'ffmpeg-static'
+if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath)
 import { initDb, initSchema, one, query, run } from './db.js'
 import { uploadPageToR2, downloadPageFromR2, deletePageFromR2, getPageContentFromR2, getWorkerUrl } from './cloudflareStorage.js'
 
@@ -851,7 +854,196 @@ app.get('/api/cloaker/camouflage-download/:id', async (req, res) => {
   }
 })
 
-// ─── User Routes ─────────────────────────────────────────────────
+// ─── Dual-Layer Media Camouflage ──────────────────────────────────
+const CAMO_MEDIA_OUTPUTS = new Map()
+
+const camoMediaStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = join('/tmp', 'metaspy-camo-media', randomUUID())
+    mkdirSync(dir, { recursive: true })
+    req.camoMediaDir = dir
+    cb(null, dir)
+  },
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+})
+
+const camoMediaUpload = multer({
+  storage: camoMediaStorage,
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg','image/png','image/gif','image/webp','video/mp4','video/webm','video/ogg','video/quicktime']
+    if (allowed.includes(file.mimetype)) return cb(null, true)
+    cb(new Error('Formato nao suportado'))
+  },
+})
+
+async function cleanFileMeta(filePath, mimeType) {
+  try {
+    const ext = extname(filePath)
+    const out = filePath.replace(ext, `_clean${ext}`)
+    if (mimeType?.startsWith('video/')) {
+      await exiftool.write(filePath, { All: '', overwrite_original: true })
+      try { renameSync(filePath, out) } catch { copyFileSync(filePath, out) }
+    } else {
+      await exiftool.write(filePath, { All: '', overwrite_original: true, GPS: '', EXIF: '', IPTC: '', XMP: '', Comment: '', Artist: '', Copyright: '' })
+      try { renameSync(filePath, out) } catch { copyFileSync(filePath, out) }
+    }
+    return out
+  } catch { return filePath }
+}
+
+async function generateSpoofedVideo(realPath, disguisePath, realMime, disguiseMime, outputPath) {
+  return new Promise((resolve, reject) => {
+    const isRealVideo = realMime?.startsWith('video/')
+    const isDisguiseVideo = disguiseMime?.startsWith('video/')
+
+    const command = ffmpeg()
+
+    if (isDisguiseVideo) {
+      command.input(disguisePath).duration(2)
+    } else {
+      command.input(disguisePath).loop(1).duration(2)
+    }
+
+    if (isRealVideo) {
+      command.input(realPath)
+    } else {
+      command.input(realPath).loop(1)
+    }
+
+    const complex = [
+      { inputs: ['0:v'], filter: 'scale=trunc(iw/2)*2:trunc(ih/2)*2, setsar=1', output: '0v' },
+      { inputs: ['1:v'], filter: 'scale=trunc(iw/2)*2:trunc(ih/2)*2, setsar=1', output: '1v' },
+      { inputs: ['0v', '1v'], filter: 'concat=n=2:v=1:a=0', output: 'out' },
+    ]
+
+    command
+      .complexFilter(complex)
+      .outputOptions(['-c:v libx264', '-preset fast', '-crf 23', '-pix_fmt yuv420p', '-movflags +faststart'])
+      .output(outputPath)
+      .on('end', () => resolve(outputPath))
+      .on('error', reject)
+  })
+}
+
+function generateClickToRevealHTML(realB64, disguiseB64, realMime, disguiseMime, safeUrl) {
+  const isRealVideo = realMime?.startsWith('video/')
+  const isDisguiseVideo = disguiseMime?.startsWith('video/')
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<title>Content Preview</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+#disguise{position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;background:#000}
+#disguise img,#disguise video{max-width:100%;max-height:100%;object-fit:contain}
+#overlay{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);cursor:pointer;transition:opacity .5s}
+#overlay.hidden{opacity:0;pointer-events:none}
+#overlay button{padding:20px 50px;font-size:24px;border:2px solid #fff;background:transparent;color:#fff;border-radius:12px;cursor:pointer}
+#overlay button:hover{background:rgba(255,255,255,0.1)}
+#real{position:absolute;inset:0;z-index:0;display:none;align-items:center;justify-content:center;background:#000}
+#real.show{display:flex}
+#real img,#real video{max-width:100%;max-height:100%;object-fit:contain}
+</style>
+</head>
+<body>
+<div id="disguise">${isDisguiseVideo ? `<video src="${disguiseB64}" autoplay muted loop playsinline></video>` : `<img src="${disguiseB64}" alt="">`}</div>
+<div id="overlay" onclick="document.getElementById('overlay').classList.add('hidden');document.getElementById('real').classList.add('show')">
+<button>Click to Load Content</button>
+</div>
+<div id="real">${isRealVideo ? `<video src="${realB64}" controls autoplay muted playsinline></video>` : `<img src="${realB64}" alt="">`}</div>
+<noscript><meta http-equiv="refresh" content="0;url=${safeUrl || 'about:blank'}"></noscript>
+<script>
+if(navigator.webdriver||/bot|googlebot|facebookexternalhit|headless|crawler/i.test(navigator.userAgent)){window.location.href=${JSON.stringify(safeUrl || 'about:blank')};document.body.innerHTML=''}
+</script>
+</body>
+</html>`
+}
+
+app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields([
+  { name: 'real_media', maxCount: 1 },
+  { name: 'disguise_media', maxCount: 1 },
+]), async (req, res) => {
+  try {
+    const features = PLAN_FEATURES[req.user.plan]
+    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
+
+    const files = req.files || {}
+    const realFile = Array.isArray(files['real_media']) ? files['real_media'][0] : undefined
+    const disguiseFile = Array.isArray(files['disguise_media']) ? files['disguise_media'][0] : undefined
+    const strategy = req.body.strategy
+    const safeUrl = req.body.safe_url || ''
+
+    if (!realFile || !disguiseFile) return res.status(400).json({ erro: 'Envie real_media e disguise_media.' })
+    if (!['thumbnail_spoofing', 'click_to_reveal'].includes(strategy)) return res.status(400).json({ erro: 'Estrategia invalida.' })
+
+    const dir = req.camoMediaDir
+    const realPath = realFile.path
+    const disguisePath = disguiseFile.path
+    const id = randomUUID()
+
+    // Edge case: same file
+    if (realFile.size === disguiseFile.size && realFile.originalname === disguiseFile.originalname) {
+      const cleanPath = await cleanFileMeta(realPath, realFile.mimetype)
+      const ext = realFile.mimetype.startsWith('video/') ? 'mp4' : 'jpg'
+      CAMO_MEDIA_OUTPUTS.set(id, cleanPath)
+      setTimeout(() => CAMO_MEDIA_OUTPUTS.delete(id), 300000)
+      return res.json({ id, strategy, downloadUrl: `/api/cloaker/camouflage/media/download/${id}`, disguisePreviewUrl: `/api/cloaker/camouflage/media/download/${id}`, instructions: 'Arquivos identicos. Nenhuma modificacao aplicada.', fileName: `camouflage-${id}.${ext}` })
+    }
+
+    let outputPath
+    let downloadExt = 'mp4'
+
+    if (strategy === 'thumbnail_spoofing') {
+      outputPath = join(dir, `output-${id}.mp4`)
+      await generateSpoofedVideo(realPath, disguisePath, realFile.mimetype, disguiseFile.mimetype, outputPath)
+      outputPath = await cleanFileMeta(outputPath, 'video/mp4')
+    } else {
+      const realB64 = readFileSync(realPath).toString('base64')
+      const disguiseB64 = readFileSync(disguisePath).toString('base64')
+      const html = generateClickToRevealHTML(`data:${realFile.mimetype};base64,${realB64}`, `data:${disguiseFile.mimetype};base64,${disguiseB64}`, realFile.mimetype, disguiseFile.mimetype, safeUrl)
+      const htmlPath = join(dir, 'index.html')
+      writeFileSync(htmlPath, html, 'utf-8')
+      const zipPath = join(dir, `output-${id}.zip`)
+      const archive = new Archiver('zip', { zlib: { level: 9 } })
+      const ws = createWriteStream(zipPath)
+      await new Promise((resolve, reject) => {
+        archive.pipe(ws)
+        archive.file(htmlPath, { name: 'index.html' })
+        outputPath = zipPath
+        downloadExt = 'zip'
+      })
+    }
+
+    CAMO_MEDIA_OUTPUTS.set(id, outputPath)
+    setTimeout(() => { try { unlinkSync(outputPath) } catch {}; CAMO_MEDIA_OUTPUTS.delete(id) }, 300000)
+
+    res.json({
+      id, strategy,
+      downloadUrl: `/api/cloaker/camouflage/media/download/${id}`,
+      disguisePreviewUrl: `/api/cloaker/camouflage/media/raw/${id}/disguise`,
+      instructions: strategy === 'thumbnail_spoofing' ? 'Upload this video to your ad manager. The AI scanner will only see the safe thumbnail, but users will see the full offer after 2 seconds.' : 'Extract the ZIP and upload the index.html to your hosting. The safe media loads immediately; the real content appears only after a click.',
+      fileName: `camouflage-${id}.${downloadExt}`,
+    })
+  } catch (erro) {
+    logger.error({ err: erro }, 'Erro no camouflage media')
+    res.status(500).json({ erro: 'Erro ao processar camuflagem de midia.' })
+  }
+})
+
+app.get('/api/cloaker/camouflage/media/download/:id', async (req, res) => {
+  const filePath = CAMO_MEDIA_OUTPUTS.get(req.params.id)
+  if (!filePath || !existsSync(filePath)) return res.status(404).json({ erro: 'Arquivo nao encontrado ou expirado.' })
+  const ext = extname(filePath)
+  const mime = ext === '.zip' ? 'application/zip' : 'video/mp4'
+  res.setHeader('Content-Type', mime)
+  res.setHeader('Content-Disposition', `attachment; filename="camouflage-${req.params.id}${ext}"`)
+  createReadStream(filePath).pipe(res)
+})
 app.get('/api/user/profile', authMiddleware, (req, res) => {
   res.json({ user: req.user })
 })

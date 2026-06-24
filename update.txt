@@ -1,397 +1,113 @@
-DATA MODEL (The "Spinal Core" – AST Architecture)
-Objective: Move from raw HTML storage to a structured, queryable, and scalable Abstract Syntax Tree (AST) to enable true modular editing.
+TECHNICAL PROMPT: DUAL-LAYER MEDIA CAMOUFLAGE (STEALTH CREATIVE)
+1. Context & Problem Statement
+The current "Creative Camouflage" feature only generates client-side JavaScript bot-detection scripts or simple HTML wrappers. This is insufficient against modern ad platform AI scanners (Meta, TikTok, Google) that analyze the visual content, first frames, and static thumbnails of video/image creatives at upload time.
 
-Technical Requirements & Architecture:
+New Requirement: The user must be able to upload a "Real Media" (the actual promotional offer) and a "Disguise Media" (a safe, generic image/video). The system must generate a single, unified output asset (video or HTML page) where the scanner only detects the "Disguise Media," but the human viewer sees the "Real Media" upon interaction.
 
-Hierarchical Data Structure: Define a strict, recursive JSON schema representing the page as a nested tree. The root must be a Page node, containing an array of Section nodes (full-width containers), each housing Row nodes (horizontal wrappers), which split into Column nodes (grid-based containers), finally holding Element nodes (the atomic visual units: Text, Image, Button, Video, Form).
+2. Core Logic Implementation
+2.1. Upload Interface (Frontend)
+Location: src/pages/CreativeCamouflage.tsx
 
-Separation of Concerns (Data vs. Presentation): The AST must enforce a strict dichotomy at every node level:
+Changes:
 
-Content Object: Stores semantic data (e.g., textContent, imageSrc, altText, buttonLabel, href).
+Add two distinct drag-and-drop upload zones:
 
-Styles Object: Stores visual presentation (e.g., padding, margin, backgroundColor, fontSize, borderRadius) mapped to specific breakpoints.
+"Real Media" (Risky content: the actual ad).
 
-Settings Object: Stores behavioral attributes (e.g., elementId, cssClasses, customAttributes, visibilityRules).
+"Disguise Media" (Safe content: e.g., a landscape, pet, or generic graphic).
 
-Persistence Strategy: Store the complete AST as a JSONB column in PostgreSQL to leverage compression, indexing on specific paths, and fast retrieval. Separate tables for pages (holding the AST) and page_versions (holding historical snapshots).
+Add a dropdown selector with two primary Camouflage Strategies:
 
-Immutable State Management: Implement a centralized state store (Zustand or Redux Toolkit) that treats the AST as immutable. All updates (style changes, reordering, deletion) must generate a new AST copy using structural sharing (Immer) to ensure optimal re-rendering performance.
+Thumbnail Spoofing (Video) – Hides the real content behind a safe preview.
+Click-to-Reveal (Interactive) – Shows the safe media until the user interacts (clicks/taps).
+Keep the optional "Bot Safe URL" (if a bot scrapes the HTML, it gets redirected).
 
-Version Control (Undo/Redo): Maintain a transient history stack (max 30-50 steps) in the client-side store. Each mutation pushes a deep-cloned snapshot of the entire AST or a compressed diff-patch (using libraries like jsondiffpatch) to the "Past" stack. Redo reverts by popping from the "Future" stack.
+2.2. Backend API Endpoint
+Endpoint: POST /api/cloaker/camouflage/media
 
-Draft vs. Published States: The database must support concurrent versions: a draft_ast (working version) and a published_ast (live version). Publishing simply copies the draft to the published column without altering the production cache until explicitly triggered.
+Authentication: JWT required, Premium/Annual plan only.
 
-2. COMPONENT SYSTEM (Mobile-First & Responsive Engine)
-Objective: Enable fluid, responsive design across Desktop, Tablet, and Mobile viewports without requiring the user to write a single media query.
+Payload (Multipart/Form-Data):
 
-Technical Requirements & Architecture:
+real_media: File (Video/Image, max 200MB).
 
-Breakpoint-Aware Styling Schema: Extend the Styles object to be a nested map: { "desktop": { ... }, "tablet": { ... }, "mobile": { ... } }. The rendering engine must conditionally apply these styles using CSS-in-JS or inline style attributes dynamically computed based on the current canvas viewport.
+disguise_media: File (Video/Image, max 200MB).
 
-Advanced Spacing Visual Controller: Replace numeric inputs with a unified "Box Model" visualizer. Implement a 4-directional control (Top, Right, Bottom, Left) with a "Link/Unlink" toggle. When linked, a single input modifies all sides uniformly; when unlinked, each side adjusts independently. This applies to both Margin and Padding.
+strategy: "thumbnail_spoofing" | "click_to_reveal".
 
-Native Flexbox & Grid Configuration Panel: Instead of raw CSS text areas, build a visual configuration toolbar for:
+safe_url: Optional redirect URL for bots.
 
-Alignment: 9-dot matrix selectors for justify-content (horizontal) and align-items (vertical).
+3. Strategy 1: Thumbnail Spoofing (Video/Image Hybrid)
+Objective: Generate a video where the platform's AI scanner (which heavily analyzes the first 2-3 seconds and the thumbnail) sees the Disguise Media, while the full video contains the Real Media.
 
-Direction: Toggle between row, row-reverse, column, column-reverse.
+Technical Implementation (Backend - using fluent-ffmpeg & exiftool):
 
-Spacing: Slider controls for gap (row-gap & column-gap) and wrap behavior toggles.
+Input Validation:
 
-Responsive Visibility Toggles: For each element, provide an eye-icon toggle per breakpoint. When "hidden" on Mobile, the builder must inject display: none !important via inline styles specific to that viewport. The AST must store this as a boolean hidden flag per breakpoint.
+If real_media is an image and disguise_media is an image: Generate a video where the first 2 seconds are the Disguise Image (static), and then it transitions/crossfades to the Real Image.
 
-Dynamic Canvas Scaling: The preview iframe must adjust its width to match the selected breakpoint (e.g., 1200px for Desktop, 768px for Tablet, 375px for Mobile) while maintaining a zoom-to-fit scaling (using CSS transform: scale) so the entire page remains visible within the editor viewport.
+If real_media is a video: Extract the first frame of the Real Video. Replace the extracted frame's visual content with the Disguise Image (or overlay the Disguise Image as a full-cover mask for the first 2 seconds).
 
-3. VISUAL vs. STRUCTURAL EDITING (WYSIWYG & Drag-Drop)
-Objective: Provide both direct manipulation on the canvas and structural management via an outliner, ensuring pixel-perfect accuracy and ease of selection.
+FFmpeg Pipeline (The "Swap"):
 
-Technical Requirements & Architecture:
+Generate a "safe intro" clip (2 seconds) from the Disguise Media.
 
-Inline Content Editing (WYSIWYG): Implement a double-click interaction model. On canvas double-click, activate contentEditable for text-based elements. A floating toolbar must appear above the selected text, offering basic formatting controls (Bold, Italic, Underline, Hyperlink, Ordered/Unordered Lists). Upon blur, the edited innerText or innerHTML must sync back to the AST content.text field.
+Generate the "real clip" from the Real Media (trimmed to the user's desired length or full duration).
 
-True Structural Drag & Drop: Utilize a mouse/pointer event system (or a library like dnd-kit) to enable dragging of existing elements. The system must support cross-container dragging (e.g., dragging an Image from Column A to Column B).
+Concatenate them so the output video is: Safe Intro (2s) + Real Video (remaining).
 
-Visual Feedback (Drop Zones): During a drag, a semi-transparent blue insertion line or highlighted outline must appear between elements or inside columns to indicate exactly where the element will be placed upon drop.
+Critical: Use ffmpeg to set the output file's title and comment metadata to generic text (e.g., "Nature View") using exiftool to prevent metadata-based flagging.
 
-Drag Handles: Reserved hover zones (e.g., a 6-dot grid icon at the top-left of an element on hover) must serve as the exclusive drag trigger to prevent conflicts with text selection.
+Output: Return a single .mp4 file (H.264/AAC) where the platform's static thumbnail scraper only captures the Disguise frame.
 
-Multi-Selection (Batch Editing): Enable Shift + Click functionality. Maintain a secondary array of selectedElementIds in the state. When multiple nodes are selected, the property panel must display common styles. If all selected elements share the same color or fontSize, show that value; otherwise, show a "Mixed" state. Updating a property will apply the change to all selected IDs in the AST simultaneously.
+4. Strategy 2: Click-to-Reveal (HTML/JS Canvas Overlay)
+Objective: Generate a self-contained HTML page that loads the Disguise Media immediately. The Real Media is embedded/encoded but hidden behind a transparent overlay or a "play" button. Bots (headless/without click events) will only render the Disguise.
 
-Structural Outliner & Breadcrumb:
+Technical Implementation (Backend & Frontend):
 
-Outliner: A dockable side panel rendering the AST as a nested, collapsible folder tree. Users can click a node to select it, drag nodes to reorder them structurally outside the canvas, or right-click to duplicate/delete.
+Media Encoding: The backend encodes the real_media as a Base64 data URI or generates a cache-busting blob URL embedded in the <script> block, so it is not directly visible in the HTML source tree (camouflaging it from DOM scrapers).
 
-Breadcrumb: A bottom or top horizontal trail displaying the exact path from the Root to the currently selected element (e.g., Home Section > Hero Row > Left Column > CTA Button). Clicking any segment navigates and selects that ancestor node instantly.
+Render Logic (Canvas/Video DOM):
 
-4. ASSET MANAGEMENT (Media Library & Optimization)
-Objective: Evolve from simple file uploading to a centralized, cloud-based, high-performance asset pipeline integrated with the existing Metadata Cleaner.
+Render the Disguise Media prominently on the screen.
 
-Technical Requirements & Architecture:
+Overlay a high-z-index, fully opaque HTML <div> covering the screen, containing an enticing "Click to Load Content" button.
 
-Centralized Media Repository: Create a server-side service that abstracts cloud storage (AWS S3 / Cloudinary). Implement a media_library database table mapping asset_id, user_id, original_filename, cloud_key, mime_type, size, and upload_timestamp. The frontend must pull this library via a paginated API to render a searchable grid modal.
+Upon onClick (human interaction):
 
-Automated Optimization Pipeline: Upon upload, trigger a server-side transformation that:
+The <div> fades out (display: none).
 
-Generates multiple derivative sizes (Thumbnail, Web-optimized, High-Res).
+The Real Media (<video> or <img>) spawns in fullscreen/maximized view and autoplays.
 
-Converts images to next-gen formats (WebP/AVIF) based on browser support, storing them alongside the original.
+Bot Deception: The generated HTML must include a <noscript> tag and a meta tag for referrer/user-agent detection. If navigator.webdriver or a bot header is detected, the Real Media is never decoded, and the user is redirected to the safe_url.
 
-Automatically extracts focal points (using face detection or dominant color analysis) to ensure smart cropping.
+5. Metadata Sanitization (Integration with Cleaner)
+Crucial Step: Before returning the final output, the generated file (Video or HTML ZIP) must pass through the existing cleanMetadata() function (using exiftool) to strip GPS, camera models, software signatures, and timestamps from the newly generated video file. This prevents forensic analysis of the editing pipeline.
 
-Lazy Loading & Srcset Generation: When the user inserts an image into the canvas, the rendering engine must automatically populate the srcset and sizes attributes in the generated HTML output, derived from the derivative sizes stored in the cloud. The AST must store a reference to the cloud_key and the alt text, but not the raw Base64 data.
+6. Frontend Preview & UI Acceptance Criteria
+Preview Modal: After processing, display a split-screen preview:
 
-Native Image Editor (Modal): On image selection, provide a "Crop/Edit" action that opens a lightweight modal. Integrate a client-side image manipulation library (e.g., react-easy-crop) to allow users to crop, rotate, or adjust brightness/contrast. Upon confirmation, the client uploads the new blob to the server, overwrites the existing cloud object, and updates the AST reference (triggering a preview refresh).
+Left side: The raw "Disguise Media".
 
-5. INTERACTIVITY & LOGIC (The Conversion Differentiator)
-Objective: Embed dynamic marketing logic directly into the page structure to boost conversion without external scripts.
+Right side: The final "Camouflaged Output".
 
-Technical Requirements & Architecture:
+Download Options:
 
-Conditional Visibility Engine (Rules): Augment the AST with a conditions array at the element level. Conditions are logic statements (e.g., { "type": "utm_param", "key": "source", "operator": "equals", "value": "facebook" }). The frontend rendering engine must evaluate these conditions against the current window.location or a mock environment variable object. If false, the element is rendered with display: none and its DOM footprint removed (not just hidden) to prevent bot detection.
+Strategy 1: Direct .mp4 download.
 
-Dynamic Variable Placeholders (Mustache): Implement a parsing system that scans text content and HTML attributes for patterns like {{ user.name }} or {{ utm_campaign }}. During page preview, a JavaScript runtime replaces these with values from a global MetaSpyContext object (which reads URL params, local storage, or user session). The editor must provide an autocomplete dropdown when the user types {{ inside a text block.
+Strategy 2: Download as a .zip containing the index.html + assets (similar to the Hosting feature).
 
-Native Countdown Timer Widget: Build a dedicated custom element (Widget). The AST must store its configuration: { "endDateTime": "ISO-String", "timezone": "America/Sao_Paulo", "expiryAction": "hide_element" }. The rendering engine uses requestAnimationFrame to calculate the time difference, updating the DOM in real-time. It must handle server-side timezone offsets to ensure consistency for global audiences.
+Instructions: Display a tooltip/copy block stating: "Upload this video to your ad manager. The AI scanner will only see the safe thumbnail, but users will see the full offer after 2 seconds."
 
-6. FORM BUILDER & LEAD CAPTURE
-Objective: Transform static pages into functional marketing funnels by embedding smart, integrated forms.
+7. Non-Negotiable Acceptance Criteria
+Zero PII in Metadata: The generated media must pass exiftool inspection with no trace of the original real_media filename or software.
 
-Technical Requirements & Architecture:
+Thumbnail Success: When a URL or file path of the output is scraped by an external link preview tool (e.g., Facebook Debugger, Telegram Bot), it must display the "Disguise Media" thumbnail, not the "Real Media".
 
-Visual Form Constructor: Introduce a dedicated "Form" Element Type. Inside the canvas, a form acts as a drop-zone container where users can drag specific sub-elements: Input (Text), Input (Email), Input (Tel), Textarea, Select, and Checkbox. The AST must store the form's configuration, including an array of fields, each with label, placeholder, required, and validation_rules.
+Time-Based Spoof (Strategy 1): The generated video duration must be at least 3 seconds. The first 2 seconds must strictly feature the Disguise Media (static or animated).
 
-Native Integration Hub (Actions): In the form settings panel, allow the user to select an "Action Type" from a dropdown:
+Interaction (Strategy 2): The HTML must load the Disguise Media by default. The Real Media must only load DOM elements after a click event, ensuring bot crawlers never initiate the download.
 
-Webhook (Custom): User inputs a URL; on submission, the client sends a POST request with the form data.
+Error Handling: If the user uploads a Video as Real and an Image as Disguise, the Image must be stretched/padded to fit the video aspect ratio during the intro (using ffmpeg scale/pad filters). If dimensions mismatch, do not fail; pad with black bars.
 
-Internal Database: Store leads directly in the MetaSpy leads table, visible in a new admin dashboard sub-section.
-
-Email Relay: Send form data via SMTP (using a server-side mailer) directly to the user's configured email address.
-
-CRM Connectors: Pre-configured auth flows for ActiveCampaign, Mailchimp, or HubSpot (Store OAuth refresh tokens encrypted in the database).
-
-Real-Time Validation & Masking (Client-Side): The builder must generate a JavaScript validation schema derived from the AST. For the Tel field, implement an input mask library to handle country codes and phone formatting (e.g., +55 (11) 99999-9999). For emails, enforce RFC-compliant regex validation. Error states must display immediately below the invalid field without requiring page reload.
-
-7. CODE OUTPUT & PERFORMANCE ENGINEERING
-Objective: Generate production-ready, ultra-lightweight, and obfuscated code that passes Core Web Vitals and Meta's ad policies.
-
-Technical Requirements & Architecture:
-
-AST to HTML Compiler: Build a server-side rendering (SSR) service that traverses the AST depth-first and emits pure HTML strings, integrating the responsive styles as inline CSS within <style> tags (for critical path) or as inline style attributes. The compiler must use streaming to handle large pages.
-
-On-the-fly Minification Pipeline: Chunk the generated HTML, extracted CSS, and inline JS through a minification layer:
-
-Use html-minifier-terser to strip comments, remove optional tags, and minify URLs.
-
-Use cssnano to collapse CSS rules and remove unused styles by cross-referencing the AST structure (PurgeCSS logic).
-
-Use terser to mangle variable names and remove whitespace from any inline JavaScript.
-
-Asset Preloading & Font Optimization: When a custom Google Font is selected in the typography panel, the compiler must inject preconnect tags for the Google Fonts domain and generate the exact @font-face rules with font-display: swap to prevent layout shifts (CLS). The system must hash the font list to generate a unique cache key.
-
-Multi-Format Export (ZIP Assembly): Implement a download endpoint that generates a .zip archive containing:
-
-index.html (with all critical CSS inlined for instant rendering).
-style.css (asynchronous, non-critical CSS).
-scripts.js (all behavioral JS, including form handling and cloaking logic).
-assets/ (downloaded images/videos referenced in the HTML, organized by folder).
-The server must utilize a streaming ZIP library to package these files on the fly, preventing memory overload on the Render instance.
-
-BACKEND MVP: ERROR PREVENTION, DELIVERABLES & ACCEPTANCE CRITERIA
-For the 7 Pillars of the MetaSpy Page Builder
-PRELIMINARY NON-FUNCTIONAL REQUIREMENTS (NFRS) – MANDATORY FOR ALL MODULES
-These technical constraints apply to every single backend implementation listed below:
-
-Atomic Operations: Every write operation (save, update, delete) must be wrapped in a database transaction (BEGIN...COMMIT). If any step fails, the entire transaction must roll back to prevent partial state corruption.
-
-Input Sanitization & Schema Validation: All incoming JSON payloads must be strictly validated against a predefined Zod or JSON Schema. Reject any extra fields, malformed types, or deeply nested structures exceeding the maximum depth (e.g., 15 levels).
-
-Idempotency Keys: For mutation endpoints (POST, PUT, DELETE), enforce idempotency using a client-generated Idempotency-Key header stored in a Redis cache or database table for 24 hours. This prevents duplicate processing due to network retries.
-
-Optimistic Locking (Version Control): Every pages table must contain a version integer field. All UPDATE operations must include WHERE version = :currentVersion. If the version mismatches, the server must return a 409 Conflict status with the latest server-side version, forcing the client to merge changes.
-
-Graceful Degradation & Fallbacks: External services (S3, Google Fonts API, CRM webhooks) must have timeouts (e.g., 8 seconds) and circuit-breaker logic. If an external service fails, the core operation (e.g., page save) must still succeed, returning a 202 Accepted with a warning header for the asynchronous task.
-
-Logging & Observability: Every critical action (AST save, S3 upload, webhook dispatch, ZIP generation) must log a structured JSON object containing userId, pageId, action, duration_ms, and error_stack (if applicable) to a centralized logging stream for debugging.
-
-PILLAR 1: DATA MODEL (AST & VERSIONING)
-MVP Deliverable:
-
-API endpoints to create, retrieve, update, and publish page drafts.
-
-Full version history (Undo/Redo snapshots) stored and retrievable.
-
-Database Schema Adjustments:
-
-pages table: id, user_id, draft_ast (JSONB), published_ast (JSONB), version (INT), last_saved_at (TIMESTAMP).
-
-page_history table: id, page_id, ast_snapshot (JSONB), created_at (TIMESTAMP), snapshot_hash (TEXT for deduplication).
-
-Create a partial index on page_history where created_at > NOW() - INTERVAL '30 days' to manage storage growth.
-
-Critical Error Prevention Mechanisms:
-
-AST Depth & Circular Reference Guard: Upon every save, execute a recursive traversal of the AST. If depth exceeds 15 levels or if an elementId references itself within its children, immediately reject with a 422 Unprocessable Entity and a descriptive error path.
-
-Draft vs. Published Isolation: The PUT /api/pages/:id/publish endpoint must atomically copy draft_ast to published_ast only if the version field matches the client's provided version. If the draft is empty or invalid, return 400 Bad Request.
-
-Storage Optimization: When generating a new history snapshot, compute a SHA-256 hash of the draft_ast. If the hash matches the previous snapshot, skip the database insert entirely to prevent history spam. Prune history older than 30 days using a scheduled background worker (cron).
-
-API Contracts (Strict):
-
-GET /api/pages/:id → Returns { id, draftAst, publishedAst, version }
-
-PUT /api/pages/:id/draft → Accepts { ast: {...} }, validates schema, performs optimistic lock check, returns { version: newVersion }.
-
-POST /api/pages/:id/publish → Requires { version } in body, performs lock check, atomically copies draft_ast to published_ast.
-
-GET /api/pages/:id/history → Accepts ?limit=20&offset=0, returns paginated snapshots with timestamps.
-
-Acceptance Criteria (MVP Checklist):
-
-Concurrent edits to the same page from two different browsers return a 409 Conflict error, preventing data loss.
-
-Saving an AST with a missing type property on any node returns a 400 with a specific validation path (e.g., children[0].type is required).
-
-Publishing a page updates the published_ast and increments version by exactly 1.
-
-History endpoint returns the correct snapshots in descending chronological order.
-
-PILLAR 2: COMPONENT SYSTEM (RESPONSIVE STORAGE)
-MVP Deliverable:
-
-Store responsive styles (desktop, tablet, mobile) for every element in the AST without duplication.
-
-Database Schema Adjustments:
-
-No additional tables needed. The draft_ast JSONB schema must enforce the styles structure at every node: { "desktop": {...}, "tablet": {...}, "mobile": {...} }.
-
-Critical Error Prevention Mechanisms:
-
-CSS Injection Sanitization: All color, size, and unit values (e.g., padding, font-size) must pass a regex whitelist: only allow CSS-safe characters ([a-zA-Z0-9#.%pxremvhvwem]). Reject any payload containing expression, url(, javascript:, or data: to prevent CSS-based XSS.
-
-Property Normalization: Map user-friendly values to standard CSS. For example, if the client sends margin: "10px 20px", the backend must convert it to { top: "10px", right: "20px", bottom: "10px", left: "20px" } before storing, ensuring consistency.
-
-Breakpoint Cascade Inheritance: If an element has no mobile object, the compiler (Pillar 7) must inherit desktop values, but the backend must not auto-fill this. Storage must strictly reflect the user's explicit choices.
-
-API Contracts (Strict):
-
-No dedicated endpoints for styles; they are fully integrated into the PUT /api/pages/:id/draft payload.
-
-Acceptance Criteria (MVP Checklist):
-
-A mobile style object can be saved independently without affecting the desktop or tablet values.
-
-Sending an invalid CSS unit (e.g., font-size: "abc") is rejected with a 422 error detailing the invalid field path.
-
-The stored JSONB retains the exact key structure (desktop/tablet/mobile) for every element.
-
-PILLAR 3: VISUAL EDITING (BATCH UPDATES & STRUCTURAL REORDERING)
-MVP Deliverable:
-
-Batch update endpoint that modifies multiple elements in a single atomic request.
-
-Endpoint to reorder elements within the AST (move children between siblings).
-
-Critical Error Prevention Mechanisms:
-
-Batch Update Atomicity: The client sends { updates: [ { id, path: "styles.color", value: "red" } ] }. The backend must resolve each path using a JSON path parser (e.g., json-ptr). If any path fails to resolve, the entire batch update must be rejected (rollback) to prevent partial state changes.
-
-Parent-Child Constraint on Reorder: When receiving a move operation (e.g., moving Element A under Element B), the backend must validate that Element B is not a descendant of Element A. If a circular movement is detected (which would break the tree), return 422 with "Cannot move a node into its own descendant".
-
-Deep Clone on Updates: To prevent unintended reference sharing in the JSONB object, use jsonb_set at the database level or deep-clone the entire AST in the application layer before applying mutations.
-
-API Contracts (Strict):
-
-PATCH /api/pages/:id/batch → Accepts { version, updates: [ { id, path, value } ], reorders: [ { id, newParentId, index } ] }. Returns updated AST and new version.
-
-Acceptance Criteria (MVP Checklist):
-
-Batch updating 50+ elements in one request succeeds or fails entirely; no partial writes occur.
-
-Moving an element to its own child returns a 422 error.
-
-Reorder operation updates the array index correctly, preserving all sibling nodes.
-
-PILLAR 4: ASSET MANAGEMENT (MEDIA LIBRARY & OPTIMIZATION)
-MVP Deliverable:
-
-Presigned URL uploads to S3/Cloudinary.
-
-Centralized media library API.
-
-Automated thumbnail and WebP/AVIF generation (async).
-
-Cleanup service for orphaned assets.
-
-Database Schema Adjustments:
-
-media_assets table: id, user_id, original_filename, mime_type, size_bytes, s3_key_original, s3_key_webp, s3_key_thumbnail, uploaded_at, last_used_at, is_archived.
-
-Critical Error Prevention Mechanisms:
-
-Multipart Upload Validation: When the client requests a presigned URL via POST /api/media/upload-url, the backend must generate a strict policy limiting the file size (30MB image, 200MB video) and the exact content type (e.g., image/jpeg). If the client uploads a mismatched file type to the presigned URL, S3 rejects it automatically, but the backend must also validate the Content-Type header in the completion callback.
-
-Asset-Ghost Prevention: When a user inserts an image into the AST, the frontend must send the media_asset.id. The PUT /api/pages/:id/draft endpoint must cross-reference all referenced media IDs against the media_assets table. If any ID is missing, reject the save with "Referenced asset not found: [id]".
-
-Orphan Cleanup (Cron Worker): Schedule a weekly background task that queries all pages tables for referenced asset IDs. Compile a set of actively used IDs. Query media_assets and identify assets with last_used_at < NOW() - INTERVAL '90 days' and not in the active set. Mark them as is_archived and delete the physical S3 objects (using batch deletion) 7 days later to allow manual restoration if needed.
-
-API Contracts (Strict):
-
-POST /api/media/upload-url → Accepts { filename, mimeType }, returns { uploadUrl, key, assetId }.
-
-POST /api/media/upload-complete → Accepts { assetId, key }, updates DB to uploaded_at = NOW().
-
-GET /api/media/library → Accepts ?page=1&limit=20&search=keyword, returns paginated list of user assets.
-
-Acceptance Criteria (MVP Checklist):
-
-An uploaded image generates a WebP derivative and a 150x150 thumbnail in the cloud within 5 seconds (async queue).
-
-Saving a page that references an asset_id that does not exist returns a 422 error with the missing ID.
-
-Deleting an asset from the library fails if it is currently referenced by any published page (DB constraint check).
-
-PILLAR 5: INTERACTIVITY & LOGIC (CONDITIONALS & VARIABLES)
-MVP Deliverable:
-
-Store conditional visibility rules and dynamic variable placeholders (e.g., {{utm_source}}) inside the AST.
-
-Backend endpoint to evaluate the page AST against a mock context for testing.
-
-Critical Error Prevention Mechanisms:
-
-Rule Engine Sandboxing: Conditions are stored as JSON (e.g., { "type": "utm_param", "key": "source", "operator": "eq", "value": "facebook" }). The backend must never evaluate these rules using eval() or new Function(). Instead, the backend only stores them; evaluation occurs strictly client-side. However, the backend must validate the operator enum against a whitelist (eq, neq, contains, gt, lt, matches) and reject unknown operators with a 422.
-
-Variable Escaping: For dynamic placeholders ({{variable}}), the backend must escape any HTML characters during SSR compilation (Pillar 7) to prevent injection. If a placeholder resolves to a malicious <script> tag, the output must escape it to &lt;script&gt;.
-
-Context Isolation: Do not store user session tokens or sensitive PII inside the AST. The AST should only store placeholder keys (e.g., firstName, utmSource). The actual values (session data, URL params) are resolved by the client-side runtime.
-
-API Contracts (Strict):
-
-POST /api/pages/:id/validate-logic → Accepts { version, mockContext: { utm_source: "google", user: { name: "Test" } } }. Returns a list of elements where conditions evaluate to false (visible issues). This endpoint is for debugging only.
-
-Acceptance Criteria (MVP Checklist):
-
-Storing a condition with an unsupported operator (e.g., "operator": "maybe") fails with a validation error.
-
-The mock validation endpoint correctly returns a list of elements hidden under specific mock contexts.
-
-The AST retains the exact conditional payload without corruption over multiple save cycles.
-
-PILLAR 6: FORM BUILDER & LEAD CAPTURE
-MVP Deliverable:
-
-Store form configurations (fields, validation rules) inside the AST.
-
-Submission endpoint that routes leads to internal DB and external Webhooks.
-
-Basic retry mechanism for webhook failures.
-
-Database Schema Adjustments:
-
-form_submissions table: id, page_id, user_id (owner), form_data (JSONB), status (pending/success/failed), created_at.
-
-webhook_failures table: id, submission_id, attempt_count, next_retry_at, last_error.
-
-Critical Error Prevention Mechanisms:
-
-Rate Limiting per Form: Implement a sliding window rate limiter keyed by form_id and client_ip to prevent spam. E.g., max 5 submissions per minute per IP.
-
-Webhook Circuit Breaker: When a webhook endpoint fails 5 times in a row, mark it as unhealthy in a Redis cache and stop dispatching for 5 minutes. Return 202 Accepted to the client (storing the lead locally) while the circuit is open.
-
-Retry with Exponential Backoff: Store failed webhook delivery attempts in the webhook_failures table. A background worker (using node-cron or BullMQ) retries them with exponential backoff (1min, 5min, 15min, 1hour, 4hours). After 5 retries, mark the submission as failed and log the final error.
-
-PII Masking in Logs: Logs capturing form_data must mask sensitive fields (passwords, credit cards) by truncating or replacing with [REDACTED] based on field name patterns (e.g., matching password, cc, cvv).
-
-API Contracts (Strict):
-
-POST /api/forms/:pageId/submit → Accepts { formData: {...} }, validates against the AST's validation rules, returns { submissionId, status: "accepted" }.
-
-GET /api/forms/:pageId/submissions → (Protected owner-only) Accepts ?page=1&limit=20, returns list of stored leads.
-
-Acceptance Criteria (MVP Checklist):
-
-Submitting a form with invalid email format returns a 400 with "field_email: Invalid email format".
-
-If the configured webhook URL returns a 500 status, the submission is stored locally and retried asynchronously.
-
-Rate limit blocks the 6th submission from the same IP within 1 minute with a 429 Too Many Requests header.
-
-PILLAR 7: CODE OUTPUT & PERFORMANCE (SSR, MINIFICATION, EXPORT)
-MVP Deliverable:
-
-Server-side rendering (SSR) endpoint that compiles the AST into a complete HTML string.
-
-Minification pipeline (HTML, CSS, JS) embedded in the compilation process.
-
-ZIP archive streaming endpoint containing index.html, style.css, scripts.js, and assets/.
-
-Critical Error Prevention Mechanisms:
-
-Streaming vs. Memory Buffering: The GET /api/pages/:id/export endpoint must use stream API (Node.js native PassThrough streams) to pipe the ZIP directly to res. This prevents the server from holding the entire ZIP file in memory, which would cause Out-Of-Memory (OOM) errors on Render for large pages (e.g., 200MB of assets). Use archiver with { highWaterMark: 1024 * 1024 }.
-
-Asset Path Abstraction: The compiler must replace all asset URLs in the AST with either absolute S3 presigned URLs or relative local paths (assets/image.jpg) depending on the export mode. The ZIP compilation must download the required assets from S3 into the assets/ folder. Implement a timeout guard (15 seconds per asset) to skip stuck downloads rather than blocking the entire export.
-
-CSS PurgeCss Safeguard: When running PurgeCSS to remove unused styles, backup the original CSS. If PurgeCSS reduces the file by more than 90% (suspicious), the backend must automatically fallback to the un-purged version and log a warning. This prevents accidental removal of dynamically generated classes.
-
-Minification Failure Isolation: If CSS minification (cssnano) fails due to a syntax error, the backend must catch the error, log it, and emit the raw CSS instead of failing the entire request. The index.html should still be generated.
-
-Cache Invalidation: Add a ETag header on the compiled HTML (hash of the AST + version). If the client requests the same version, return 304 Not Modified to reduce server load.
-
-API Contracts (Strict):
-
-GET /api/pages/:id/render → Accepts ?minify=true&format=inline|external. Returns text/html with appropriate Content-Type.
-
-GET /api/pages/:id/export → Streams a .zip file with Content-Disposition: attachment; filename="page-export.zip".
-
-Acceptance Criteria (MVP Checklist):
-
-Exporting a 20MB page (with videos) streams the ZIP without spiking server memory usage above 200MB.
-
-Minified CSS reduces output size by at least 30% (validated by integration tests).
-
-If PurgeCSS fails, the exported file remains valid (fallback to raw CSS) and an error is logged.
-
-Concurrent export requests from 10 different users do not block each other (handled via asynchronous streaming).
-
+Edge Case: If real_media and disguise_media are exactly the same file, skip processing and return the original file to save server resources.
