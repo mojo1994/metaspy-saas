@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Check, Minus, Star } from '@phosphor-icons/react'
+import { Check, Minus } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
   { label: 'Minerador de Anúncios', ok: true },
@@ -30,12 +30,6 @@ const ALL_FEATURES = [
   'Hospedar Páginas',
   'Cloacker',
   'Removedor de Metadados',
-]
-
-const DEPOIMENTOS = [
-  { nome: 'Rafael M.', cargo: 'Afiliado, 2 anos', texto: 'O MetaSpy mudou completamente minha forma de analisar ofertas. Em 3 meses passei de R$3k para R$15k/mês.' },
-  { nome: 'Camila S.', cargo: 'Media Buyer', texto: 'O clonador + editor é absurdo de bom. Editar página em tempo real direto no canvas é outro nível.' },
-  { nome: 'Lucas O.', cargo: 'Diretor de Tráfego', texto: 'Uso o cloacker em todas as campanhas. Zero denúncias desde que comecei a usar. Vale cada centavo.' },
 ]
 
 const DEPO_IMAGENS = [
@@ -398,7 +392,7 @@ export default function Planos() {
       </section>
 
       <section className="planos-depoimentos" data-reveal style={revealStyle(160)}>
-        <h2>Quem usa, recomenda</h2>
+        <h2>conheca os top players do mercado que escalam com a gente</h2>
         <div className="planos-depo-grid-fotos">
           {DEPO_IMAGENS.map((d, index) => (
             <div key={d.handle} className="planos-depo-card-foto" data-reveal style={revealStyle(index * 60)}>
@@ -411,24 +405,6 @@ export default function Planos() {
               <div className="planos-depo-info">
                 <strong className="planos-depo-handle">{d.handle}</strong>
                 <span className="planos-depo-idade">{d.idade}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="planos-depoimentos-grid">
-          {DEPOIMENTOS.map((d, index) => (
-            <div key={d.nome} className="planos-depoimento-card" data-reveal style={revealStyle(index * 80)}>
-              <div className="planos-depoimento-stars" aria-hidden="true">
-                <Star size={14} weight="fill" />
-                <Star size={14} weight="fill" />
-                <Star size={14} weight="fill" />
-                <Star size={14} weight="fill" />
-                <Star size={14} weight="fill" />
-              </div>
-              <p className="planos-depoimento-texto">"{d.texto}"</p>
-              <div className="planos-depoimento-autor">
-                <strong>{d.nome}</strong>
-                <span>{d.cargo}</span>
               </div>
             </div>
           ))}
