@@ -200,7 +200,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
   if (!chave) return null
   const cacheado = cacheImagensPreview.get(chave)
   if (cacheado) return cacheado
-  // Strategy 1: Cloudflare Worker + linkUrl OG fallback + screenshot (timeout 35s)
+  // Strategy 1: Cloudflare Worker (scrape rapido + linkUrl OG, timeout 15s)
   try {
     const body: Record<string, string> = { snapshotUrl: anuncio.urlBiblioteca }
     if (anuncio.urlDestino) body.linkUrl = anuncio.urlDestino
@@ -209,7 +209,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(35000)
+      signal: AbortSignal.timeout(15000)
     })
     if (resp.ok) {
       const data = await resp.json()
@@ -255,7 +255,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
 
 function urlImagemProxy(url: string): string {
   if (!url) return url
-  if (url.includes('fbcdn.net') || url.includes('facebook.com')) {
+  if (url.includes('fbcdn.net') || url.includes('facebook.com') || url.includes('fbsbx.com')) {
     return `/api/image-proxy?url=${encodeURIComponent(url)}`
   }
   return url

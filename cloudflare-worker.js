@@ -12,7 +12,7 @@ const EXTRA_HEADERS = {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url)
     const path = url.pathname
 
@@ -25,13 +25,13 @@ export default {
 
         let imageUrl = null
 
-        // Strategy 1: Scrape OG meta tags from the snapshot page
+        // Strategy 1: Scrape OG meta tags from the snapshot page (timeout rapido 10s)
         try {
           const scraped = await env.BROWSER.quickAction('scrape', {
             url: snapshotUrl,
             userAgent: BROWSER_UA,
             setExtraHTTPHeaders: EXTRA_HEADERS,
-            gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
+            gotoOptions: { waitUntil: 'load', timeout: 10000 },
             bestAttempt: true,
             elements: [
               { selector: "meta[property='og:image']" },
@@ -45,16 +45,16 @@ export default {
           }
         } catch (e) { console.error('[worker] Strat1 scrape falhou:', e?.message || e) }
 
-        // Strategy 2: Scrape OG image from the landing page (linkUrl)
+        // Strategy 2: HTTP fetch direto da landing page (sem Browser Run, rapido)
         if (!imageUrl && linkUrl) {
           try {
-            // First try simple HTTP fetch (faster, works if the page is static)
             const resp = await fetch(linkUrl, {
               headers: {
                 'User-Agent': BROWSER_UA,
                 'Accept': 'text/html',
                 'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
               },
+              signal: AbortSignal.timeout(5000),
             })
             if (resp.ok) {
               const html = await resp.text()
@@ -67,55 +67,40 @@ export default {
               }
             }
           } catch (e) { console.error('[worker] Strat2 HTTP fetch falhou:', e?.message || e) }
-          // Fall back to Browser Run for JS-heavy pages
-          if (!imageUrl) {
-            try {
-              const scraped = await env.BROWSER.quickAction('scrape', {
-                url: linkUrl,
-                userAgent: BROWSER_UA,
-                gotoOptions: { waitUntil: 'load', timeout: 15000 },
-                bestAttempt: true,
-                setJavaScriptEnabled: false,
-                elements: [
-                  { selector: "meta[property='og:image']" },
-                  { selector: "meta[name='twitter:image']" },
-                ],
-              })
-              for (const item of scraped) {
-                const val = item.results?.[0]?.attributes?.find(a => a.name === 'content')?.value
-                if (val && /^https?:\/\//.test(val)) { imageUrl = val; break }
-              }
-            } catch (e) { console.error('[worker] Strat2 Browser Run scrape falhou:', e?.message || e) }
-          }
         }
 
-        // Strategy 3: Screenshot da pagina render_ad via Browser Run
+        // Retorna resposta IMEDIATA com o que temos (ou null)
+        // Screenshot rodará em background via waitUntil
+        const response = new Response(JSON.stringify({ imageUrl }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+
+        // Background: screenshot via Browser Run (se nao encontrou nada)
         if (!imageUrl && snapshotUrl) {
-          try {
-            const ss = await env.BROWSER.quickAction('screenshot', {
-              url: snapshotUrl,
-              userAgent: BROWSER_UA,
-              setExtraHTTPHeaders: EXTRA_HEADERS,
-              gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
-              bestAttempt: true,
-              viewport: { width: 800, height: 600 },
-              screenshotOptions: { type: 'jpeg', quality: 80 },
-            })
-            if (ss?.screenshot) {
-              const adId = new URL(snapshotUrl).searchParams.get('id') || Date.now().toString()
-              const filename = `${adId}_${Date.now()}.jpg`
-              const key = `screenshots/${filename}`
-              const binary = Uint8Array.from(atob(ss.screenshot), c => c.charCodeAt(0))
-              await env.METASPY_BUCKET.put(key, binary, {
-                httpMetadata: { contentType: 'image/jpeg' },
+          ctx.waitUntil((async () => {
+            try {
+              const ss = await env.BROWSER.quickAction('screenshot', {
+                url: snapshotUrl,
+                userAgent: BROWSER_UA,
+                setExtraHTTPHeaders: EXTRA_HEADERS,
+                gotoOptions: { waitUntil: 'networkidle2', timeout: 20000 },
+                bestAttempt: true,
+                viewport: { width: 800, height: 600 },
+                screenshotOptions: { type: 'jpeg', quality: 80 },
               })
-              const baseUrl = `${url.protocol}//${url.host}`
-              imageUrl = `${baseUrl}/api/ad-screenshot/${filename}`
-            }
-          } catch (e) { console.error('[worker] Strat3 screenshot falhou:', e?.message || e) }
+              if (ss?.screenshot) {
+                const adId = new URL(snapshotUrl).searchParams.get('id') || Date.now().toString()
+                const filename = `${adId}_${Date.now()}.jpg`
+                const key = `screenshots/${filename}`
+                const binary = Uint8Array.from(atob(ss.screenshot), c => c.charCodeAt(0))
+                await env.METASPY_BUCKET.put(key, binary, {
+                  httpMetadata: { contentType: 'image/jpeg' },
+                })
+                console.log('[worker] Strat3 screenshot salva em R2:', key)
+              }
+            } catch (e) { console.error('[worker] Strat3 screenshot bg falhou:', e?.message || e) }
+          })())
         }
 
-        return new Response(JSON.stringify({ imageUrl }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+        return response
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
       }

@@ -1122,7 +1122,7 @@ async function getPageProfilePic(pageId, adId) {
 }
 
 // ─── Image Proxy (bypass CDN blocking via browser fingerprint) ──
-const DOMINIOS_PERMITIDOS = ['.fbcdn.net', '.facebook.com', '.meta.com']
+const DOMINIOS_PERMITIDOS = ['.fbcdn.net', '.facebook.com', '.meta.com', '.fbsbx.com']
 
 function proxyImagemHandler(req, res) {
   const { url } = req.query
