@@ -6,7 +6,7 @@ if (process.env.REDIS_URL) {
   try {
     redis = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: null,
-      enableReadyCheck: false,
+      enableReadyCheck: true,
       retryStrategy(times) {
         const delay = Math.min(times * 200, 2000)
         return delay
