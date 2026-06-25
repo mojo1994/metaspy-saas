@@ -2363,6 +2363,69 @@ app.post('/api/pages/upload', authMiddleware, async (req, res, next) => {
   }
 })
 
+// List hosted pages for the current user
+app.get('/api/pages', authMiddleware, async (req, res) => {
+  try {
+    const rows = await query(`
+      SELECT id, slug, title, type, published, cf_url, created_at, updated_at
+      FROM pages WHERE user_id = $1 AND type = 'hosted'
+      ORDER BY created_at DESC
+    `, [req.user.id])
+    const list = (rows || []).map(r => ({
+      id: r.id,
+      slug: r.slug,
+      title: r.title,
+      published: !!r.published,
+      cfUrl: r.cf_url,
+      url: r.published ? `https://centralspyads.netlify.app/p/${r.slug}` : null,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }))
+    res.json(list)
+  } catch (err) {
+    logger.error({ err }, 'Erro ao listar paginas')
+    res.status(500).json({ error: 'Erro ao listar paginas.' })
+  }
+})
+
+// Delete a hosted page
+app.delete('/api/pages/:id', authMiddleware, async (req, res) => {
+  try {
+    const page = await one('SELECT id, slug, user_id FROM pages WHERE id = $1 AND type = $2', [req.params.id, 'hosted'])
+    if (!page) return res.status(404).json({ error: 'Pagina nao encontrada.' })
+    if (page.user_id !== req.user.id) return res.status(403).json({ error: 'Acesso negado.' })
+
+    // Remove from R2
+    if (USE_CF_STORAGE) {
+      try { await deletePageFromR2(page.slug) } catch {}
+    }
+
+    // Remove from filesystem
+    try {
+      const pageDir = join(PAGES_DIR, page.slug)
+      if (existsSync(pageDir)) {
+        const rmDir = (dir) => {
+          for (const entry of readdirSync(dir)) {
+            const full = join(dir, entry)
+            if (statSync(full).isDirectory()) rmDir(full)
+            else unlinkSync(full)
+          }
+          try { unlinkSync(dir) } catch {}
+        }
+        rmDir(pageDir)
+      }
+    } catch {}
+
+    // Remove from DB
+    await run('DELETE FROM pages WHERE id = $1', [page.id])
+
+    res.json({ success: true })
+  } catch (err) {
+    logger.error({ err }, 'Erro ao deletar pagina')
+    res.status(500).json({ error: 'Erro ao deletar pagina.' })
+  }
+})
+
 async function servePage(slug, fileName, res) {
   const mimeType = mime.lookup(fileName) || 'application/octet-stream'
   // Try R2 first
