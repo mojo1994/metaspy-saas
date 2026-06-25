@@ -179,6 +179,9 @@ export default function Dashboard() {
           <NavLink to="/dashboard/cleaner" onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             Remover Metadados
           </NavLink>
+          <NavLink to="/dashboard/quizzes" onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            Quiz Builder
+          </NavLink>
         </nav>
 
         <div className="sidebar-section-label">Conta</div>
