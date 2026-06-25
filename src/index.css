@@ -744,25 +744,7 @@ select {
   border-color: var(--border-hover);
   box-shadow: var(--shadow-glow);
 }
-.ad-card.destaque { animation: neonPulse 2.5s ease-in-out infinite; }
-.ad-card.destaque .card-flag {
-  position: absolute;
-  top: -7px;
-  right: -7px;
-  background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 8px 2px 6px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  z-index: 2;
-  box-shadow: 0 2px 10px rgba(168,85,247,0.35);
-  white-space: nowrap;
-  line-height: 1.4;
-}
+
 .ad-thumb {
   width: 72px;
   height: 72px;
@@ -1055,11 +1037,6 @@ select {
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
 }
-@keyframes neonPulse {
-  0%, 100% { box-shadow: 0 0 4px rgba(168,85,247,0.2), 0 0 12px rgba(168,85,247,0.08); border-color: rgba(168,85,247,0.3); }
-  50% { box-shadow: 0 0 10px rgba(168,85,247,0.4), 0 0 24px rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.6); }
-}
-
 /* ─── PAGE EDITOR ─── */
 .page-editor { display: flex; flex-direction: column; height: calc(100vh - 120px); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); background: var(--bg-primary); }
 .pe-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); gap: 8px; flex-shrink: 0; }
@@ -1540,7 +1517,7 @@ select {
   background: var(--bg-card-hover);
 }
 
-/* â”€â”€â”€ MODERNIZATION LAYER â”€â”€â”€ */
+/* ─── MODERNIZATION LAYER ─── */
 :root {
   --space-1: 4px;
   --space-2: 8px;
@@ -2096,7 +2073,7 @@ button:active,
   }
 }
 
-/* â”€â”€â”€ PLANOS PAGE OVERRIDES â”€â”€â”€ */
+/* ─── PLANOS PAGE OVERRIDES ─── */
 .planos-page {
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-display: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -2847,7 +2824,7 @@ button:active,
   }
 }
 
-/* â”€â”€â”€ LANDING PAGE OVERRIDES â”€â”€â”€ */
+/* ─── LANDING PAGE OVERRIDES ─── */
 .landing {
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-display: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -2927,12 +2904,13 @@ button:active,
   margin: 0 auto;
   padding: 88px 24px 54px;
   display: flex;
-  align-items: flex-start;
-  text-align: left;
+  align-items: center;
+  text-align: center;
 }
 
 .landing-hero-inner {
   max-width: 860px;
+  margin: 0 auto;
 }
 
 .landing-hero-badge {
@@ -2986,6 +2964,7 @@ button:active,
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  justify-content: center;
 }
 
 .landing-cta-btn,
@@ -3032,6 +3011,7 @@ button:active,
   min-height: 0;
   align-self: stretch;
   overflow: visible;
+  text-align: center;
 }
 
 .landing-feature-card h3 {
@@ -3087,7 +3067,7 @@ button:active,
   max-width: 1180px;
   margin: 0 auto;
   padding: 14px 24px 82px;
-  text-align: left;
+  text-align: center;
 }
 
 .landing-planos h2 {
@@ -3288,7 +3268,7 @@ button:active,
   }
 }
 
-/* â”€â”€â”€ APP SHELL OVERRIDES â”€â”€â”€ */
+/* ─── APP SHELL OVERRIDES ─── */
 .app-layout {
   background:
     radial-gradient(circle at 12% 0%, rgba(168,85,247,0.04), transparent 24%),

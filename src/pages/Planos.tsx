@@ -2,54 +2,54 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Radar, Check, Minus, Star, Sparkles, ArrowRight } from 'lucide-react'
+import { Radar, Check, Minus, Star, Sparkle, ArrowRight } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
-  { label: 'Clonador de Paginas', ok: true },
+  { label: 'Clonador de Páginas', ok: true },
   { label: 'MetaSpy Minerador de Ads', ok: true },
-  { label: 'Editor Visual de Paginas', ok: false },
+  { label: 'Editor Visual de Páginas', ok: false },
   { label: 'Estrutura de Arquivos + ZIP', ok: false },
   { label: 'Cloacker Profissional', ok: false },
-  { label: 'Analise Avancada de Ofertas', ok: false },
+  { label: 'Análise Avançada de Ofertas', ok: false },
   { label: 'Bypass Engine Multicamada', ok: false },
   { label: 'Remover Metadados', ok: false },
-  { label: 'Suporte Prioritario', ok: false },
+  { label: 'Suporte Prioritário', ok: false },
 ]
 
 const FEATURES_GOLD = [
-  { label: 'Clonador de Paginas', ok: true },
+  { label: 'Clonador de Páginas', ok: true },
   { label: 'MetaSpy Minerador de Ads', ok: true },
-  { label: 'Editor Visual de Paginas', ok: true },
+  { label: 'Editor Visual de Páginas', ok: true },
   { label: 'Estrutura de Arquivos + ZIP', ok: true },
   { label: 'Cloacker Profissional', ok: true },
-  { label: 'Analise Avancada de Ofertas', ok: true },
+  { label: 'Análise Avançada de Ofertas', ok: true },
   { label: 'Bypass Engine Multicamada', ok: true },
   { label: 'Remover Metadados', ok: false },
-  { label: 'Suporte Prioritario', ok: true },
+  { label: 'Suporte Prioritário', ok: true },
 ]
 
 const FEATURES_PREMIUM = [
-  { label: 'Clonador de Paginas', ok: true },
+  { label: 'Clonador de Páginas', ok: true },
   { label: 'MetaSpy Minerador de Ads', ok: true },
-  { label: 'Editor Visual de Paginas', ok: true },
+  { label: 'Editor Visual de Páginas', ok: true },
   { label: 'Estrutura de Arquivos + ZIP', ok: true },
   { label: 'Cloacker Profissional', ok: true },
-  { label: 'Analise Avancada de Ofertas', ok: true },
+  { label: 'Análise Avançada de Ofertas', ok: true },
   { label: 'Bypass Engine Multicamada', ok: true },
   { label: 'Remover Metadados', ok: true },
-  { label: 'Suporte Prioritario', ok: true },
+  { label: 'Suporte Prioritário', ok: true },
 ]
 
 const ALL_FEATURES = [
-  'Clonador de Paginas',
+  'Clonador de Páginas',
   'MetaSpy Minerador de Ads',
-  'Editor Visual de Paginas',
+  'Editor Visual de Páginas',
   'Estrutura de Arquivos + ZIP',
   'Cloacker Profissional',
-  'Analise Avancada de Ofertas',
+  'Análise Avançada de Ofertas',
   'Bypass Engine Multicamada',
   'Remover Metadados',
-  'Suporte Prioritario',
+  'Suporte Prioritário',
 ]
 
 const DEPOIMENTOS = [
@@ -62,7 +62,7 @@ const PLAN_CARD_DATA = [
   {
     key: 'basico',
     title: 'Basico',
-    description: 'Para quem quer comecar a escalar agora',
+    description: 'Para quem quer começar a escalar agora',
     original: 'R$ 97',
     current: 'R$ 49,90',
     button: 'Assinar Agora',
@@ -146,7 +146,7 @@ export default function Planos() {
       <nav className="planos-nav" data-reveal style={revealStyle(0)}>
         <div className="planos-brand">
           <div className="sidebar-logo-icon planos-brand-mark">
-            <Radar size={18} strokeWidth={2} />
+            <Radar size={18} weight="regular" />
           </div>
           <span className="planos-brand-name">MetaSpy</span>
         </div>
@@ -165,7 +165,7 @@ export default function Planos() {
       <section className="planos-hero">
         <div className="planos-hero-inner">
           <div className="planos-hero-badge reveal-lift" data-reveal style={revealStyle(0)}>
-            ACESSO IMEDIATO â€¢ CANCELAMENTO LIVRE
+            ACESSO IMEDIATO • CANCELAMENTO LIVRE
           </div>
           <h1 className="reveal-lift planos-hero-title" data-reveal style={revealStyle(120)}>
             Escolha seu Arsenal de Guerra
@@ -177,15 +177,15 @@ export default function Planos() {
           <div className="planos-hero-cta-row" data-reveal style={revealStyle(360)}>
             {isAuthenticated ? (
               <button type="button" className="btn btn-gradient planos-hero-cta" onClick={() => navigate('/dashboard')}>
-                Ir para o Dashboard <ArrowRight size={18} strokeWidth={2} />
+                Ir para o Dashboard <ArrowRight size={18} weight="regular" />
               </button>
             ) : (
               <>
                 <button type="button" className="btn btn-gradient planos-hero-cta" onClick={() => navigate('/signup')}>
-                  COMEÃ‡AR AGORA <ArrowRight size={18} strokeWidth={2} />
+                  COMEÇAR AGORA <ArrowRight size={18} weight="regular" />
                 </button>
                 <button type="button" className="btn btn-primary planos-hero-cta" onClick={() => navigate('/login')}>
-                  Entrar <ArrowRight size={18} strokeWidth={2} />
+                  Entrar <ArrowRight size={18} weight="regular" />
                 </button>
               </>
             )}
@@ -206,7 +206,7 @@ export default function Planos() {
                 <h2>{plan.title}</h2>
                 {plan.highlighted && (
                   <div className="planos-card-badge planos-card-badge-animated">
-                    <Sparkles size={12} strokeWidth={2} />
+                    <Sparkle size={12} weight="regular" />
                     MELHOR VALOR
                   </div>
                 )}
@@ -226,7 +226,7 @@ export default function Planos() {
               {plan.features.map(f => (
                 <li key={f.label} className={f.ok ? '' : 'off'}>
                   <span className="planos-check">
-                    {f.ok ? <Check size={12} strokeWidth={2.5} /> : <Minus size={12} strokeWidth={2.5} />}
+                    {f.ok ? <Check size={12} weight="bold" /> : <Minus size={12} weight="bold" />}
                   </span>
                   {f.label}
                 </li>
@@ -282,13 +282,13 @@ export default function Planos() {
                     {feature}
                   </div>
                   <div className="planos-table-cell planos-table-flag" role="cell">
-                    {basic ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2.5} />}
+                    {basic ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
                   </div>
                   <div className="planos-table-cell planos-table-flag planos-table-flag-highlight" role="cell">
-                    {gold ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2.5} />}
+                    {gold ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
                   </div>
                   <div className="planos-table-cell planos-table-flag" role="cell">
-                    {premium ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2.5} />}
+                    {premium ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
                   </div>
                 </div>
               )
@@ -303,11 +303,11 @@ export default function Planos() {
           {DEPOIMENTOS.map((d, index) => (
             <div key={d.nome} className="planos-depoimento-card" data-reveal style={revealStyle(index * 80)}>
               <div className="planos-depoimento-stars" aria-hidden="true">
-                <Star size={14} strokeWidth={2.2} fill="currentColor" />
-                <Star size={14} strokeWidth={2.2} fill="currentColor" />
-                <Star size={14} strokeWidth={2.2} fill="currentColor" />
-                <Star size={14} strokeWidth={2.2} fill="currentColor" />
-                <Star size={14} strokeWidth={2.2} fill="currentColor" />
+                <Star size={14} weight="fill" />
+                <Star size={14} weight="fill" />
+                <Star size={14} weight="fill" />
+                <Star size={14} weight="fill" />
+                <Star size={14} weight="fill" />
               </div>
               <p className="planos-depoimento-texto">"{d.texto}"</p>
               <div className="planos-depoimento-autor">
@@ -320,14 +320,14 @@ export default function Planos() {
       </section>
 
       <section className="planos-faq" data-reveal style={revealStyle(160)}>
-        <h2>Duvidas Frequentes</h2>
+        <h2>Dúvidas Frequentes</h2>
         <div className="planos-faq-grid">
           {[
-            { p: 'Posso cancelar quando quiser?', r: 'Sim. Cancele a qualquer momento. Seu acesso continua ate o fim do periodo pago.' },
+            { p: 'Posso cancelar quando quiser?', r: 'Sim. Cancele a qualquer momento. Seu acesso continua até o fim do período pago.' },
             { p: 'O pagamento e seguro?', r: 'Totalmente. Processamos via Kirvano com cartao, Pix ou boleto. Seus dados estao protegidos.' },
             { p: 'Funciona para qualquer nicho?', r: 'Sim. O MetaSpy funciona para Nutra, Info, Ecommerce, leads e qualquer vertical do Meta Ads.' },
-            { p: 'Precisa de conhecimento tecnico?', r: 'Nao. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiencia em programacao.' },
-            { p: 'Qual a diferenca entre os planos?', r: 'O Basico da acesso ao Clonador de Paginas e MetaSpy Minerador. O Gold libera todas as ferramentas exceto Remover Metadados. O Premium libera todas as ferramentas sem excecao.' },
+            { p: 'Precisa de conhecimento tecnico?', r: 'Não. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiência em programação.' },
+            { p: 'Qual a diferença entre os planos?', r: 'O Basico da acesso ao Clonador de Páginas e MetaSpy Minerador. O Gold libera todas as ferramentas exceto Remover Metadados. O Premium libera todas as ferramentas sem exceção.' },
           ].map((faq, index) => (
             <details key={faq.p} className="planos-faq-item" data-reveal style={revealStyle(index * 60)}>
               <summary>{faq.p}</summary>
@@ -341,12 +341,12 @@ export default function Planos() {
         <h2>Pronto para escalar?</h2>
         <p>Junte-se a centenas de profissionais que ja usam o MetaSpy para dominar o Meta Ads.</p>
         <button type="button" className="btn btn-gradient planos-bottom-cta" onClick={() => handleCheckout('basico')}>
-          COMECAR AGORA <ArrowRight size={18} strokeWidth={2} />
+          COMEÇAR AGORA <ArrowRight size={18} weight="regular" />
         </button>
       </section>
 
       <footer className="planos-footer">
-        <p>MetaSpy Â© 2026 â€” Inteligencia de ofertas em escala. By Banshee.ads</p>
+        <p>MetaSpy © 2026 — Inteligência de ofertas em escala. By Banshee.ads</p>
       </footer>
     </div>
   )

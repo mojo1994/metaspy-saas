@@ -6,15 +6,15 @@ import {
   Radar,
   Copy,
   Shield,
-  BarChart3,
-  SlidersHorizontal,
+  ChartBar,
+  Sliders,
   Download,
   Play,
   ArrowRight,
   Check,
   Minus,
-  Layers3,
-} from 'lucide-react'
+  Stack,
+} from '@phosphor-icons/react'
 
 const FEATURE_ITEMS = [
   {
@@ -24,7 +24,7 @@ const FEATURE_ITEMS = [
   },
   {
     title: 'Clonador',
-    description: 'Clone paginas web completas para o seu computador. Suporte a sites complexos, quizzes Inlead, e bypass de seguranca com engine multicamada.',
+    description: 'Clone páginas web completas para o seu computador. Suporte a sites complexos, quizzes Inlead, e bypass de segurança com engine multicamada.',
     icon: Copy,
   },
   {
@@ -33,23 +33,23 @@ const FEATURE_ITEMS = [
     icon: Shield,
   },
   {
-    title: 'Analise Avancada',
-    description: 'Dashboard completo com estatisticas de score, distribuicao por segmento, competitividade de nicho e top ofertas em escala.',
-    icon: BarChart3,
+    title: 'Análise Avançada',
+    description: 'Dashboard completo com estatísticas de score, distribuição por segmento, competitividade de nicho e top ofertas em escala.',
+    icon: ChartBar,
   },
   {
     title: 'Filtros Inteligentes',
     description: 'Filtre por pais, plataforma, status, tipo de midia, score minimo, dias ativo, segmento (Nutra/Info), palavras negativas e muito mais.',
-    icon: SlidersHorizontal,
+    icon: Sliders,
   },
   {
-    title: 'Exportacao CSV',
-    description: 'Exporte todos os resultados para CSV com um clique. Perfeito para analises externas e relatorios personalizados.',
+    title: 'Exportação CSV',
+    description: 'Exporte todos os resultados para CSV com um clique. Perfeito para análises externas e relatórios personalizados.',
     icon: Download,
   },
   {
     title: 'Bypass Engine',
-    description: 'Motor de bypass em JS, Python, Node e PHP. Suporta Cloudflare, SSL, quizzes interativos e sites com protecao avançada.',
+    description: 'Motor de bypass em JS, Python, Node e PHP. Suporta Cloudflare, SSL, quizzes interativos e sites com proteção avançada.',
     icon: Play,
   },
 ]
@@ -60,11 +60,11 @@ const PRICE_ROWS = [
     original: 'R$ 97',
     current: 'R$ 49,90',
     features: [
-      ['Clonador de Paginas', true],
+      ['Clonador de Páginas', true],
       ['MetaSpy Minerador de Ads', true],
       ['Cloacker Profissional', false],
       ['Remover Metadados', false],
-      ['Suporte Prioritario', false],
+      ['Suporte Prioritário', false],
     ],
     highlighted: false,
   },
@@ -73,10 +73,10 @@ const PRICE_ROWS = [
     original: 'R$ 197',
     current: 'R$ 97,00',
     features: [
-      ['Clonador de Paginas', true],
+      ['Clonador de Páginas', true],
       ['MetaSpy Minerador de Ads', true],
       ['Cloacker Profissional', true],
-      ['Analise Avancada + Suporte', true],
+      ['Análise Avançada + Suporte', true],
       ['Remover Metadados', false],
     ],
     highlighted: true,
@@ -86,11 +86,11 @@ const PRICE_ROWS = [
     original: 'R$ 397',
     current: 'R$ 197,00',
     features: [
-      ['Clonador de Paginas', true],
+      ['Clonador de Páginas', true],
       ['MetaSpy Minerador de Ads', true],
       ['Cloacker Profissional', true],
       ['Remover Metadados', true],
-      ['Suporte Prioritario', true],
+      ['Suporte Prioritário', true],
     ],
     highlighted: false,
   },
@@ -130,7 +130,7 @@ export default function Landing() {
       <nav className="landing-nav" data-reveal style={delayStyle(0)}>
         <div className="landing-brand">
           <div className="sidebar-logo-icon landing-brand-mark">
-            <Radar size={16} strokeWidth={2} />
+            <Radar size={16} weight="regular" />
           </div>
           <span className="landing-brand-name">MetaSpy</span>
         </div>
@@ -150,7 +150,7 @@ export default function Landing() {
         <div className="landing-hero-inner">
           <div className="landing-hero-badge" data-reveal style={delayStyle(40)}>
             <div className="landing-brand-mark landing-hero-mark">
-              <Radar size={14} strokeWidth={2} />
+              <Radar size={14} weight="regular" />
             </div>
             <span>MetaSpy</span>
           </div>
@@ -164,15 +164,15 @@ export default function Landing() {
           <div className="landing-cta" data-reveal style={delayStyle(360)}>
             {isAuthenticated ? (
               <Link to="/dashboard" className="btn btn-gradient landing-cta-btn">
-                Ir para o Dashboard <ArrowRight size={18} strokeWidth={2} />
+                Ir para o Dashboard <ArrowRight size={18} weight="regular" />
               </Link>
             ) : (
               <>
                 <Link to="/planos" className="btn btn-gradient landing-cta-btn">
-                  COMEÇAR AGORA <ArrowRight size={18} strokeWidth={2} />
+                  COMEÇAR AGORA <ArrowRight size={18} weight="regular" />
                 </Link>
                 <Link to="/login" className="btn btn-primary landing-cta-btn">
-                  Entrar <ArrowRight size={18} strokeWidth={2} />
+                  Entrar <ArrowRight size={18} weight="regular" />
                 </Link>
               </>
             )}
@@ -191,7 +191,7 @@ export default function Landing() {
               style={delayStyle(index * 70)}
             >
               <div className="feature-icon">
-                <Icon size={24} strokeWidth={2} />
+                <Icon size={24} weight="regular" />
               </div>
               <h3>{item.title}</h3>
               <p>{item.description}</p>
@@ -203,7 +203,7 @@ export default function Landing() {
       <section className="landing-planos">
         <h2 data-reveal style={delayStyle(120)}>Escolha seu Arsenal</h2>
         <p className="landing-planos-sub" data-reveal style={delayStyle(200)}>
-          Sem plano free. Sem enrolacao. Resultado do primeiro dia.
+          Sem plano free. Sem enrolação. Resultado do primeiro dia.
         </p>
         <div className="landing-planos-cards">
           {PRICE_ROWS.map((plan, index) => (
@@ -218,16 +218,16 @@ export default function Landing() {
                   <h3>{plan.title}</h3>
                   {plan.highlighted && (
                     <div className="planos-card-badge planos-card-badge-animated">
-                      <Layers3 size={12} strokeWidth={2} />
+                      <Stack size={12} weight="regular" />
                       MELHOR VALOR
                     </div>
                   )}
                 </div>
                 <p className="planos-card-desc">
                   {plan.title === 'Basico'
-                    ? 'Para quem quer comecar a escalar agora'
+                    ? 'Para quem quer começar a escalar agora'
                     : plan.title === 'Gold'
-                      ? 'O pacote completo para maquinas de guerra'
+                      ? 'O pacote completo para máquinas de guerra'
                       : 'Todas as ferramentas sem limites'}
                 </p>
               </div>
@@ -244,7 +244,7 @@ export default function Landing() {
                 {plan.features.map(([label, ok]) => (
                   <li key={label} className={ok ? '' : 'off'}>
                     <span className="planos-check">
-                      {ok ? <Check size={12} strokeWidth={2.5} /> : <Minus size={12} strokeWidth={2.5} />}
+                      {ok ? <Check size={12} weight="bold" /> : <Minus size={12} weight="bold" />}
                     </span>
                     {label}
                   </li>
