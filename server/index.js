@@ -964,26 +964,104 @@ app.get('/api/ad-extract-image', async (req, res) => {
   res.json({ imageUrl: null })
 })
 
-// ─── Ad Image Proxy (bypass CORS/auth) ──────────────────────────
-app.get('/api/ad-image-proxy', async (req, res) => {
+// ─── Image Proxy (bypass CDN blocking via browser fingerprint) ──
+const DOMINIOS_PERMITIDOS = ['.fbcdn.net', '.facebook.com', '.meta.com']
+
+function proxyImagemHandler(req, res) {
   const { url } = req.query
   if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
   try {
-    const resp = await fetchWithTimeout(url.toString(), {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
-      }
-    }, 30000)
-    if (!resp.ok) return res.status(resp.status).end()
+    const urlObj = new URL(url.toString())
+    const permitido = DOMINIOS_PERMITIDOS.some(d => urlObj.hostname.endsWith(d))
+    if (!permitido) return res.status(403).json({ error: 'Dominio nao permitido' })
+  } catch {
+    return res.status(400).json({ error: 'URL invalida' })
+  }
+  fetchWithTimeout(url.toString(), {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Referer': 'https://www.facebook.com/',
+      'Origin': 'https://www.facebook.com',
+      'Sec-Fetch-Dest': 'image',
+      'Sec-Fetch-Mode': 'no-cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'Cache-Control': 'no-cache'
+    }
+  }, 30000).then(async resp => {
+    if (!resp.ok) return res.status(204).end()
     const ct = resp.headers.get('content-type') || 'image/jpeg'
     res.set('Content-Type', ct)
     res.set('Cache-Control', 'public, max-age=86400')
     res.set('Access-Control-Allow-Origin', '*')
     const buf = await resp.arrayBuffer()
     res.send(Buffer.from(buf))
-  } catch {
-    res.status(500).end()
+  }).catch(() => res.status(204).end())
+}
+
+app.get('/api/ad-image-proxy', proxyImagemHandler)
+app.get('/api/image-proxy', proxyImagemHandler)
+
+// ─── Puppeteer Snapshot (headless browser for ads without thumbnails) ─
+let browserInstance = null
+async function getBrowser() {
+  if (browserInstance && browserInstance.isConnected()) return browserInstance
+  const puppeteer = await import('puppeteer')
+  browserInstance = await puppeteer.launch({
+    headless: true,
+    args: [
+      '--no-sandbox', '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage', '--disable-gpu',
+      '--window-size=1920,1080'
+    ]
+  })
+  return browserInstance
+}
+
+app.get('/api/ad-snapshot-image', async (req, res) => {
+  const { url } = req.query
+  if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
+  try {
+    const browser = await getBrowser()
+    const page = await browser.newPage()
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36')
+    await page.setViewport({ width: 1920, height: 1080 })
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Referer': 'https://www.facebook.com/',
+      'Origin': 'https://www.facebook.com'
+    })
+    // Set cookies to avoid cookie consent banners
+    await page.setCookie({ name: 'locale', value: 'pt_BR', domain: '.facebook.com' })
+
+    await page.goto(url.toString(), { waitUntil: 'networkidle2', timeout: 30000 })
+    // Realistic human-like wait
+    await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000))
+
+    let imageUrl = null
+    // Try og:image
+    try {
+      imageUrl = await page.$eval('meta[property="og:image"]', el => el.getAttribute('content'))
+    } catch {}
+    // Try twitter:image
+    if (!imageUrl) {
+      try {
+        imageUrl = await page.$eval('meta[name="twitter:image"]', el => el.getAttribute('content'))
+      } catch {}
+    }
+    // Try first large img on page
+    if (!imageUrl) {
+      try {
+        imageUrl = await page.$eval('img[src*="fbcdn"]', el => el.getAttribute('src'))
+      } catch {}
+    }
+
+    await page.close()
+    if (imageUrl) cachePreview.set(url.toString(), { imageUrl })
+    res.json({ imageUrl })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
 })
 

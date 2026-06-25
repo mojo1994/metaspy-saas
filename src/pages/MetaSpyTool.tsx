@@ -211,7 +211,18 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
       }
     }
   } catch {}
-  // Strategy 2: Render backend (Graph API direct + snapshot scrape)
+  // Strategy 2: Render Puppeteer backend (headless Chrome real)
+  try {
+    const resp = await fetch(`/api/ad-snapshot-image?url=${encodeURIComponent(anuncio.urlBiblioteca)}`)
+    if (resp.ok) {
+      const data = await resp.json()
+      if (data.imageUrl) {
+        cacheImagensPreview.set(chave, data.imageUrl)
+        return data.imageUrl
+      }
+    }
+  } catch {}
+  // Strategy 3: Render backend (Graph API direct + snapshot scrape)
   try {
     const params = new URLSearchParams()
     if (anuncio.idAnuncio) params.set('id', anuncio.idAnuncio)
@@ -231,7 +242,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
 function urlImagemProxy(url: string): string {
   if (!url) return url
   if (url.includes('fbcdn.net') || url.includes('facebook.com')) {
-    return `/api/ad-image-proxy?url=${encodeURIComponent(url)}`
+    return `/api/image-proxy?url=${encodeURIComponent(url)}`
   }
   return url
 }
