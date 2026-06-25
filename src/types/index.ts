@@ -1,6 +1,7 @@
 export interface Anuncio {
   idAnuncio: string;
   anunciante: string;
+  pageId: string;
   tituloOferta: string;
   texto: string;
   textoCompleto: string;

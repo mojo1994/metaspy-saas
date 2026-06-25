@@ -50,7 +50,7 @@ export function startWorker(env) {
           const data = await resp.json()
           if (data.imageUrl) imageUrl = data.imageUrl
         }
-      } catch {}
+      } catch (e) { console.error(`[thumbnail] CF Worker falhou ${adId}:`, e?.message || e) }
     }
 
     // Fallback: Puppeteer local
@@ -63,7 +63,7 @@ export function startWorker(env) {
           const data = await resp.json()
           if (data.imageUrl) imageUrl = data.imageUrl
         }
-      } catch {}
+      } catch (e) { console.error(`[thumbnail] Puppeteer local falhou ${adId}:`, e?.message || e) }
     }
 
     // Fallback: Graph API direct
@@ -77,7 +77,7 @@ export function startWorker(env) {
           const data = await resp.json()
           if (data.ad_creative_thumbnail_url) imageUrl = data.ad_creative_thumbnail_url
         }
-      } catch {}
+      } catch (e) { console.error(`[thumbnail] Graph API direta falhou ${adId}:`, e?.message || e) }
     }
 
     // Proxy the image through our own proxy to cache it
@@ -86,7 +86,7 @@ export function startWorker(env) {
         await fetch(`http://localhost:${env.PORT || 3001}/api/image-proxy?url=${encodeURIComponent(imageUrl)}`, {
           signal: AbortSignal.timeout(15000),
         })
-      } catch {}
+      } catch (e) { console.error(`[thumbnail] proxy cache falhou ${adId}:`, e?.message || e) }
     }
 
     console.log(`[thumbnail-worker] ${adId}: ${imageUrl ? 'encontrada' : 'nao encontrada'}`)

@@ -16,7 +16,8 @@ const CAMPOS_API_PRINCIPAL = [
 ].join(',')
 const CAMPOS_API_FALLBACK = [
   'id', 'ad_creation_time', 'ad_creative_bodies', 'ad_delivery_start_time',
-  'ad_snapshot_url', 'ad_creative_thumbnail_url', 'page_id', 'page_name', 'publisher_platforms'
+  'ad_snapshot_url', 'ad_creative_thumbnail_url', 'ad_creative_link_url',
+  'page_id', 'page_name', 'publisher_platforms'
 ].join(',')
 const CAMPOS_API_MINIMO = [
   'id', 'ad_creation_time', 'ad_creative_bodies',
@@ -156,9 +157,12 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
   })
 
   const textoAnuncio = `${textoCompleto} ${pageName} ${snapshot}`
+  const urlDestino = (ad.ad_creative_link_url as string) || ''
+  if (urlDestino) console.debug(`urlDestino set for ${id}:`, urlDestino.slice(0, 80))
   const anuncio: Anuncio = {
     idAnuncio: id,
     anunciante: pageName || titulos?.[0]?.slice(0, 40) || '(sem nome)',
+    pageId: String(ad.page_id || ''),
     tituloOferta: titulos?.[0] || pageName || '',
     texto: textoCompleto.slice(0, 280),
     textoCompleto,
@@ -167,7 +171,7 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
     dataFimISO: null,
     dataUltimaAtualizacaoISO: null,
     plataformas,
-    urlDestino: (ad.ad_creative_link_url as string) || '',
+    urlDestino,
     urlBiblioteca: snapshot,
     cta: 'Saiba mais',
     adActiveStatus: 'ACTIVE',
@@ -220,6 +224,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
     if (anuncio.idAnuncio) params.set('id', anuncio.idAnuncio)
     if (anuncio.urlBiblioteca) params.set('snapshot', anuncio.urlBiblioteca)
     if (anuncio.urlDestino) params.set('linkUrl', anuncio.urlDestino)
+    if (anuncio.pageId) params.set('pageId', anuncio.pageId)
     const resp = await fetch(`/api/ad-extract-image?${params.toString()}`, {
       signal: AbortSignal.timeout(15000)
     })
@@ -361,9 +366,9 @@ export default function MetaSpyTool() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ads: semImg })
-          }).catch(() => {})
+          }).catch(e => console.warn('enqueue-thumbnails falhou:', e))
         }
-      } catch {}
+      } catch (e) { console.warn('enqueue-thumbnails erro:', e) }
       setDebugInfo(`Total: ${todos.length}, Unicos: ${unicos.length}\n${log.join('\n')}`)
     }
     setProgresso(100)

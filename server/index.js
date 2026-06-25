@@ -869,19 +869,20 @@ app.get('/api/page-fetch', authMiddleware, async (req, res) => {
 // ─── Ad Image Extraction ─────────────────────────────────────────
 const cachePreview = new Map()
 app.get('/api/ad-extract-image', async (req, res) => {
-  const { id, snapshot, linkUrl } = req.query
+  const { id, snapshot, linkUrl, pageId: pageIdParam } = req.query
   if (!id && !snapshot) return res.status(400).json({ error: 'Informe id ou snapshot' })
   const chaveCache = id || snapshot.toString()
   const cacheado = cachePreview.get(chaveCache)
   if (cacheado) return res.json(cacheado)
 
   let imageUrl = null
-  let pageId = null
+  let pageId = pageIdParam?.toString() || null
   if (id) {
     try {
       const fields = encodeURIComponent('ad_creative_thumbnail_url,ad_snapshot_url,ad_creative_bodies,object_story_spec,page_id')
       const apiUrl = `https://graph.facebook.com/v22.0/${id}?fields=${fields}&access_token=${FB_TOKEN}`
       const resp = await fetchWithTimeout(apiUrl, {}, 5000)
+      logger.info({ status: resp.status, id }, 'Estrat1: Graph API individual')
       if (resp.ok) {
         const data = await resp.json()
         pageId = data.page_id || null
@@ -915,7 +916,7 @@ app.get('/api/ad-extract-image', async (req, res) => {
           }
         }
       }
-    } catch {}
+    } catch (e) { logger.warn({ err: e?.message, id }, 'Estrat1: Graph API individual falhou') }
   }
 
   // Strategy 2: Scrape snapshot page
@@ -944,7 +945,7 @@ app.get('/api/ad-extract-image', async (req, res) => {
               const str = JSON.stringify(JSON.parse(nextMatch[1]))
               const fbUrl = str.match(/"(https:\/\/[^"]+fbcdn[^"]+)"/)
               if (fbUrl) imageUrl = fbUrl[1].replace(/\\u0025/g, '%').replace(/\\\//g, '/')
-            } catch {}
+            } catch (e) { logger.warn({ err: String(e), id }, 'Estrat2: preloaded_state parse falhou') }
           }
         }
 
@@ -972,7 +973,7 @@ app.get('/api/ad-extract-image', async (req, res) => {
                 return null
               }
               imageUrl = findUrl(ld)
-            } catch {}
+            } catch (e) { logger.warn({ err: String(e), id }, 'Estrat2: JSON-LD parse falhou') }
           }
         }
 
@@ -989,7 +990,7 @@ app.get('/api/ad-extract-image', async (req, res) => {
           return res.json(result)
         }
       }
-    } catch {}
+    } catch (e) { logger.warn({ err: String(e), id, snapshot: snapshot?.toString()?.slice(0, 80) }, 'Estrat2: snapshot fetch falhou') }
   }
 
   // Strategy 5: Try OG image from the landing page (linkUrl)
@@ -1019,7 +1020,7 @@ app.get('/api/ad-extract-image', async (req, res) => {
           return res.json(result)
         }
       }
-    } catch {}
+    } catch (e) { logger.warn({ err: String(e), id, linkUrl: linkUrl?.toString()?.slice(0, 80) }, 'Estrat5: OG fetch falhou') }
   }
 
   // Strategy 6: Page profile picture as last resort
@@ -1029,7 +1030,7 @@ app.get('/api/ad-extract-image', async (req, res) => {
 
   // Enqueue background extraction if no image found
   if (!imageUrl && (id || snapshot)) {
-    enqueueThumbnailExtraction(id || '', snapshot?.toString() || '', linkUrl?.toString() || '').catch(() => {})
+    enqueueThumbnailExtraction(id || '', snapshot?.toString() || '', linkUrl?.toString() || '').catch(e => logger.warn({ err: String(e) }, 'enqueueThumbnails falhou'))
   }
 
   const result = { imageUrl }
@@ -1048,7 +1049,7 @@ async function getPageProfilePic(pageId, adId) {
       const data = await resp.json()
       if (data?.data?.url) return data.data.url
     }
-  } catch {}
+  } catch (e) { logger.warn({ err: String(e), pid }, 'Estrat6: page pic fetch falhou') }
   return null
 }
 
