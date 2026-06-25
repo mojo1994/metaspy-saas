@@ -41,7 +41,7 @@ export default {
           })
           for (const item of scraped) {
             const val = item.results?.[0]?.attributes?.find(a => a.name === 'content' || a.name === 'href')?.value
-            if (val && /^https?:\/\//.test(val) && val.includes('fbcdn')) { imageUrl = val; break }
+            if (val && /^https?:\/\//.test(val)) { imageUrl = val; break }
           }
         } catch {}
 

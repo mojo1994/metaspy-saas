@@ -14,10 +14,10 @@ export function getQueue() {
   return queue
 }
 
-export async function enqueueThumbnailExtraction(adId, snapshotUrl) {
+export async function enqueueThumbnailExtraction(adId, snapshotUrl, linkUrl) {
   const q = getQueue()
   if (!q) return null
-  const job = await q.add('extract', { adId, snapshotUrl }, {
+  const job = await q.add('extract', { adId, snapshotUrl, linkUrl }, {
     attempts: 3,
     backoff: { type: 'exponential', delay: 10000 },
     removeOnComplete: { age: 86400, count: 100 },
@@ -30,7 +30,7 @@ export function startWorker(env) {
   if (!redis || worker) return
 
   worker = new Worker(FILA_NOME, async job => {
-    const { adId, snapshotUrl } = job.data
+    const { adId, snapshotUrl, linkUrl } = job.data
     console.log(`[thumbnail-worker] processando ${adId}...`)
 
     let imageUrl = null
@@ -38,10 +38,12 @@ export function startWorker(env) {
     // Tenta Cloudflare Worker primeiro (Browser Run)
     if (env.CF_WORKER_URL) {
       try {
+        const body = { snapshotUrl }
+        if (linkUrl) body.linkUrl = linkUrl
         const resp = await fetch(`${env.CF_WORKER_URL}/api/ad-preview`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ snapshotUrl }),
+          body: JSON.stringify(body),
           signal: AbortSignal.timeout(30000),
         })
         if (resp.ok) {

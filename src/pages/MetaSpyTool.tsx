@@ -20,7 +20,7 @@ const CAMPOS_API_FALLBACK = [
 ].join(',')
 const CAMPOS_API_MINIMO = [
   'id', 'ad_creation_time', 'ad_creative_bodies',
-  'ad_snapshot_url', 'ad_creative_thumbnail_url',
+  'ad_snapshot_url', 'ad_creative_thumbnail_url', 'ad_creative_link_url',
   'page_id', 'page_name', 'publisher_platforms'
 ].join(',')
 const PAUSA_RATE_LIMIT_MS = 15000

@@ -1011,7 +1011,7 @@ app.get('/api/ad-extract-image', async (req, res) => {
 
   // Enqueue background extraction if no image found
   if (id || snapshot) {
-    enqueueThumbnailExtraction(id || '', snapshot?.toString() || '').catch(() => {})
+    enqueueThumbnailExtraction(id || '', snapshot?.toString() || '', linkUrl?.toString() || '').catch(() => {})
   }
 
   res.json({ imageUrl: null })
@@ -1091,7 +1091,7 @@ app.post('/api/enqueue-thumbnails', async (req, res) => {
     const results = []
     for (const ad of ads) {
       if (ad.idAnuncio && ad.urlBiblioteca) {
-        const jobId = await enqueueThumbnailExtraction(ad.idAnuncio, ad.urlBiblioteca)
+        const jobId = await enqueueThumbnailExtraction(ad.idAnuncio, ad.urlBiblioteca, ad.urlDestino || '')
         if (jobId) results.push({ id: ad.idAnuncio, jobId })
       }
     }
