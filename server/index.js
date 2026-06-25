@@ -1916,6 +1916,225 @@ app.get('/api/debug/webhooks', (req, res) => {
   res.json({ webhooks: WEBHOOK_LOG })
 })
 
+// ─── Quiz Builder API ────────────────────────────────────────────
+function validateQuizAst(ast) {
+  if (!ast || typeof ast !== 'object') return 'AST invalido'
+  if (!Array.isArray(ast.nodes)) return 'nodes deve ser um array'
+  if (!Array.isArray(ast.edges)) return 'edges deve ser um array'
+  for (const n of ast.nodes) {
+    if (!n.id || !n.type || !n.position) return `Node invalido: ${n.id || 'sem id'}`
+    if (!['start', 'question', 'logic', 'result', 'redirect', 'score', 'custom'].includes(n.type)) return `Tipo de node desconhecido: ${n.type}`
+  }
+  // Check circular dependencies
+  const adj = {}
+  for (const e of ast.edges) {
+    if (!adj[e.source]) adj[e.source] = []
+    adj[e.source].push(e.target)
+  }
+  for (const n of ast.nodes) {
+    const visited = new Set()
+    function dfs(nodeId) {
+      if (nodeId === n.id) return true
+      if (visited.has(nodeId)) return false
+      visited.add(nodeId)
+      for (const next of (adj[nodeId] || [])) {
+        if (dfs(next)) return true
+      }
+      return false
+    }
+    for (const next of (adj[n.id] || [])) {
+      if (dfs(next)) return 'Conexao circular detectada'
+    }
+  }
+  return null
+}
+
+// List quizzes
+app.get('/api/quizzes', authMiddleware, async (req, res) => {
+  try {
+    const quizzes = await query('SELECT id, title, description, slug, status, version, created_at, updated_at FROM quizzes WHERE user_id = $1 ORDER BY updated_at DESC', [req.user.id])
+    res.json(quizzes || [])
+  } catch { res.status(500).json({ error: 'Erro ao listar quizzes' }) }
+})
+
+// Create quiz
+app.post('/api/quizzes', authMiddleware, async (req, res) => {
+  try {
+    const id = randomUUID()
+    const slug = 'quiz-' + Math.random().toString(36).slice(2, 7)
+    const now = new Date().toISOString()
+    const ast = {
+      nodes: [{ id: randomUUID(), type: 'start', position: { x: 250, y: 200 }, data: { label: 'Inicio', type: 'start', styles: { color: '#a855f7' } } }],
+      edges: [],
+      settings: { theme: 'dark', layout: 'single', progressBar: true, allowBacktracking: false, randomizeQuestions: false, timeLimit: 0, redirectAfterComplete: '' }
+    }
+    await run('INSERT INTO quizzes (id, user_id, title, slug, status, ast, version, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [id, req.user.id, 'Novo Quiz', slug, 'draft', JSON.stringify(ast), 1, now, now])
+    res.json({ id, userId: req.user.id, title: 'Novo Quiz', description: '', slug, status: 'draft', nodes: ast.nodes, edges: ast.edges, settings: ast.settings, version: 1, createdAt: now, updatedAt: now })
+  } catch (err) { res.status(500).json({ error: 'Erro ao criar quiz' }) }
+})
+
+// Get quiz by ID
+app.get('/api/quizzes/:id', authMiddleware, async (req, res) => {
+  try {
+    const quiz = await one('SELECT * FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!quiz) return res.status(404).json({ error: 'Quiz nao encontrado' })
+    const ast = typeof quiz.ast === 'string' ? JSON.parse(quiz.ast) : quiz.ast
+    res.json({
+      id: quiz.id, userId: quiz.user_id, title: quiz.title, description: quiz.description || '',
+      slug: quiz.slug, status: quiz.status, nodes: ast.nodes, edges: ast.edges, settings: ast.settings,
+      version: quiz.version, createdAt: quiz.created_at, updatedAt: quiz.updated_at
+    })
+  } catch { res.status(500).json({ error: 'Erro ao carregar quiz' }) }
+})
+
+// Update quiz (with version check)
+app.put('/api/quizzes/:id', authMiddleware, async (req, res) => {
+  try {
+    const existing = await one('SELECT version, ast FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!existing) return res.status(404).json({ error: 'Quiz nao encontrado' })
+    const clientVersion = req.body.version || 0
+    if (clientVersion !== existing.version) {
+      const ast = typeof existing.ast === 'string' ? JSON.parse(existing.ast) : existing.ast
+      return res.status(409).json({
+        error: 'Versao desatualizada',
+        id: req.params.id, userId: req.user.id, title: req.body.title, description: req.body.description,
+        slug: req.body.slug, status: existing.status, nodes: ast.nodes, edges: ast.edges, settings: ast.settings,
+        version: existing.version, updatedAt: new Date().toISOString()
+      })
+    }
+    const { title, description, nodes, edges, settings } = req.body
+    const ast = { nodes: nodes || [], edges: edges || [], settings: settings || {} }
+    const err = validateQuizAst(ast)
+    if (err) return res.status(400).json({ error: err })
+    const now = new Date().toISOString()
+    const newVersion = existing.version + 1
+    // Save history
+    const historyId = randomUUID()
+    await run('INSERT INTO quiz_history (id, quiz_id, ast_snapshot, version, created_at) VALUES ($1,$2,$3,$4,$5)',
+      [historyId, req.params.id, JSON.stringify(ast), existing.version, now])
+    await run('UPDATE quizzes SET title=$1, description=$2, ast=$3, version=$4, updated_at=$5 WHERE id=$6',
+      [title || 'Novo Quiz', description || '', JSON.stringify(ast), newVersion, now, req.params.id])
+    res.json({ id: req.params.id, userId: req.user.id, title: title || 'Novo Quiz', description: description || '',
+      slug: req.body.slug, status: existing.status, nodes: ast.nodes, edges: ast.edges, settings: ast.settings,
+      version: newVersion, createdAt: existing.created_at, updatedAt: now })
+  } catch (err) { res.status(500).json({ error: 'Erro ao salvar quiz' }) }
+})
+
+// Publish quiz
+app.post('/api/quizzes/:id/publish', authMiddleware, async (req, res) => {
+  try {
+    const quiz = await one('SELECT * FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!quiz) return res.status(404).json({ error: 'Quiz nao encontrado' })
+    const ast = typeof quiz.ast === 'string' ? JSON.parse(quiz.ast) : quiz.ast
+    const slug = req.body.slug || quiz.slug
+    const now = new Date().toISOString()
+    await run('UPDATE quizzes SET status=$1, slug=$2, published_at=$3, updated_at=$4 WHERE id=$5',
+      ['published', slug, now, now, req.params.id])
+    res.json({ id: quiz.id, userId: quiz.user_id, title: quiz.title, description: quiz.description,
+      slug, status: 'published', nodes: ast.nodes, edges: ast.edges, settings: ast.settings,
+      version: quiz.version, createdAt: quiz.created_at, updatedAt: now })
+  } catch { res.status(500).json({ error: 'Erro ao publicar quiz' }) }
+})
+
+// Duplicate quiz
+app.post('/api/quizzes/:id/duplicate', authMiddleware, async (req, res) => {
+  try {
+    const quiz = await one('SELECT * FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!quiz) return res.status(404).json({ error: 'Quiz nao encontrado' })
+    const id = randomUUID()
+    const slug = 'quiz-' + Math.random().toString(36).slice(2, 7)
+    const now = new Date().toISOString()
+    await run('INSERT INTO quizzes (id, user_id, title, description, slug, status, ast, version, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [id, req.user.id, quiz.title + ' (copia)', quiz.description || '', slug, 'draft', quiz.ast, 1, now, now])
+    res.json({ id })
+  } catch { res.status(500).json({ error: 'Erro ao duplicar quiz' }) }
+})
+
+// Archive (soft delete) quiz
+app.delete('/api/quizzes/:id/delete', authMiddleware, async (req, res) => {
+  try {
+    await run('UPDATE quizzes SET status=$1, updated_at=$2 WHERE id=$3 AND user_id=$4',
+      ['archived', new Date().toISOString(), req.params.id, req.user.id])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro ao arquivar quiz' }) }
+})
+
+// Get quiz by slug (public)
+app.get('/api/quizzes/slug/:slug', async (req, res) => {
+  try {
+    const quiz = await one('SELECT * FROM quizzes WHERE slug = $1 AND status = $2', [req.params.slug, 'published'])
+    if (!quiz) return res.status(404).json({ error: 'Quiz nao encontrado' })
+    const ast = typeof quiz.ast === 'string' ? JSON.parse(quiz.ast) : quiz.ast
+    res.json({ id: quiz.id, title: quiz.title, nodes: ast.nodes, edges: ast.edges, settings: ast.settings })
+  } catch { res.status(500).json({ error: 'Erro' }) }
+})
+
+// Start quiz session (public)
+app.post('/api/quizzes/:id/run', async (req, res) => {
+  try {
+    const quiz = await one('SELECT id FROM quizzes WHERE id = $1 AND status = $2', [req.params.id, 'published'])
+    if (!quiz) return res.status(404).json({ error: 'Quiz nao encontrado' })
+    const id = randomUUID()
+    const sessionToken = randomUUID().replace(/-/g, '')
+    const now = new Date().toISOString()
+    await run('INSERT INTO quiz_sessions (id, quiz_id, session_token, current_node_id, answers, score, status, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [id, req.params.id, sessionToken, '', '[]', 0, 'in_progress', now])
+    res.json({ session_id: id, session_token: sessionToken })
+  } catch { res.status(500).json({ error: 'Erro ao iniciar sessao' }) }
+})
+
+// Submit answer
+app.post('/api/sessions/:token/answer', async (req, res) => {
+  try {
+    const session = await one('SELECT * FROM quiz_sessions WHERE session_token = $1', [req.params.token])
+    if (!session) return res.status(404).json({ error: 'Sessao nao encontrada' })
+    const answers = typeof session.answers === 'string' ? JSON.parse(session.answers) : (session.answers || [])
+    if (req.body.answer !== undefined) {
+      answers.push({ nodeId: req.body.nodeId, answer: req.body.answer, timestamp: new Date().toISOString() })
+    }
+    await run('UPDATE quiz_sessions SET answers=$1, current_node_id=$2 WHERE session_token=$3',
+      [JSON.stringify(answers), req.body.nodeId || session.current_node_id, req.params.token])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro' }) }
+})
+
+// Complete session
+app.post('/api/sessions/:token/complete', async (req, res) => {
+  try {
+    const now = new Date().toISOString()
+    await run('UPDATE quiz_sessions SET status=$1, completed_at=$2, score=$3 WHERE session_token=$4',
+      ['completed', now, req.body.score || 0, req.params.token])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro' }) }
+})
+
+// Quiz stats
+app.get('/api/quizzes/:id/stats', authMiddleware, async (req, res) => {
+  try {
+    const sessions = await query('SELECT id, score, status, created_at, completed_at FROM quiz_sessions WHERE quiz_id = $1 ORDER BY created_at DESC', [req.params.id])
+    const total = sessions.length
+    const completed = sessions.filter(s => s.status === 'completed').length
+    const inProgress = sessions.filter(s => s.status === 'in_progress').length
+    const scores = sessions.filter(s => s.status === 'completed').map(s => s.score || 0)
+    const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
+    res.json({ total, completed, inProgress, avgScore, sessions })
+  } catch { res.status(500).json({ error: 'Erro' }) }
+})
+
+// Rollback to history version
+app.post('/api/quizzes/:id/rollback/:version', authMiddleware, async (req, res) => {
+  try {
+    const history = await one('SELECT * FROM quiz_history WHERE quiz_id = $1 AND version = $2 ORDER BY created_at DESC LIMIT 1',
+      [req.params.id, parseInt(req.params.version)])
+    if (!history) return res.status(404).json({ error: 'Versao nao encontrada' })
+    const now = new Date().toISOString()
+    await run('UPDATE quizzes SET ast=$1, updated_at=$2 WHERE id=$3 AND user_id=$4',
+      [history.ast_snapshot, now, req.params.id, req.user.id])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro ao reverter' }) }
+})
+
 // ─── Health ───────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', online: !!FB_TOKEN, db: 'postgresql' })

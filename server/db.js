@@ -221,4 +221,49 @@ export async function initSchema() {
       created_at TEXT NOT NULL
     )
   `).catch(() => {})
+
+  // Quiz Builder
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quizzes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT 'Novo Quiz',
+      description TEXT DEFAULT '',
+      slug TEXT UNIQUE NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      ast JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[],"settings":{"theme":"dark","layout":"single","progressBar":true,"allowBacktracking":false,"randomizeQuestions":false}}',
+      version INT NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      published_at TEXT
+    )
+  `).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quiz_history (
+      id TEXT PRIMARY KEY,
+      quiz_id TEXT NOT NULL,
+      ast_snapshot JSONB NOT NULL,
+      version INT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quiz_sessions (
+      id TEXT PRIMARY KEY,
+      quiz_id TEXT NOT NULL,
+      user_id TEXT,
+      session_token TEXT UNIQUE NOT NULL,
+      current_node_id TEXT,
+      answers JSONB DEFAULT '[]',
+      score INT DEFAULT 0,
+      status TEXT DEFAULT 'in_progress',
+      created_at TEXT NOT NULL,
+      completed_at TEXT
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quizzes_user_id ON quizzes(user_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quizzes_slug ON quizzes(slug)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_history_quiz_id ON quiz_history(quiz_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_sessions_quiz_id ON quiz_sessions(quiz_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_sessions_token ON quiz_sessions(session_token)`).catch(() => {})
 }
