@@ -230,9 +230,51 @@ export default function MetaSpyTool() {
 
   const apiOnline = true
   const buscouAuto = useRef(false)
+  const [debugInfo, setDebugInfo] = useState('')
+
+  const TERMOS_EM_ALTA = ['comprar', 'receita', 'whatsapp', 'desconto', 'curso', 'resultado', 'academia', 'emagrecer', 'digital', 'saude']
+
+  async function buscarEmAlta() {
+    const termos = TERMOS_EM_ALTA
+    let todos: Anuncio[] = []
+    let log: string[] = []
+    for (const termo of termos) {
+      if (todos.length >= 40) break
+      const params = new URLSearchParams({
+        ad_active_status: 'ACTIVE',
+        ad_reached_countries: JSON.stringify(['BR']),
+        search_terms: termo,
+        limit: '10',
+        fields: CAMPOS_API_MINIMO
+      })
+      const url = `${FB_API_BASE}?${params.toString()}`
+      try {
+        const json = await requisicaoApiComRetry(url)
+        const dados = (json.data || []).map(normalizarAnuncioApi).filter((a): a is Anuncio => a !== null)
+        todos.push(...dados)
+        log.push(`${termo}: ${dados.length} ads`)
+      } catch (err) {
+        log.push(`${termo}: erro - ${err instanceof Error ? err.message : '?'}`)
+      }
+    }
+    if (todos.length === 0) {
+      setMensagem('Nenhum anuncio encontrado')
+      setDebugInfo(log.join('\n') || 'sem dados')
+    } else {
+      const vistos = new Set<string>()
+      const unicos = todos.filter(a => { if (vistos.has(a.idAnuncio)) return false; vistos.add(a.idAnuncio); return true })
+      unicos.sort((a, b) => (b.scoreEscala || 0) - (a.scoreEscala || 0))
+      setAnuncios(unicos)
+      setMensagem(`${unicos.length} anuncios em alta`)
+      setAlerta(`${unicos.length} anuncios em alta carregados!`)
+      setDebugInfo(`Total: ${todos.length}, Unicos: ${unicos.length}\n${log.join('\n')}`)
+    }
+    setProgresso(100)
+    setCarregando(false)
+  }
 
   useEffect(() => {
-    if (buscouAuto.current || carregando || anuncios.length > 0) return
+    if (buscouAuto.current || anuncios.length > 0) return
     buscouAuto.current = true
     setMensagem('Carregando anuncios em alta...')
     setCarregando(true)
@@ -403,46 +445,6 @@ export default function MetaSpyTool() {
     throw ultimoErro || new Error('Nenhum cenario de consulta funcionou.')
   }, [filtros.pais, filtros.statusApi, montarCenariosApi])
 
-  const TERMOS_EM_ALTA = ['comprar', 'receita', 'whatsapp', 'desconto', 'curso', 'resultado', 'academia', 'emagrecer', 'digital', 'saude']
-
-  const buscarEmAlta = useCallback(async () => {
-    let todos: Anuncio[] = []
-    let ultimoErro = ''
-    for (const termo of TERMOS_EM_ALTA) {
-      if (todos.length >= 40) break
-      const params = new URLSearchParams({
-        ad_active_status: 'ACTIVE',
-        ad_reached_countries: JSON.stringify([filtros.pais]),
-        search_terms: termo,
-        limit: '10',
-        fields: CAMPOS_API_MINIMO
-      })
-      const url = `${FB_API_BASE}?${params.toString()}`
-      try {
-        const json = await requisicaoApiComRetry(url)
-        const dados = (json.data || []).map(normalizarAnuncioApi).filter((a): a is Anuncio => a !== null)
-        todos.push(...dados)
-      } catch (err) {
-        ultimoErro = err instanceof Error ? err.message : 'Falha'
-        continue
-      }
-    }
-    if (todos.length === 0) {
-      setErroDetalhado(ultimoErro || (window as any).__ultimoErroApi || 'Nenhum anuncio encontrado. Verifique o token e a permissao ads_read.')
-      setMensagem('Nenhum anuncio')
-    } else {
-      setErroDetalhado('')
-      const vistos = new Set<string>()
-      const unicos = todos.filter(a => { if (vistos.has(a.idAnuncio)) return false; vistos.add(a.idAnuncio); return true })
-      unicos.sort((a, b) => (b.scoreEscala || 0) - (a.scoreEscala || 0))
-      setAnuncios(unicos)
-      setMensagem(`${unicos.length} anuncios em alta`)
-      setAlerta(`${unicos.length} anuncios em alta carregados!`)
-    }
-    setProgresso(100)
-    setCarregando(false)
-  }, [filtros.pais, requisicaoApiComRetry])
-
   async function iniciarBusca() {
     setCarregando(true)
     setProgresso(10)
@@ -509,6 +511,9 @@ export default function MetaSpyTool() {
           <span className={`status on`}>API Online</span>
           <span className={`status ${anuncios.length ? 'on' : 'off'}`}>
             {anuncios.length ? `${anunciosFiltrados.length} ofertas` : 'offline'}
+          </span>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+            raw: {anuncios.length} | filt: {anunciosFiltrados.length}
           </span>
         </div>
       </div>
@@ -651,6 +656,14 @@ export default function MetaSpyTool() {
             Log de Erro (clique para expandir)
           </summary>
           <pre style={{ padding: 12, fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 200, overflowY: 'auto', color: 'var(--text-muted)' }}>{erroDetalhado}</pre>
+        </details>
+      )}
+      {debugInfo && (
+        <details style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
+          <summary style={{ cursor: 'pointer', padding: '8px 12px', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, userSelect: 'none' }}>
+            Debug API (clique para expandir)
+          </summary>
+          <pre style={{ padding: 12, fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 200, overflowY: 'auto', color: 'var(--text-muted)' }}>{debugInfo}</pre>
         </details>
       )}
 
