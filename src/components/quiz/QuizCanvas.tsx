@@ -11,7 +11,6 @@ import {
   type NodeTypes,
   useNodesState,
   useEdgesState,
-  ReactFlowProvider,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuizStore, type QuizNodeData } from '../../stores/quizStore'
@@ -156,9 +155,5 @@ function CanvasInner() {
 }
 
 export default function QuizCanvas() {
-  return (
-    <ReactFlowProvider>
-      <CanvasInner />
-    </ReactFlowProvider>
-  )
+  return <CanvasInner />
 }

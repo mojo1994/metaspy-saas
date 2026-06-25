@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { ReactFlowProvider } from '@xyflow/react'
 import { useAuth } from '../contexts/AuthContext'
 import { useQuizStore } from '../stores/quizStore'
 import QuizCanvas from '../components/quiz/QuizCanvas'
@@ -30,21 +31,23 @@ export default function QuizBuilder() {
   }
 
   return (
-    <div className="quiz-builder">
-      <QuizTopBar quizId={id!} />
-      <div className="quiz-builder-body">
-        {isPreview ? (
-          <div className="quiz-preview-container">
-            <PreviewQuiz />
-          </div>
-        ) : (
-          <>
-            <NodePalette />
-            <QuizCanvas />
-            <PropertyPanel />
-          </>
-        )}
+    <ReactFlowProvider>
+      <div className="quiz-builder">
+        <QuizTopBar quizId={id!} />
+        <div className="quiz-builder-body">
+          {isPreview ? (
+            <div className="quiz-preview-container">
+              <PreviewQuiz />
+            </div>
+          ) : (
+            <>
+              <NodePalette />
+              <QuizCanvas />
+              <PropertyPanel />
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </ReactFlowProvider>
   )
 }
