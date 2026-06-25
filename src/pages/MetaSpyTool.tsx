@@ -27,6 +27,7 @@ const TIMEOUT_REQUISICAO_API_MS = 30000
 const CACHE_EXPIRACAO_MS = 5 * 60 * 1000
 
 const cacheApi = new Map<string, { valor: unknown; criadoEm: number }>()
+const cacheImagensPreview = new Map<string, string>()
 
 function obterCacheApi(chave: string): unknown | null {
   const entry = cacheApi.get(chave)
@@ -189,6 +190,24 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
   return anuncio
 }
 
+async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
+  if (!anuncio.urlBiblioteca || anuncio.urlBiblioteca.includes('id=') === false) return null
+  const cacheado = cacheImagensPreview.get(anuncio.urlBiblioteca)
+  if (cacheado) return cacheado
+  try {
+    const resp = await fetch(`/api/ad-extract-image?url=${encodeURIComponent(anuncio.urlBiblioteca)}`)
+    if (!resp.ok) return null
+    const data = await resp.json()
+    if (data.imageUrl) {
+      cacheImagensPreview.set(anuncio.urlBiblioteca, data.imageUrl)
+      return data.imageUrl
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function gerarPaginas(total: number, atual: number): (number | '...')[] {
   if (total <= 7) {
     return Array.from({ length: total }, (_, i) => i + 1)
@@ -279,6 +298,14 @@ export default function MetaSpyTool() {
       setAnuncios(unicos)
       setMensagem(`${unicos.length} anuncios em alta`)
       setAlerta(`${unicos.length} anuncios em alta carregados!`)
+      carregarImagensPreview(unicos).then(imgs => {
+        if (imgs.size > 0) {
+          setAnuncios(prev => prev.map(a => ({
+            ...a,
+            midias: imgs.has(a.idAnuncio) ? [{ url: imgs.get(a.idAnuncio)!, tipo: 'imagem' }] : a.midias
+          })))
+        }
+      })
       setDebugInfo(`Total: ${todos.length}, Unicos: ${unicos.length}\n${log.join('\n')}`)
     }
     setProgresso(100)
@@ -485,6 +512,15 @@ export default function MetaSpyTool() {
       const dados = await buscarDaApi(termo)
       setProgresso(80)
       setAnuncios(dados)
+      setMensagem('Carregando imagens...')
+      carregarImagensPreview(dados).then(imgs => {
+        if (imgs.size > 0) {
+          setAnuncios(prev => prev.map(a => ({
+            ...a,
+            midias: imgs.has(a.idAnuncio) ? [{ url: imgs.get(a.idAnuncio)!, tipo: 'imagem' }] : a.midias
+          })))
+        }
+      })
       setProgresso(100)
       setMensagem('Busca concluida')
       setAlerta(`${dados.length} ofertas encontradas!`)
@@ -505,6 +541,16 @@ export default function MetaSpyTool() {
     setProgresso(0)
     setMensagem('')
     setAlerta('')
+  }
+
+  async function carregarImagensPreview(lista: Anuncio[]): Promise<Map<string, string>> {
+    const semImagem = lista.filter(a => !a.midias?.[0]?.url && a.urlBiblioteca)
+    const resultados = new Map<string, string>()
+    await Promise.allSettled(semImagem.map(async a => {
+      const url = await extrairImagemPreview(a)
+      if (url) resultados.set(a.idAnuncio, url)
+    }))
+    return resultados
   }
 
   return (
@@ -709,11 +755,10 @@ export default function MetaSpyTool() {
                 const ehDestaque = badge.texto === 'ALTA ESCALA' || badge.texto === 'ESCALADA'
                 return (
                   <div key={a.idAnuncio} className={`ad-card${ehDestaque ? ' destaque' : ''}`}>
-                    {a.midias?.[0]?.url ? (
-                      <img className="ad-card-image" src={a.midias[0].url} alt="" loading="lazy" />
-                    ) : (
+                    <div className="ad-card-img-wrap">
+                      {a.midias?.[0]?.url && <img className="ad-card-image" src={a.midias[0].url} alt="" loading="lazy" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
                       <div className="ad-card-image-placeholder"><IconImage size={32} /></div>
-                    )}
+                    </div>
                     <div className="ad-card-body">
                       <h3>{a.anunciante}</h3>
                       <div className="ad-card-text">{a.texto?.slice(0, 140) || 'Sem descricao capturada.'}</div>

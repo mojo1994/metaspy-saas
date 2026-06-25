@@ -864,6 +864,40 @@ app.get('/api/page-fetch', authMiddleware, async (req, res) => {
   }
 })
 
+// ─── Ad Preview (extract image from snapshot) ────────────────────
+const cachePreview = new Map()
+app.get('/api/ad-extract-image', async (req, res) => {
+  const { url } = req.query
+  if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
+  const cacheado = cachePreview.get(url.toString())
+  if (cacheado) return res.json(cacheado)
+  try {
+    const resp = await fetchWithTimeout(url.toString(), {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+    }, 30000)
+    if (!resp.ok) return res.status(resp.status).json({ error: `HTTP ${resp.status}` })
+    const html = await resp.text()
+    let imageUrl = null
+    const ogMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)
+    if (ogMatch) imageUrl = ogMatch[1]
+    if (!imageUrl) {
+      const fbMatch = html.match(/"(?:image|thumbnail|src)":"(https:[^"]+fbcdn[^"]+)"/i)
+      if (fbMatch) {
+        try { imageUrl = JSON.parse('"' + fbMatch[1] + '"') } catch { imageUrl = fbMatch[1] }
+      }
+    }
+    if (!imageUrl) {
+      const imgMatch = html.match(/<img[^>]+src="(https:[^"]+)"[^>]*>/i)
+      if (imgMatch) imageUrl = imgMatch[1]
+    }
+    const result = { imageUrl }
+    if (imageUrl) cachePreview.set(url.toString(), result)
+    res.json(result)
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao extrair imagem' })
+  }
+})
+
 // ─── Ads Archive (Facebook Graph API proxy) ──────────────────────
 app.get('/api/ads-archive', async (req, res) => {
   try {
