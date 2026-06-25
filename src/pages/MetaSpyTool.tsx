@@ -345,6 +345,17 @@ export default function MetaSpyTool() {
           })))
         }
       })
+      // Enqueue background extraction for ads without thumbnails
+      try {
+        const semImg = unicos.filter(a => !a.midias?.[0]?.url && a.urlBiblioteca)
+        if (semImg.length > 0) {
+          fetch('/api/enqueue-thumbnails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ads: semImg })
+          }).catch(() => {})
+        }
+      } catch {}
       setDebugInfo(`Total: ${todos.length}, Unicos: ${unicos.length}\n${log.join('\n')}`)
     }
     setProgresso(100)
@@ -560,6 +571,17 @@ export default function MetaSpyTool() {
           })))
         }
       })
+      // Enqueue background extraction for ads without thumbnails
+      try {
+        const semImg = dados.filter(a => !a.midias?.[0]?.url && a.urlBiblioteca)
+        if (semImg.length > 0) {
+          fetch('/api/enqueue-thumbnails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ads: semImg })
+          }).catch(() => {})
+        }
+      } catch {}
       setProgresso(100)
       setMensagem('Busca concluida')
       setAlerta(`${dados.length} ofertas encontradas!`)

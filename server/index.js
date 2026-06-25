@@ -19,6 +19,8 @@ import sanitizeHtml from 'sanitize-html'
 import { z } from 'zod'
 import pino from 'pino'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
+import { getRedis, cacheGet, cacheSet } from './redis.js'
+import { enqueueThumbnailExtraction, startWorker } from './thumbnailQueue.js'
 
 let ffmpegInstance = null
 let ffmpegLoading = false
@@ -961,6 +963,11 @@ app.get('/api/ad-extract-image', async (req, res) => {
     } catch {}
   }
 
+  // Enqueue background extraction if no image found
+  if (id || snapshot) {
+    enqueueThumbnailExtraction(id || '', snapshot?.toString() || '').catch(() => {})
+  }
+
   res.json({ imageUrl: null })
 })
 
@@ -1002,6 +1009,26 @@ function proxyImagemHandler(req, res) {
 
 app.get('/api/ad-image-proxy', proxyImagemHandler)
 app.get('/api/image-proxy', proxyImagemHandler)
+
+// ─── Batch thumbnail enqueue for background extraction ────────────
+app.post('/api/enqueue-thumbnails', async (req, res) => {
+  try {
+    const { ads } = req.body
+    if (!Array.isArray(ads) || ads.length === 0) {
+      return res.status(400).json({ error: 'Envie um array de ads' })
+    }
+    const results = []
+    for (const ad of ads) {
+      if (ad.idAnuncio && ad.urlBiblioteca) {
+        const jobId = await enqueueThumbnailExtraction(ad.idAnuncio, ad.urlBiblioteca)
+        if (jobId) results.push({ id: ad.idAnuncio, jobId })
+      }
+    }
+    res.json({ enfileirados: results.length, total: ads.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // ─── Puppeteer Snapshot (headless browser for ads without thumbnails) ─
 let browserInstance = null
@@ -2727,8 +2754,23 @@ app.use((err, req, res, next) => {
 })
 
 // ─── Start ───────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  logger.info({ port: PORT, frontend: process.env.FRONTEND_URL || '*', kirvano: !!KIRVANO_API_KEY, facebook: !!FB_TOKEN, db: 'PostgreSQL', env: IS_RENDER ? 'Render' : 'dev' }, 'MetaSpy Server iniciado')
+app.listen(PORT, async () => {
+  // Redis init
+  const redisClient = getRedis()
+  if (redisClient) {
+    try {
+      await redisClient.connect()
+      startWorker({
+        CF_WORKER_URL: process.env.CF_WORKER_URL || 'https://metaspy-host.09santos-felipe.workers.dev',
+        PORT,
+        FB_TOKEN,
+      })
+      logger.info('[redis] conectado e worker iniciado')
+    } catch (err) {
+      logger.warn({ err: err.message }, '[redis] falha ao conectar')
+    }
+  }
+  logger.info({ port: PORT, frontend: process.env.FRONTEND_URL || '*', kirvano: !!KIRVANO_API_KEY, facebook: !!FB_TOKEN, db: 'PostgreSQL', env: IS_RENDER ? 'Render' : 'dev', redis: !!redisClient }, 'MetaSpy Server iniciado')
 })
 
 // Keep-Alive: ping a cada 60s para evitar cold start no Render
