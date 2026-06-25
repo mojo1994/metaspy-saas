@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import {
-  Radar,
+  Crosshair,
   Copy,
   Shield,
   ChartBar,
@@ -20,7 +20,7 @@ const FEATURE_ITEMS = [
   {
     title: 'MetaSpy Ad Intelligence',
     description: 'Escaneie a Biblioteca de Anúncios do Facebook em tempo real. Descubra ofertas escaladas por score, tempo de atividade, variações criativas e muito mais.',
-    icon: Radar,
+    icon: Crosshair,
   },
   {
     title: 'Clonador',
@@ -130,7 +130,7 @@ export default function Landing() {
       <nav className="landing-nav" data-reveal style={delayStyle(0)}>
         <div className="landing-brand">
           <div className="sidebar-logo-icon landing-brand-mark">
-            <Radar size={16} weight="regular" />
+            <Crosshair size={16} weight="regular" />
           </div>
           <span className="landing-brand-name">MetaSpy</span>
         </div>
@@ -150,7 +150,7 @@ export default function Landing() {
         <div className="landing-hero-inner">
           <div className="landing-hero-badge" data-reveal style={delayStyle(40)}>
             <div className="landing-brand-mark landing-hero-mark">
-              <Radar size={14} weight="regular" />
+              <Crosshair size={14} weight="regular" />
             </div>
             <span>MetaSpy</span>
           </div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Radar, Check, Minus, Star, Sparkle, ArrowRight } from '@phosphor-icons/react'
+import { Crosshair, Check, Minus, Star, Sparkle, ArrowRight } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
   { label: 'Clonador de Páginas', ok: true },
@@ -146,7 +146,7 @@ export default function Planos() {
       <nav className="planos-nav" data-reveal style={revealStyle(0)}>
         <div className="planos-brand">
           <div className="sidebar-logo-icon planos-brand-mark">
-            <Radar size={18} weight="regular" />
+            <Crosshair size={18} weight="regular" />
           </div>
           <span className="planos-brand-name">MetaSpy</span>
         </div>

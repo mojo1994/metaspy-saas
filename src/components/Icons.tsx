@@ -8,7 +8,7 @@ import {
   Star,
   Image,
   X,
-  Radar as PhosphorRadar,
+  Crosshair as PhosphorCrosshair,
   Diamond,
   Lock,
   PlusSquare,
@@ -60,11 +60,11 @@ export function IconClose({ size = 18, className }: Props) {
 }
 
 export function IconLogo({ size = 24, className }: Props) {
-  return <PhosphorRadar size={size} weight="regular" className={className} />
+  return <PhosphorCrosshair size={size} weight="regular" className={className} />
 }
 
 export function IconTarget({ size = 24, className }: Props) {
-  return <PhosphorRadar size={size} weight="regular" className={className} />
+  return <PhosphorCrosshair size={size} weight="regular" className={className} />
 }
 
 export function IconDiamond({ size = 24, className }: Props) {
