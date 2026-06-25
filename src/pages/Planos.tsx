@@ -92,23 +92,30 @@ function ParticleField() {
     let mx = -9999, my = -9999
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
 
+    function getPageH() {
+      return Math.max(document.documentElement.scrollHeight, window.innerHeight)
+    }
+
     function resize() {
-      canvas!.width = window.innerWidth * dpr
-      canvas!.height = window.innerHeight * dpr
-      canvas!.style.width = window.innerWidth + 'px'
-      canvas!.style.height = window.innerHeight + 'px'
+      const pw = window.innerWidth
+      const ph = getPageH()
+      canvas!.width = pw * dpr
+      canvas!.height = ph * dpr
+      canvas!.style.width = pw + 'px'
+      canvas!.style.height = ph + 'px'
       ctx!.scale(dpr, dpr)
     }
     resize()
     window.addEventListener('resize', resize)
 
-    const count = Math.min(120, Math.floor(window.innerWidth * window.innerHeight / 12000))
+    const ph = getPageH()
+    const count = Math.min(120, Math.floor(window.innerWidth * ph / 12000))
     const pts: { x: number; y: number; vx: number; vy: number; s: number; o: number }[] = []
 
     for (let i = 0; i < count; i++) {
       pts.push({
         x: Math.random() * window.innerWidth,
-        y: Math.random() * window.innerHeight,
+        y: Math.random() * ph,
         vx: (Math.random() - 0.5) * 0.35,
         vy: (Math.random() - 0.5) * 0.35,
         s: Math.random() * 2.4 + 0.6,
@@ -118,13 +125,14 @@ function ParticleField() {
 
     function draw() {
       const w = window.innerWidth
-      const h = window.innerHeight
+      const h = getPageH()
       ctx!.clearRect(0, 0, w, h)
 
       for (let i = 0; i < pts.length; i++) {
         const p = pts[i]
         const dx = mx - p.x
-        const dy = my - p.y
+        const dy = (my + window.scrollY) - p.y
+
         const dist = Math.sqrt(dx * dx + dy * dy)
         if (dist < 180) {
           const f = ((180 - dist) / 180) * 0.015
