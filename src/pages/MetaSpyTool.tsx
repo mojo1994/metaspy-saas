@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { IconImage, IconClose, IconTarget, IconChevronDown, IconChevronRight, IconArrowUp } from '../components/Icons'
@@ -223,6 +223,21 @@ export default function MetaSpyTool() {
   })
 
   const apiOnline = true
+  const buscouAuto = useRef(false)
+
+  const TERMOS_EM_ALTA = ['comprar', 'receita', 'curso online', 'emagrecer', 'whatsapp', 'desconto']
+
+  useEffect(() => {
+    if (buscouAuto.current || carregando || anuncios.length > 0) return
+    buscouAuto.current = true
+    const termo = TERMOS_EM_ALTA[Math.floor(Math.random() * TERMOS_EM_ALTA.length)]
+    setSearchTerm(termo)
+  }, [])
+
+  useEffect(() => {
+    if (!buscouAuto.current || carregando || anuncios.length > 0 || !searchTerm) return
+    iniciarBusca()
+  }, [searchTerm])
 
   const anunciosFiltrados = useMemo(() => {
     let lista = [...anuncios]
