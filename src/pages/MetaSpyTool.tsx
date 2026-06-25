@@ -209,7 +209,7 @@ export default function MetaSpyTool() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filtrosExpandidos, setFiltrosExpandidos] = useState(false)
   const [filtros, setFiltros] = useState<FilterState>({
-    ordenacao: 'mais_recente',
+    ordenacao: 'maior_escala',
     plataforma: 'ambos',
     pais: 'BR',
     statusApi: 'ACTIVE',
@@ -225,19 +225,13 @@ export default function MetaSpyTool() {
   const apiOnline = true
   const buscouAuto = useRef(false)
 
-  const TERMOS_EM_ALTA = ['comprar', 'receita', 'curso online', 'emagrecer', 'whatsapp', 'desconto']
-
   useEffect(() => {
     if (buscouAuto.current || carregando || anuncios.length > 0) return
     buscouAuto.current = true
-    const termo = TERMOS_EM_ALTA[Math.floor(Math.random() * TERMOS_EM_ALTA.length)]
-    setSearchTerm(termo)
+    setMensagem('Carregando anuncios em alta...')
+    setCarregando(true)
+    buscarEmAlta()
   }, [])
-
-  useEffect(() => {
-    if (!buscouAuto.current || carregando || anuncios.length > 0 || !searchTerm) return
-    iniciarBusca()
-  }, [searchTerm])
 
   const anunciosFiltrados = useMemo(() => {
     let lista = [...anuncios]
@@ -383,6 +377,31 @@ export default function MetaSpyTool() {
     }
     throw ultimoErro || new Error('Nenhum cenario de consulta funcionou.')
   }, [filtros.pais, filtros.statusApi, montarCenariosApi])
+
+  const buscarEmAlta = useCallback(async () => {
+    const params = new URLSearchParams({
+      ad_active_status: 'ACTIVE',
+      ad_reached_countries: JSON.stringify([filtros.pais]),
+      ad_type: 'ALL',
+      limit: '50',
+      fields: CAMPOS_API_PRINCIPAL
+    })
+    const url = `${FB_API_BASE}?${params.toString()}`
+    try {
+      const json = await requisicaoApiComRetry(url)
+      const dados = (json.data || []).map(normalizarAnuncioApi).filter((a): a is Anuncio => a !== null)
+      dados.sort((a, b) => (b.scoreEscala || 0) - (a.scoreEscala || 0))
+      setAnuncios(dados)
+      setProgresso(100)
+      setMensagem(`${dados.length} anuncios em alta`)
+      setAlerta(`${dados.length} anuncios em alta carregados!`)
+    } catch (err) {
+      setAlerta(`Erro ao carregar: ${err instanceof Error ? err.message : 'Falha'}`)
+      setMensagem('Erro ao carregar')
+    } finally {
+      setCarregando(false)
+    }
+  }, [filtros.pais, requisicaoApiComRetry])
 
   async function iniciarBusca() {
     setCarregando(true)

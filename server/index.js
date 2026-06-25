@@ -867,13 +867,19 @@ app.get('/api/page-fetch', authMiddleware, async (req, res) => {
 // ─── Ads Archive (Facebook Graph API proxy) ──────────────────────
 app.get('/api/ads-archive', async (req, res) => {
   try {
-    const params = new URLSearchParams(req.query)
+    const params = new URLSearchParams()
+    for (const [key, val] of Object.entries(req.query)) {
+      if (Array.isArray(val)) val.forEach(v => params.append(key, String(v)))
+      else params.set(key, String(val))
+    }
     if (!params.has('access_token')) params.set('access_token', FB_TOKEN)
-    const apiUrl = `https://graph.facebook.com/v21.0/ads_archive?${params.toString()}`
-    const resp = await fetch(apiUrl, {
-      headers: { 'User-Agent': 'MetaSpy/1.0' },
-      signal: AbortSignal.timeout(30000)
-    })
+    const apiUrl = `https://graph.facebook.com/v22.0/ads_archive?${params.toString()}`
+    const resp = await fetchWithTimeout(apiUrl, {
+      headers: {
+        'User-Agent': 'MetaSpy/1.0',
+        'Authorization': `Bearer ${FB_TOKEN}`
+      }
+    }, 30000)
     const text = await resp.text()
     res.set('Content-Type', 'application/json')
     res.status(resp.status).send(text)
