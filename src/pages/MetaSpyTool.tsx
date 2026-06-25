@@ -201,7 +201,22 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
   if (!chave) return null
   const cacheado = cacheImagensPreview.get(chave)
   if (cacheado) return cacheado
-  // Strategy 1: Render backend (Graph API creative fields + imagem_hash CDN, timeout 15s)
+  // Strategy 1: Apify Facebook Ads Scraper (busca imagem real do criativo, timeout 45s)
+  if (anuncio.idAnuncio) {
+    try {
+      const resp = await fetch(`/api/ad-image-apify?adId=${encodeURIComponent(anuncio.idAnuncio)}`, {
+        signal: AbortSignal.timeout(45000)
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        if (data.imageUrl) {
+          cacheImagensPreview.set(chave, data.imageUrl)
+          return data.imageUrl
+        }
+      }
+    } catch (e) { console.error('[extrairImagemPreview] Apify falhou:', e) }
+  }
+  // Strategy 2: Render backend (Graph API creative fields + CDN, timeout 10s)
   try {
     const params = new URLSearchParams()
     if (anuncio.idAnuncio) params.set('id', anuncio.idAnuncio)
@@ -211,7 +226,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
     // @ts-ignore
     if (anuncio.objectStorySpec) params.set('objectStorySpec', JSON.stringify(anuncio.objectStorySpec))
     const resp = await fetch(`/api/ad-extract-image?${params.toString()}`, {
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(10000)
     })
     if (resp.ok) {
       const data = await resp.json()
@@ -221,39 +236,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
       }
     }
   } catch (e) { console.error('[extrairImagemPreview] Backend falhou:', e) }
-  // Strategy 2: Cloudflare Worker (screenshot em background + scrape, timeout 10s)
-  try {
-    const body: Record<string, string> = { snapshotUrl: anuncio.urlBiblioteca }
-    if (anuncio.urlDestino) body.linkUrl = anuncio.urlDestino
-    if (anuncio.pageId) body.pageId = anuncio.pageId
-    const resp = await fetch(`${CF_WORKER_URL}/api/ad-preview`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10000)
-    })
-    if (resp.ok) {
-      const data = await resp.json()
-      if (data.imageUrl) {
-        cacheImagensPreview.set(chave, data.imageUrl)
-        return data.imageUrl
-      }
-    }
-  } catch (e) { console.error('[extrairImagemPreview] CF Worker falhou:', e) }
-  // Strategy 3: Puppeteer backend (Render, timeout 10s)
-  try {
-    const resp = await fetch(`/api/ad-snapshot-image?url=${encodeURIComponent(anuncio.urlBiblioteca)}`, {
-      signal: AbortSignal.timeout(10000)
-    })
-    if (resp.ok) {
-      const data = await resp.json()
-      if (data.imageUrl) {
-        cacheImagensPreview.set(chave, data.imageUrl)
-        return data.imageUrl
-      }
-    }
-  } catch (e) { console.error('[extrairImagemPreview] Puppeteer falhou:', e) }
-  // Strategy 4: Page profile picture as guaranteed fallback
+  // Strategy 3: Page profile picture as guaranteed fallback
   if (anuncio.pageId) {
     try {
       const resp = await fetch(`/api/page-picture/${anuncio.pageId}`, { signal: AbortSignal.timeout(5000) })

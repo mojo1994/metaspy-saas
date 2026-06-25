@@ -1179,6 +1179,102 @@ async function getPageProfilePic(pageId, adId) {
   return null
 }
 
+// ─── Apify Facebook Ads Scraper Integration ────────────────────
+const APIFY_TOKEN = process.env.APIFY_TOKEN
+const APIFY_ACTOR_ID = 'XtaWFhbtfxyzqrFmd'
+const apifyCache = new Map()
+
+async function extractImageFromApifyData(items) {
+  if (!Array.isArray(items) || items.length === 0) return null
+  const item = items[0]
+  // Try cards first (most common for multi-creative ads)
+  const cards = item.snapshot?.cards || item.snapshot?.images || []
+  for (const card of cards) {
+    if (card.original_image_url) return card.original_image_url
+    if (card.resized_image_url) return card.resized_image_url
+    if (card.video_preview_image_url) return card.video_preview_image_url
+  }
+  // Try direct images
+  const images = item.snapshot?.images || []
+  for (const img of images) {
+    if (img.original_image_url) return img.original_image_url
+    if (img.resized_image_url) return img.resized_image_url
+  }
+  // Try page profile picture as last resort
+  if (item.snapshot?.page_profile_picture_url) return item.snapshot.page_profile_picture_url
+  return null
+}
+
+app.get('/api/ad-image-apify', async (req, res) => {
+  const { adId, adUrl } = req.query
+  const id = adId?.toString() || ''
+  const libraryUrl = adUrl?.toString() || (id ? `https://www.facebook.com/ads/library/?id=${id}` : '')
+  if (!libraryUrl) return res.status(400).json({ error: 'Informe adId ou adUrl' })
+
+  const cacheKey = libraryUrl
+  const cached = apifyCache.get(cacheKey)
+  if (cached) return res.json({ imageUrl: cached })
+
+  if (!APIFY_TOKEN) {
+    logger.warn('APIFY_TOKEN nao configurado')
+    return res.json({ imageUrl: null })
+  }
+
+  try {
+    const runResp = await fetch(`https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs?token=${APIFY_TOKEN}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        count: 1,
+        scrapeAdDetails: true,
+        urls: [{ url: libraryUrl }]
+      })
+    })
+
+    if (!runResp.ok) {
+      const errText = await runResp.text().catch(() => '')
+      logger.warn({ status: runResp.status, errText }, 'Apify run falhou')
+      return res.json({ imageUrl: null })
+    }
+
+    const runData = await runResp.json()
+    const runId = runData?.data?.id
+    if (!runId) return res.json({ imageUrl: null })
+
+    // Poll for completion (max 30s)
+    let result = null
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+      const statusResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`)
+      if (!statusResp.ok) continue
+      const statusData = await statusResp.json()
+      const status = statusData?.data?.status
+
+      if (status === 'SUCCEEDED') {
+        // Get dataset items
+        const dsResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}/dataset/items?token=${APIFY_TOKEN}`)
+        if (dsResp.ok) {
+          const items = await dsResp.json()
+          result = await extractImageFromApifyData(items)
+        }
+        break
+      } else if (status === 'FAILED' || status === 'ABORTED' || status === 'TIMED-OUT') {
+        break
+      }
+    }
+
+    if (result) {
+      apifyCache.set(cacheKey, result)
+      setTimeout(() => apifyCache.delete(cacheKey), 30 * 60 * 1000) // 30min cache
+      return res.json({ imageUrl: result })
+    }
+    res.json({ imageUrl: null })
+  } catch (e) {
+    logger.warn({ err: String(e) }, 'Apify integration erro')
+    res.json({ imageUrl: null })
+  }
+})
+
 // ─── Image Proxy (bypass CDN blocking via browser fingerprint) ──
 const DOMINIOS_PERMITIDOS = ['.fbcdn.net', '.facebook.com', '.meta.com', '.fbsbx.com']
 
