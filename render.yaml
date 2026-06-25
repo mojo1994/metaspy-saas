@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: metaspy-server
+    env: node
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    workingDirectory: ./
+    envVars:
+      - key: NODE_ENV
+        value: production
