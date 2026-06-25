@@ -10,10 +10,8 @@ import {
   Sliders,
   Download,
   Play,
-  ArrowRight,
   Check,
   Minus,
-  Stack,
 } from '@phosphor-icons/react'
 
 const FEATURE_ITEMS = [
@@ -145,15 +143,15 @@ export default function Landing() {
           <div className="landing-cta" data-reveal style={delayStyle(360)}>
             {isAuthenticated ? (
               <Link to="/dashboard" className="btn btn-gradient landing-cta-btn">
-                Ir para o Dashboard <ArrowRight size={18} weight="regular" />
+                Ir para o Dashboard
               </Link>
             ) : (
               <>
                 <Link to="/planos" className="btn btn-gradient landing-cta-btn">
-                  COMEÇAR AGORA <ArrowRight size={18} weight="regular" />
+                  COMEÇAR AGORA
                 </Link>
                 <Link to="/login" className="btn btn-primary landing-cta-btn">
-                  Entrar <ArrowRight size={18} weight="regular" />
+                  Entrar
                 </Link>
               </>
             )}
@@ -199,7 +197,6 @@ export default function Landing() {
                   <h3>{plan.title}</h3>
                   {plan.highlighted && (
                     <div className="planos-card-badge planos-card-badge-animated">
-                      <Stack size={12} weight="regular" />
                       MELHOR VALOR
                     </div>
                   )}

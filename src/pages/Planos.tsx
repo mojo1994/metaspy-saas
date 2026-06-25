@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Check, Minus, Star, Sparkle, ArrowRight } from '@phosphor-icons/react'
+import { Check, Minus, Star } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
   { label: 'Clonador de Páginas', ok: true },
@@ -153,9 +153,6 @@ export default function Planos() {
 
       <section className="planos-hero">
         <div className="planos-hero-inner">
-          <div className="planos-hero-badge reveal-lift" data-reveal style={revealStyle(0)}>
-            ACESSO IMEDIATO • CANCELAMENTO LIVRE
-          </div>
           <h1 className="reveal-lift planos-hero-title" data-reveal style={revealStyle(120)}>
             Escolha o Plano Ideal para Escalar suas Campanhas
           </h1>
@@ -166,15 +163,15 @@ export default function Planos() {
           <div className="planos-hero-cta-row" data-reveal style={revealStyle(360)}>
             {isAuthenticated ? (
               <button type="button" className="btn btn-gradient planos-hero-cta" onClick={() => navigate('/dashboard')}>
-                Ir para o Dashboard <ArrowRight size={18} weight="regular" />
+                Ir para o Dashboard
               </button>
             ) : (
               <>
                 <button type="button" className="btn btn-gradient planos-hero-cta" onClick={() => navigate('/signup')}>
-                  COMEÇAR AGORA <ArrowRight size={18} weight="regular" />
+                  COMEÇAR AGORA
                 </button>
                 <button type="button" className="btn btn-primary planos-hero-cta" onClick={() => navigate('/login')}>
-                  Entrar <ArrowRight size={18} weight="regular" />
+                  Entrar
                 </button>
               </>
             )}
@@ -195,7 +192,6 @@ export default function Planos() {
                 <h2>{plan.title}</h2>
                 {plan.highlighted && (
                   <div className="planos-card-badge planos-card-badge-animated">
-                    <Sparkle size={12} weight="regular" />
                     MELHOR VALOR
                   </div>
                 )}
@@ -330,7 +326,7 @@ export default function Planos() {
         <h2>Pronto para escalar?</h2>
         <p>Junte-se a centenas de profissionais que ja usam o MetaSpy para dominar o Meta Ads.</p>
         <button type="button" className="btn btn-gradient planos-bottom-cta" onClick={() => handleCheckout('basico')}>
-          COMEÇAR AGORA <ArrowRight size={18} weight="regular" />
+          COMEÇAR AGORA
         </button>
       </section>
 
