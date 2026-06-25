@@ -2337,8 +2337,7 @@ app.post('/api/pages/upload', authMiddleware, async (req, res, next) => {
       }
     }
     if (indexHtml) {
-      const sanitizedHtml = sanitizeHtmlStrict(indexHtml)
-      run('UPDATE pages SET html = $1 WHERE id = $2', [sanitizedHtml, id]).catch(() => {})
+      run('UPDATE pages SET html = $1 WHERE id = $2', [indexHtml, id]).catch(() => {})
     }
 
     if (USE_CF_STORAGE) {
