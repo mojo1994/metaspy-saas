@@ -866,7 +866,26 @@ app.get('/api/page-fetch', authMiddleware, async (req, res) => {
   }
 })
 
-// ─── Ad Image Extraction ─────────────────────────────────────────
+  // ─── CDN URL patterns for image_hash ──────────────────────────
+const CDN_PATTERNS = [
+  (hash) => `https://scontent.xx.fbcdn.net/v/t45.1600-4/${hash}_n.jpg`,
+  (hash) => `https://scontent.xx.fbcdn.net/v/t1.15770-9/${hash}_n.jpg`,
+  (hash) => `https://scontent.xx.fbcdn.net/v/t1.30497-1/${hash}_n.jpg`,
+  (hash) => `https://scontent.xx.fbcdn.net/v/t1.6435-9/${hash}_n.jpg`,
+]
+
+async function resolveImageHash(hash) {
+  for (const pattern of CDN_PATTERNS) {
+    try {
+      const url = pattern(hash)
+      const resp = await fetchWithTimeout(url, { method: 'HEAD' }, 3000)
+      if (resp.ok) return url
+    } catch {}
+  }
+  return null
+}
+
+  // ─── Ad Image Extraction ─────────────────────────────────────────
 const cachePreview = new Map()
 app.get('/api/ad-extract-image', async (req, res) => {
   const { id, snapshot, linkUrl, pageId: pageIdParam } = req.query
@@ -916,12 +935,14 @@ app.get('/api/ad-extract-image', async (req, res) => {
                 cachePreview.set(chaveCache, result)
                 return res.json(result)
               }
-              // 1d: Se temos image_hash, constroi CDN URL
+              // 1d: Se temos image_hash, tenta multiplos padroes CDN
               if (cData.image_hash) {
-                const cdnUrl = `https://scontent.xx.fbcdn.net/v/t45.1600-4/${cData.image_hash}_n.jpg`
-                const result = { imageUrl: cdnUrl }
-                cachePreview.set(chaveCache, result)
-                return res.json(result)
+                const resolved = await resolveImageHash(cData.image_hash)
+                if (resolved) {
+                  const result = { imageUrl: resolved }
+                  cachePreview.set(chaveCache, result)
+                  return res.json(result)
+                }
               }
             }
           } catch (e) { logger.warn({ err: e?.message, creativeId }, 'Estrat1c: creative query falhou') }
@@ -954,10 +975,12 @@ app.get('/api/ad-extract-image', async (req, res) => {
           }
           const hashMatch = specStr.match(/"image_hash"\s*:\s*"([^"]+)"/)
           if (hashMatch) {
-            const cdnUrl = `https://scontent.xx.fbcdn.net/v/t45.1600-4/${hashMatch[1]}_n.jpg`
-            const result = { imageUrl: cdnUrl }
-            cachePreview.set(chaveCache, result)
-            return res.json(result)
+            const resolved = await resolveImageHash(hashMatch[1])
+            if (resolved) {
+              const result = { imageUrl: resolved }
+              cachePreview.set(chaveCache, result)
+              return res.json(result)
+            }
           }
         }
 
@@ -976,10 +999,12 @@ app.get('/api/ad-extract-image', async (req, res) => {
               return res.json(result)
             }
             if (first?.image_hash) {
-              const cdnUrl = `https://scontent.xx.fbcdn.net/v/t45.1600-4/${first.image_hash}_n.jpg`
-              const result = { imageUrl: cdnUrl }
-              cachePreview.set(chaveCache, result)
-              return res.json(result)
+              const resolved = await resolveImageHash(first.image_hash)
+              if (resolved) {
+                const result = { imageUrl: resolved }
+                cachePreview.set(chaveCache, result)
+                return res.json(result)
+              }
             }
           }
         } catch (e) { logger.warn({ err: e?.message, id }, 'Estrat1f: creatives endpoint falhou') }

@@ -25,28 +25,8 @@ export default {
 
         let imageUrl = null
 
-        // Strategy 1: Scrape OG meta tags from the snapshot page (timeout rapido 10s)
-        try {
-          const scraped = await env.BROWSER.quickAction('scrape', {
-            url: snapshotUrl,
-            userAgent: BROWSER_UA,
-            setExtraHTTPHeaders: EXTRA_HEADERS,
-            gotoOptions: { waitUntil: 'load', timeout: 10000 },
-            bestAttempt: true,
-            elements: [
-              { selector: "meta[property='og:image']" },
-              { selector: "meta[name='twitter:image']" },
-              { selector: "link[rel='image_src']" },
-            ],
-          })
-          for (const item of scraped) {
-            const val = item.results?.[0]?.attributes?.find(a => a.name === 'content' || a.name === 'href')?.value
-            if (val && /^https?:\/\//.test(val)) { imageUrl = val; break }
-          }
-        } catch (e) { console.error('[worker] Strat1 scrape falhou:', e?.message || e) }
-
-        // Strategy 2: HTTP fetch direto da landing page (sem Browser Run, rapido)
-        if (!imageUrl && linkUrl) {
+        // Strategy 1: HTTP fetch direto da landing page (mais rapido, sempre tenta)
+        if (linkUrl) {
           try {
             const resp = await fetch(linkUrl, {
               headers: {
@@ -66,7 +46,37 @@ export default {
                 if (m) imageUrl = m[1].replace(/&amp;/g, '&')
               }
             }
-          } catch (e) { console.error('[worker] Strat2 HTTP fetch falhou:', e?.message || e) }
+          } catch (e) { console.error('[worker] Strat1 HTTP fetch falhou:', e?.message || e) }
+        }
+
+        // Strategy 2: Browser Run scrape do render_ad page (busca imagens direto)
+        if (!imageUrl) {
+          try {
+            const scraped = await env.BROWSER.quickAction('scrape', {
+              url: snapshotUrl,
+              userAgent: BROWSER_UA,
+              setExtraHTTPHeaders: EXTRA_HEADERS,
+              gotoOptions: { waitUntil: 'load', timeout: 10000 },
+              bestAttempt: true,
+              elements: [
+                { selector: "img[src*='fbcdn']" },
+                { selector: "img[src*='scontent']" },
+                { selector: "meta[property='og:image']" },
+                { selector: "meta[name='twitter:image']" },
+                { selector: "link[rel='image_src']" },
+              ],
+            })
+            for (const item of scraped) {
+              const attrs = item.results?.[0]?.attributes || []
+              const val = attrs.find(a => a.name === 'src' || a.name === 'content' || a.name === 'href')?.value
+              if (val && /^https?:\/\//.test(val)) {
+                const clean = val.replace(/&amp;/g, '&').replace(/\\\//g, '/')
+                if (!clean.includes('emoji') && !clean.includes('icon')) {
+                  imageUrl = clean; break
+                }
+              }
+            }
+          } catch (e) { console.error('[worker] Strat2 scrape falhou:', e?.message || e) }
         }
 
         // Retorna resposta IMEDIATA com o que temos (ou null)
