@@ -4,7 +4,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import multer from 'multer'
-import { randomUUID, createHash, createHmac } from 'node:crypto'
+import { randomUUID, createHash, createHmac, createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync } from 'node:fs'
@@ -109,7 +109,7 @@ function generateHMACSignature(campaignId, targetUrl, timestamp, nonce) {
 function verifyHMACSignature(campaignId, targetUrl, timestamp, nonce, signature) {
   const expected = generateHMACSignature(campaignId, targetUrl, timestamp, nonce)
   if (expected.length !== signature.length) return false
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
 }
 
 // ─── Fraud Score Decision Engine ─────────────────────────────────
@@ -330,7 +330,7 @@ const STEG_AES_KEY = process.env.STEG_AES_KEY || createHash('sha256').update(HMA
 
 function stegEncrypt(data) {
   const iv = randomUUID().replace(/-/g, '').slice(0, 16)
-  const cipher = crypto.createCipheriv('aes-256-cbc', STEG_AES_KEY, iv)
+  const cipher = createCipheriv('aes-256-cbc', STEG_AES_KEY, iv)
   const encrypted = Buffer.concat([cipher.update(data), cipher.final()])
   const hmac = createHmac('sha256', STEG_AES_KEY).update(encrypted).digest()
   return Buffer.concat([Buffer.from(iv), hmac, encrypted])
@@ -343,7 +343,7 @@ function stegDecrypt(payload) {
     const encrypted = payload.slice(48)
     const expected = createHmac('sha256', STEG_AES_KEY).update(encrypted).digest()
     if (!hmac.equals(expected)) return null
-    const decipher = crypto.createDecipheriv('aes-256-cbc', STEG_AES_KEY, iv)
+    const decipher = createDecipheriv('aes-256-cbc', STEG_AES_KEY, iv)
     return Buffer.concat([decipher.update(encrypted), decipher.final()])
   } catch { return null }
 }
