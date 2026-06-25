@@ -2162,7 +2162,7 @@ button:active,
 
 .planos-hero-title {
   margin: 22px auto 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: clamp(3.7rem, 8vw, 5.2rem);
   line-height: 0.95;
   letter-spacing: -0.07em;
@@ -2943,7 +2943,7 @@ button:active,
 }
 
 .landing-hero h1 {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: clamp(3.1rem, 6.8vw, 4.9rem);
   line-height: 0.98;
   letter-spacing: -0.06em;

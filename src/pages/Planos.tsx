@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Crosshair, Check, Minus, Star, Sparkle, ArrowRight } from '@phosphor-icons/react'
+import { Check, Minus, Star, Sparkle, ArrowRight } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
   { label: 'Clonador de Páginas', ok: true },
@@ -150,25 +150,6 @@ export default function Planos() {
   return (
     <div className="planos-page">
       <div className="planos-bg" />
-
-      <nav className="planos-nav" data-reveal style={revealStyle(0)}>
-        <div className="planos-brand">
-          <div className="sidebar-logo-icon planos-brand-mark">
-            <Crosshair size={18} weight="regular" />
-          </div>
-          <span className="planos-brand-name">MetaSpy</span>
-        </div>
-        <div className="planos-nav-actions">
-          {isAuthenticated ? (
-            <button type="button" className="btn btn-secondary" onClick={() => navigate('/dashboard')}>Dashboard</button>
-          ) : (
-            <>
-              <button type="button" className="btn btn-secondary" onClick={() => navigate('/login')}>Entrar</button>
-              <button type="button" className="btn btn-gradient" onClick={() => navigate('/signup')}>Criar Conta</button>
-            </>
-          )}
-        </div>
-      </nav>
 
       <section className="planos-hero">
         <div className="planos-hero-inner">

@@ -127,25 +127,6 @@ export default function Landing() {
 
   return (
     <div className="landing">
-      <nav className="landing-nav" data-reveal style={delayStyle(0)}>
-        <div className="landing-brand">
-          <div className="sidebar-logo-icon landing-brand-mark">
-            <Crosshair size={16} weight="regular" />
-          </div>
-          <span className="landing-brand-name">MetaSpy</span>
-        </div>
-        <div className="landing-nav-actions">
-          {isAuthenticated ? (
-            <Link to="/dashboard" className="btn btn-gradient landing-nav-btn">Dashboard</Link>
-          ) : (
-            <>
-              <Link to="/login" className="btn btn-secondary landing-nav-btn">Entrar</Link>
-              <Link to="/signup" className="btn btn-gradient landing-nav-btn">Criar Conta</Link>
-            </>
-          )}
-        </div>
-      </nav>
-
       <section className="landing-hero">
         <div className="landing-hero-inner">
           <div className="landing-hero-badge" data-reveal style={delayStyle(40)}>
