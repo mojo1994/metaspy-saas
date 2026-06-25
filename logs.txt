@@ -1,176 +1,32 @@
-FIX SALES PAGE TEXT ENCODING, COPY QUALITY AND COMPARISON TABLE
 
-OBJECTIVE
-
-The current sales page suffers from UTF-8 encoding issues and low-quality AI-generated copy.
-
-Examples of broken encoding:
-
-â€¢
-â€”
-Â©
-Basico
-Analise
-Paginas
-Duvidas
-Nao
-
-This is unacceptable for a production SaaS.
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-TEXT ENCODING REQUIREMENTS
-
-1. Force UTF-8 encoding across the entire application.
-2. Ensure frontend renders UTF-8 correctly.
-3. Ensure database stores UTF-8 correctly.
-4. Ensure API responses use UTF-8 headers.
-5. Remove all malformed characters.
-6. Validate all generated content before rendering.
-
-Replace:
-
-Basico → Básico
-Paginas → Páginas
-Analise → Análise
-Duvidas → Dúvidas
-Nao → Não
-Ate → Até
-Tecnico → Técnico
-Programacao → Programação
-Excecao → Exceção
-Inteligencia → Inteligência
-
-Replace malformed symbols:
-
-â€¢ → •
-â€” → —
-Â© → ©
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-COPY IMPROVEMENTS
-
-The sales page should sound premium, direct-response oriented and professional.
-
-Current copy feels generic and AI-generated.
-
-Rewrite headlines and descriptions using persuasive language.
-
-Example:
-
-Current:
-
-Escolha seu Arsenal de Guerra
-
-Replace with:
-
-Escolha o Plano Ideal para Escalar suas Campanhas
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-COMPARISON TABLE IMPROVEMENTS
-
-The current comparison section is useless because every plan appears identical.
-
-Users cannot understand why they should upgrade.
-
-Create a real feature comparison.
-
-Example:
-
-FUNCIONALIDADE
-
-Clonador de Páginas
-MetaSpy Minerador de Ads
-Editor Visual
-Exportação CSV
-Filtros Inteligentes
-Análise Avançada
-Bypass Engine
-Cloacker Profissional
-Remover Metadados
-Suporte Prioritário
-
-BÁSICO
-
-✓ Clonador de Páginas
-✓ Minerador de Ads
-✓ Filtros Inteligentes
-✗ Editor Visual
-✗ Exportação CSV
-✗ Análise Avançada
-✗ Bypass Engine
-✗ Cloacker
-✗ Remover Metadados
-Suporte Padrão
-
-GOLD
-
-✓ Clonador de Páginas
-✓ Minerador de Ads
-✓ Editor Visual
-✓ Exportação CSV
-✓ Filtros Inteligentes
-✓ Análise Avançada
-✓ Bypass Engine
-✓ Cloacker Profissional
-✗ Remover Metadados
-Suporte Prioritário
-
-PREMIUM
-
-✓ Todas as funcionalidades
-✓ Atualizações prioritárias
-✓ Remover Metadados
-✓ Recursos futuros inclusos
-✓ Suporte Máximo
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-TESTIMONIAL SECTION
-
-Improve typography.
-
-Ensure proper quotation marks.
-
-Ensure names, roles and spacing are consistent.
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-FAQ SECTION
-
-Rewrite every FAQ using correct Portuguese grammar.
-
-Ensure:
-
-* Correct accents
-* Correct punctuation
-* Correct capitalization
-* Professional tone
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-FOOTER
-
-Replace:
-
-MetaSpy Â© 2026 â€” Inteligencia de ofertas em escala.
-
-With:
-
-MetaSpy © 2026 — Inteligência de Ofertas em Escala.
-Todos os direitos reservados.
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-FINAL GOAL
-
-The page must feel like a premium SaaS sales page.
-
-No encoding errors.
-No malformed characters.
-No AI-looking copy.
-No duplicated features.
-
-Every plan must clearly communicate value and justify upgrades.
+up to date, audited 262 packages in 832ms
+42 packages are looking for funding
+  run `npm fund` for details
+found 0 vulnerabilities
+==> Uploading build...
+==> Uploaded in 2.3s. Compression took 2.5s
+==> Build successful 🎉
+==> Deploying...
+==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+==> Running 'node index.js'
+file:///opt/render/project/src/server/index.js:14
+import archiver from 'archiver'
+       ^^^^^^^^
+SyntaxError: The requested module 'archiver' does not provide an export named 'default'
+    at ModuleJob._instantiate (node:internal/modules/esm/module_job:213:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:320:5)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+Node.js v20.20.2
+==> Exited with status 1
+==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
+==> Running 'node index.js'
+file:///opt/render/project/src/server/index.js:14
+import archiver from 'archiver'
+       ^^^^^^^^
+SyntaxError: The requested module 'archiver' does not provide an export named 'default'
+    at ModuleJob._instantiate (node:internal/modules/esm/module_job:213:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:320:5)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+Node.js v20.20.2

@@ -1264,7 +1264,8 @@ select {
   opacity: 0;
 }
 .sidebar-subnav.open {
-  max-height: 200px;
+  max-height: 600px;
+  overflow-y: auto;
   opacity: 1;
 }
 .sidebar-sublink {
