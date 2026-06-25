@@ -864,6 +864,24 @@ app.get('/api/page-fetch', authMiddleware, async (req, res) => {
   }
 })
 
+// ─── Ads Archive (Facebook Graph API proxy) ──────────────────────
+app.get('/api/ads-archive', async (req, res) => {
+  try {
+    const params = new URLSearchParams(req.query)
+    if (!params.has('access_token')) params.set('access_token', FB_TOKEN)
+    const apiUrl = `https://graph.facebook.com/v21.0/ads_archive?${params.toString()}`
+    const resp = await fetch(apiUrl, {
+      headers: { 'User-Agent': 'MetaSpy/1.0' },
+      signal: AbortSignal.timeout(30000)
+    })
+    const text = await resp.text()
+    res.set('Content-Type', 'application/json')
+    res.status(resp.status).send(text)
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao consultar ads_archive' })
+  }
+})
+
 // ─── Subscription Routes ─────────────────────────────────────────
 const KIRVANO_API = 'https://api.kirvano.com'
 
