@@ -470,18 +470,25 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
 
 function sanitizeHtmlStrict(dirty) {
   return sanitizeHtml(dirty, {
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'video', 'source', 'audio', 'figure', 'figcaption', 'picture', 'iframe']),
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+      'img', 'video', 'source', 'audio', 'figure', 'figcaption', 'picture', 'iframe',
+      'style', 'link', 'script', 'meta', 'base', 'noscript', 'svg', 'path', 'circle', 'rect', 'defs', 'use',
+    ]),
     allowedAttributes: {
       '*': ['style', 'class', 'id', 'data-*'],
       'a': ['href', 'target', 'rel'],
-      'img': ['src', 'alt', 'width', 'height', 'loading'],
-      'video': ['src', 'controls', 'autoplay', 'muted', 'loop', 'width', 'height'],
-      'source': ['src', 'type'],
-      'iframe': ['src', 'width', 'height', 'frameborder', 'allowfullscreen'],
+      'img': ['src', 'alt', 'width', 'height', 'loading', 'srcset', 'sizes'],
+      'video': ['src', 'controls', 'autoplay', 'muted', 'loop', 'width', 'height', 'poster', 'playsinline'],
+      'source': ['src', 'type', 'srcset', 'media', 'sizes'],
+      'iframe': ['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'loading', 'referrerpolicy'],
+      'link': ['href', 'rel', 'type', 'media', 'crossorigin', 'integrity', 'as', 'hreflang'],
+      'script': ['src', 'type', 'async', 'defer', 'crossorigin', 'integrity', 'nomodule'],
+      'meta': ['name', 'content', 'charset', 'http-equiv', 'property'],
+      'base': ['href', 'target'],
     },
-    allowedSchemes: ['http', 'https', 'mailto', 'data'],
+    allowedSchemes: ['http', 'https', 'mailto', 'data', 'blob'],
     disallowedTagsMode: 'discard',
-    allowedSchemesByTag: { img: ['http', 'https', 'data'] },
+    allowedSchemesByTag: { img: ['http', 'https', 'data', 'blob'] },
   })
 }
 
@@ -2357,25 +2364,38 @@ app.post('/api/pages/upload', authMiddleware, async (req, res, next) => {
   }
 })
 
-// Public route: serve hosted page assets by slug/path — try R2 first, fallback to DB
+// Public route: serve hosted page assets by slug/path
 app.get('/api/page/:slug/:path(*)', async (req, res) => {
   try {
     const { slug, path } = req.params
-    const mimeType = mime.lookup(path) || 'text/html; charset=utf-8'
-    if (USE_CF_STORAGE && mimeType === 'text/html; charset=utf-8') {
+    const mimeType = mime.lookup(path) || 'application/octet-stream'
+
+    // Try R2 first
+    if (USE_CF_STORAGE) {
       try {
-        const r2Data = await getPageContentFromR2(slug, path || 'index.html')
+        const r2Data = await getPageContentFromR2(slug, path)
         if (r2Data) {
           res.set('Content-Type', mimeType)
           res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
           res.set('X-Cache', 'R2-HIT')
-          return res.send(r2Data.toString('utf-8'))
+          return res.send(r2Data)
         }
       } catch {}
     }
+
+    // Filesystem fallback
+    const filePath = join(PAGES_DIR, slug, path)
+    if (existsSync(filePath)) {
+      const data = readFileSync(filePath)
+      res.set('Content-Type', mimeType)
+      res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+      return res.send(data)
+    }
+
+    // Last resort: try DB html column
     const page = await one('SELECT html FROM pages WHERE slug = $1 AND published = 1', [slug])
     if (!page) return res.status(404).send('Pagina nao encontrada.')
-    res.set('Content-Type', mimeType)
+    res.set('Content-Type', 'text/html; charset=utf-8')
     res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
     res.send(page.html || '')
   } catch {
@@ -2397,6 +2417,14 @@ app.get('/api/page/:slug', async (req, res) => {
           return res.send(r2Data.toString('utf-8'))
         }
       } catch {}
+    }
+    // Filesystem fallback
+    const filePath = join(PAGES_DIR, slug, 'index.html')
+    if (existsSync(filePath)) {
+      const data = readFileSync(filePath)
+      res.set('Content-Type', 'text/html; charset=utf-8')
+      res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+      return res.send(data)
     }
     const page = await one('SELECT html FROM pages WHERE slug = $1 AND published = 1', [slug])
     if (!page) return res.status(404).send('Pagina nao encontrada.')
