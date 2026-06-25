@@ -148,9 +148,9 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
   const ativo = true
 
   const score = calcularScoreEscala({
-    diasAtivo, impressionsMax: Number(impressionsMax), spendMax: Number(spendMax),
-    variacoesAtivas: quantCopias, audienceMax: Number(audienceMax),
-    dataFimISO: parada, plataformas
+    diasAtivo, impressionsMax: 0, spendMax: 0,
+    variacoesAtivas: quantCopias, audienceMax: 0,
+    dataFimISO: null, plataformas
   })
 
   const textoAnuncio = `${textoCompleto} ${pageName} ${snapshot}`
