@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -106,10 +106,117 @@ function revealStyle(delayMs: number): CSSProperties {
   return { ['--reveal-delay' as never]: `${delayMs}ms` } as CSSProperties
 }
 
+function ParticleField() {
+  const ref = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = ref.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    let anim: number
+    let mx = -9999, my = -9999
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+
+    function resize() {
+      canvas!.width = window.innerWidth * dpr
+      canvas!.height = window.innerHeight * dpr
+      canvas!.style.width = window.innerWidth + 'px'
+      canvas!.style.height = window.innerHeight + 'px'
+      ctx!.scale(dpr, dpr)
+    }
+    resize()
+    window.addEventListener('resize', resize)
+
+    const count = Math.min(55, Math.floor(window.innerWidth * window.innerHeight / 20000))
+    const pts: { x: number; y: number; vx: number; vy: number; s: number; o: number }[] = []
+
+    for (let i = 0; i < count; i++) {
+      pts.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
+        s: Math.random() * 1.8 + 0.4,
+        o: Math.random() * 0.35 + 0.08,
+      })
+    }
+
+    function draw() {
+      const w = window.innerWidth
+      const h = window.innerHeight
+      ctx!.clearRect(0, 0, w, h)
+
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i]
+        const dx = mx - p.x
+        const dy = my - p.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < 180) {
+          const f = ((180 - dist) / 180) * 0.015
+          p.vx -= dx * f
+          p.vy -= dy * f
+        }
+        p.vx += (Math.random() - 0.5) * 0.01
+        p.vy += (Math.random() - 0.5) * 0.01
+        p.vx *= 0.98
+        p.vy *= 0.98
+        p.x += p.vx
+        p.y += p.vy
+        if (p.x < -20) p.x = w + 20
+        if (p.x > w + 20) p.x = -20
+        if (p.y < -20) p.y = h + 20
+        if (p.y > h + 20) p.y = -20
+
+        ctx!.beginPath()
+        ctx!.arc(p.x, p.y, p.s, 0, Math.PI * 2)
+        ctx!.fillStyle = `rgba(168,85,247,${p.o})`
+        ctx!.fill()
+      }
+
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const a = pts[i], b = pts[j]
+          const dx = a.x - b.x, dy = a.y - b.y
+          const d = dx * dx + dy * dy
+          if (d < 110 * 110) {
+            const alpha = (1 - Math.sqrt(d) / 110) * 0.06
+            ctx!.beginPath()
+            ctx!.moveTo(a.x, a.y)
+            ctx!.lineTo(b.x, b.y)
+            ctx!.strokeStyle = `rgba(168,85,247,${alpha})`
+            ctx!.lineWidth = 0.5
+            ctx!.stroke()
+          }
+        }
+      }
+
+      anim = requestAnimationFrame(draw)
+    }
+    draw()
+
+    function onMouse(e: MouseEvent) { mx = e.clientX; my = e.clientY }
+    function onLeave() { mx = -9999; my = -9999 }
+    window.addEventListener('mousemove', onMouse)
+    document.addEventListener('mouseleave', onLeave)
+
+    return () => {
+      cancelAnimationFrame(anim)
+      window.removeEventListener('resize', resize)
+      window.removeEventListener('mousemove', onMouse)
+      document.removeEventListener('mouseleave', onLeave)
+    }
+  }, [])
+
+  return <canvas ref={ref} className="planos-particles" />
+}
+
 export default function Planos() {
   const { isAuthenticated, fetchWithAuth } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState<string | null>(null)
+  const pageRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'))
@@ -133,6 +240,34 @@ export default function Planos() {
     return () => observer.disconnect()
   }, [])
 
+  useEffect(() => {
+    const el = pageRef.current
+    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    let frame: number
+    let mx = 0, my = 0
+
+    function onMove(e: MouseEvent) {
+      mx = (e.clientX / window.innerWidth - 0.5) * 2
+      my = (e.clientY / window.innerHeight - 0.5) * 2
+      if (!frame) {
+        frame = requestAnimationFrame(apply)
+      }
+    }
+
+    function apply() {
+      frame = 0
+      el!.style.setProperty('--tilt-x', `${my * -3}deg`)
+      el!.style.setProperty('--tilt-y', `${mx * 3}deg`)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      cancelAnimationFrame(frame)
+    }
+  }, [])
+
   async function handleCheckout(plan: string) {
     if (!isAuthenticated) { navigate('/signup?redirect=planos'); return }
     setLoading(plan)
@@ -148,10 +283,11 @@ export default function Planos() {
   }
 
   return (
-    <div className="planos-page">
+    <div className="planos-page" ref={pageRef}>
+      <ParticleField />
       <div className="planos-bg" />
 
-      <section className="planos-hero">
+      <section className="planos-hero" data-tilt>
         <div className="planos-hero-inner">
           <h1 className="reveal-lift planos-hero-title" data-reveal style={revealStyle(120)}>
             Escolha o Plano Ideal para Escalar suas Campanhas
