@@ -10,7 +10,7 @@ export default function Signup() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [codigo, setCodigo] = useState('')
-  const [step, setStep] = useState<'form' | 'code'>('form')
+  const [step, setStep] = useState<'email' | 'form' | 'code'>('email')
   const [erro, setErro] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,6 +21,26 @@ export default function Signup() {
     const id = setInterval(() => setResendTimer(t => t - 1), 1000)
     return () => clearInterval(id)
   }, [resendTimer])
+
+  async function checkEmail() {
+    setErro(''); setMsg('')
+    if (!email) { setErro('Digite seu email.'); return }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() })
+      })
+      const data = await res.json()
+      if (data.exists) {
+        setErro('Email ja cadastrado! <a href="/login" style="color:var(--purple-400)">Faca login</a>')
+      } else {
+        setStep('form')
+      }
+    } catch { setErro('Erro de conexao com o servidor.') }
+    setLoading(false)
+  }
 
   async function sendCode() {
     setErro(''); setMsg('')
@@ -70,23 +90,35 @@ export default function Signup() {
           <div className="sidebar-logo-icon" style={{ margin: '0 auto 12px', width: 48, height: 48, fontSize: 24 }}>
             <IconLogo size={24} />
           </div>
-          <h2>{step === 'form' ? 'Criar Conta' : 'Confirmar Email'}</h2>
+          <h2>{step === 'email' ? 'Teste Grátis' : step === 'form' ? 'Criar Conta' : 'Confirmar Email'}</h2>
           <p>
-            {step === 'form' ? 'Comece a usar o MetaSpy gratis' : 'Digite o codigo enviado para seu email'}
+            {step === 'email' ? 'Digite seu email para comecar' : step === 'form' ? 'Complete seu cadastro' : 'Digite o codigo enviado para seu email'}
           </p>
         </div>
-        {erro && <div className="auth-error">{erro}</div>}
+        {erro && <div className="auth-error" dangerouslySetInnerHTML={{ __html: erro }} />}
         {msg && <div className="auth-error" style={{ background: 'var(--success-bg)', border: '1px solid rgba(16,185,129,0.25)', color: 'var(--success)' }}>{msg}</div>}
+
+        {step === 'email' && (
+          <div className="auth-form">
+            <label>
+              Email
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" autoFocus />
+            </label>
+            <button type="button" className="btn btn-gradient" disabled={loading} onClick={checkEmail} style={{ marginTop: 4 }}>
+              {loading ? 'Verificando...' : 'Continuar'}
+            </button>
+          </div>
+        )}
 
         {step === 'form' && (
           <form className="auth-form" onSubmit={handleSubmit}>
             <label>
               Nome
-              <input type="text" value={nome} onChange={e => setNome(e.target.value)} placeholder="Seu nome" />
+              <input type="text" value={nome} onChange={e => setNome(e.target.value)} placeholder="Seu nome" autoFocus />
             </label>
-            <label>
+            <label style={{ opacity: 0.6 }}>
               Email
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" />
+              <input type="email" value={email} readOnly />
             </label>
             <label>
               Senha
@@ -128,11 +160,18 @@ export default function Signup() {
           </form>
         )}
 
-        {step === 'form' && (
+        {step === 'email' && (
           <>
             <p>Ja tem conta? <Link to="/login">Entre</Link></p>
             <p><Link to="/" style={{ fontSize: 12 }}>← Voltar</Link></p>
           </>
+        )}
+        {step === 'form' && (
+          <p style={{ textAlign: 'center' }}>
+            <Link to="" onClick={(e) => { e.preventDefault(); setStep('email'); setErro('') }} style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              ← Trocar email
+            </Link>
+          </p>
         )}
       </div>
     </div>

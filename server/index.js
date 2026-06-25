@@ -297,6 +297,18 @@ app.post('/api/auth/verify-signup', validate(verifyCodeSchema), async (req, res)
   }
 })
 
+app.post('/api/auth/check-email', async (req, res) => {
+  try {
+    const { email } = req.body
+    if (!email) return res.status(400).json({ error: 'Email nao fornecido' })
+    const emailLower = email.toLowerCase().trim()
+    const existing = await one('SELECT id FROM users WHERE email = $1', [emailLower])
+    res.json({ exists: !!existing })
+  } catch {
+    res.status(500).json({ error: 'Erro ao verificar email' })
+  }
+})
+
 app.post('/api/auth/login', validate(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body

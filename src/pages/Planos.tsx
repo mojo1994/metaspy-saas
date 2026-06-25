@@ -276,7 +276,7 @@ export default function Planos() {
             ) : (
               <>
                 <button type="button" className="btn btn-gradient planos-hero-cta" onClick={() => navigate('/signup')}>
-                  COMEÇAR AGORA
+                  TESTE GRATIS
                 </button>
                 <button type="button" className="btn btn-primary planos-hero-cta" onClick={() => navigate('/login')}>
                   Entrar

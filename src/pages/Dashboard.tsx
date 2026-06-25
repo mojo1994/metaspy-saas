@@ -10,6 +10,11 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const location = useLocation()
 
+  const isFree = user?.plano === 'nenhum'
+  function redirectIfFree(e: React.MouseEvent) {
+    if (isFree) { e.preventDefault(); navigate('/planos') }
+  }
+
   const [showVerify, setShowVerify] = useState(false)
   const [verifyCode, setVerifyCode] = useState('')
   const [verifyMsg, setVerifyMsg] = useState('')
@@ -19,6 +24,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isAuthenticated) navigate('/login', { replace: true })
   }, [isAuthenticated, navigate])
+
+  useEffect(() => {
+    if (!user || user.plano !== 'nenhum') return
+    const path = location.pathname
+    if (path === '/dashboard') return
+    if (path === '/dashboard/perfil' || path === '/dashboard/configuracoes' || path === '/dashboard/admin') return
+    navigate('/planos', { replace: true })
+  }, [location.pathname, user, navigate])
 
   function handleLogout() {
     logout()
@@ -87,10 +100,10 @@ export default function Dashboard() {
 
         <div className="sidebar-section-label">Ferramentas</div>
         <nav className="sidebar-nav">
-          <NavLink to="/dashboard" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/dashboard" end onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             MetaSpy
           </NavLink>
-          <NavLink to="/dashboard/pagevault" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/dashboard/pagevault" onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             Clonador
           </NavLink>
           <div className="sidebar-group">
@@ -104,10 +117,10 @@ export default function Dashboard() {
               <span className="sidebar-arrow" data-open={cloackerOpen}>›</span>
             </button>
             <div className={`sidebar-subnav${cloackerOpen ? ' open' : ''}`}>
-              <NavLink to="/dashboard/cloacker" end className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+              <NavLink to="/dashboard/cloacker" end onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
                 Gerar Script
               </NavLink>
-              <NavLink to="/dashboard/cloacker/detector" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+              <NavLink to="/dashboard/cloacker/detector" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
                 Quebra de Cloacker
               </NavLink>
               <div className="sidebar-group">
@@ -122,10 +135,10 @@ export default function Dashboard() {
                   <span className="sidebar-arrow" data-open={camoOpen}>›</span>
                 </button>
                 <div className={`sidebar-subnav${camoOpen ? ' open' : ''}`}>
-                  <NavLink to="/dashboard/cloacker/camouflage/texto" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                  <NavLink to="/dashboard/cloacker/camouflage/texto" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
                     Texto
                   </NavLink>
-                  <NavLink to="/dashboard/cloacker/camouflage/midia" className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                  <NavLink to="/dashboard/cloacker/camouflage/midia" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
                     Midia
                   </NavLink>
                 </div>
@@ -143,12 +156,12 @@ export default function Dashboard() {
               <span className="sidebar-arrow" data-open={hospedarOpen}>›</span>
             </button>
             <div className={`sidebar-subnav${hospedarOpen ? ' open' : ''}`}>
-              <NavLink to="/dashboard/hospedar" end className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+              <NavLink to="/dashboard/hospedar" end onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
                 Hospedar Pagina
               </NavLink>
             </div>
           </div>
-          <NavLink to="/dashboard/cleaner" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/dashboard/cleaner" onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             Remover Metadados
           </NavLink>
         </nav>
