@@ -191,21 +191,33 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
 }
 
 async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
-  if (!anuncio.urlBiblioteca || anuncio.urlBiblioteca.includes('id=') === false) return null
-  const cacheado = cacheImagensPreview.get(anuncio.urlBiblioteca)
+  const chave = anuncio.urlBiblioteca || anuncio.idAnuncio
+  if (!chave) return null
+  const cacheado = cacheImagensPreview.get(chave)
   if (cacheado) return cacheado
   try {
-    const resp = await fetch(`/api/ad-extract-image?url=${encodeURIComponent(anuncio.urlBiblioteca)}`)
+    const params = new URLSearchParams()
+    if (anuncio.idAnuncio) params.set('id', anuncio.idAnuncio)
+    if (anuncio.urlBiblioteca) params.set('snapshot', anuncio.urlBiblioteca)
+    const resp = await fetch(`/api/ad-extract-image?${params.toString()}`)
     if (!resp.ok) return null
     const data = await resp.json()
     if (data.imageUrl) {
-      cacheImagensPreview.set(anuncio.urlBiblioteca, data.imageUrl)
+      cacheImagensPreview.set(chave, data.imageUrl)
       return data.imageUrl
     }
     return null
   } catch {
     return null
   }
+}
+
+function urlImagemProxy(url: string): string {
+  if (!url) return url
+  if (url.includes('fbcdn.net') || url.includes('facebook.com')) {
+    return `/api/ad-image-proxy?url=${encodeURIComponent(url)}`
+  }
+  return url
 }
 
 function gerarPaginas(total: number, atual: number): (number | '...')[] {
@@ -756,7 +768,7 @@ export default function MetaSpyTool() {
                 return (
                   <div key={a.idAnuncio} className={`ad-card${ehDestaque ? ' destaque' : ''}`}>
                     <div className="ad-card-img-wrap">
-                      {a.midias?.[0]?.url && <img className="ad-card-image" src={a.midias[0].url} alt="" loading="lazy" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
+                      {a.midias?.[0]?.url && <img className="ad-card-image" src={urlImagemProxy(a.midias[0].url)} alt="" loading="lazy" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
                       <div className="ad-card-image-placeholder"><IconImage size={32} /></div>
                     </div>
                     <div className="ad-card-body">
@@ -857,7 +869,7 @@ export default function MetaSpyTool() {
             </div>
             <div className="modal-body">
               {modalAnuncio.midias?.[0]?.url && (
-                <div className="modal-media"><img src={modalAnuncio.midias[0].url} alt="" /></div>
+                <div className="modal-media"><img src={urlImagemProxy(modalAnuncio.midias[0].url)} alt="" /></div>
               )}
               <div className="modal-text">{modalAnuncio.textoCompleto || 'Sem texto disponivel.'}</div>
               <div className="modal-info">

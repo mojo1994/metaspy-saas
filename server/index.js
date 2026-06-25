@@ -864,37 +864,126 @@ app.get('/api/page-fetch', authMiddleware, async (req, res) => {
   }
 })
 
-// ─── Ad Preview (extract image from snapshot) ────────────────────
+// ─── Ad Image Extraction ─────────────────────────────────────────
 const cachePreview = new Map()
 app.get('/api/ad-extract-image', async (req, res) => {
+  const { id, snapshot } = req.query
+  if (!id && !snapshot) return res.status(400).json({ error: 'Informe id ou snapshot' })
+  const chaveCache = id || snapshot.toString()
+  const cacheado = cachePreview.get(chaveCache)
+  if (cacheado) return res.json(cacheado)
+
+  // Strategy 1: Graph API individual endpoint
+  if (id) {
+    try {
+      const apiUrl = `https://graph.facebook.com/v22.0/${id}?fields=ad_creative_thumbnail_url,ad_snapshot_url&access_token=${FB_TOKEN}`
+      const resp = await fetchWithTimeout(apiUrl, {}, 15000)
+      if (resp.ok) {
+        const data = await resp.json()
+        if (data.ad_creative_thumbnail_url) {
+          const result = { imageUrl: data.ad_creative_thumbnail_url }
+          cachePreview.set(chaveCache, result)
+          return res.json(result)
+        }
+      }
+    } catch {}
+  }
+
+  // Strategy 2: Scrape snapshot page
+  if (snapshot) {
+    try {
+      const resp = await fetchWithTimeout(snapshot.toString(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+        }
+      }, 20000)
+      if (resp.ok) {
+        const html = await resp.text()
+        let imageUrl = null
+
+        // og:image and twitter:image
+        const metaMatch = html.match(/<meta\s+(?:property|name)="(?:og:image|twitter:image)"\s+content="([^"]+)"/i)
+        if (metaMatch) imageUrl = metaMatch[1]
+
+        // __NEXT_DATA__ JSON
+        if (!imageUrl) {
+          const nextMatch = html.match(/<script[^>]*>window\.__PRELOADED_STATE__\s*=\s*({.+?})<\/script>/)
+          if (nextMatch) {
+            try {
+              const str = JSON.stringify(JSON.parse(nextMatch[1]))
+              const fbUrl = str.match(/"(https:\/\/[^"]+fbcdn[^"]+)"/)
+              if (fbUrl) imageUrl = fbUrl[1].replace(/\\u0025/g, '%').replace(/\\\//g, '/')
+            } catch {}
+          }
+        }
+
+        // embedded JSON image/thumbnail keys
+        if (!imageUrl) {
+          const jsonMatch = html.match(/"(?:image|thumbnail|src|preview|imgUrl)"\s*:\s*"(https:[^"]+?fbcdn[^"]+?)"/i)
+          if (jsonMatch) {
+            try { imageUrl = JSON.parse('"' + jsonMatch[1] + '"') } catch { imageUrl = jsonMatch[1] }
+          }
+        }
+
+        // script tag with JSON-LD
+        if (!imageUrl) {
+          const ldMatch = html.match(/<script[^>]+type="application\/ld\+json"[^>]*>({.+?})<\/script>/)
+          if (ldMatch) {
+            try {
+              const ld = JSON.parse(ldMatch[1])
+              const findUrl = (o) => {
+                if (!o || typeof o !== 'object') return null
+                for (const v of Object.values(o)) {
+                  if (typeof v === 'string' && v.includes('fbcdn')) return v
+                  const r = findUrl(v)
+                  if (r) return r
+                }
+                return null
+              }
+              imageUrl = findUrl(ld)
+            } catch {}
+          }
+        }
+
+        // any img tag with fbcdn src
+        if (!imageUrl) {
+          const allImgs = [...html.matchAll(/<img[^>]+src="(https:[^"]+?)"[^>]*>/gi)]
+          const fbcdn = allImgs.find(m => m[1].includes('fbcdn'))
+          imageUrl = fbcdn?.[1] || null
+        }
+
+        const result = { imageUrl }
+        if (imageUrl) cachePreview.set(chaveCache, result)
+        return res.json(result)
+      }
+    } catch {}
+  }
+
+  res.json({ imageUrl: null })
+})
+
+// ─── Ad Image Proxy (bypass CORS/auth) ──────────────────────────
+app.get('/api/ad-image-proxy', async (req, res) => {
   const { url } = req.query
   if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
-  const cacheado = cachePreview.get(url.toString())
-  if (cacheado) return res.json(cacheado)
   try {
     const resp = await fetchWithTimeout(url.toString(), {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-    }, 30000)
-    if (!resp.ok) return res.status(resp.status).json({ error: `HTTP ${resp.status}` })
-    const html = await resp.text()
-    let imageUrl = null
-    const ogMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)
-    if (ogMatch) imageUrl = ogMatch[1]
-    if (!imageUrl) {
-      const fbMatch = html.match(/"(?:image|thumbnail|src)":"(https:[^"]+fbcdn[^"]+)"/i)
-      if (fbMatch) {
-        try { imageUrl = JSON.parse('"' + fbMatch[1] + '"') } catch { imageUrl = fbMatch[1] }
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
       }
-    }
-    if (!imageUrl) {
-      const imgMatch = html.match(/<img[^>]+src="(https:[^"]+)"[^>]*>/i)
-      if (imgMatch) imageUrl = imgMatch[1]
-    }
-    const result = { imageUrl }
-    if (imageUrl) cachePreview.set(url.toString(), result)
-    res.json(result)
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao extrair imagem' })
+    }, 30000)
+    if (!resp.ok) return res.status(resp.status).end()
+    const ct = resp.headers.get('content-type') || 'image/jpeg'
+    res.set('Content-Type', ct)
+    res.set('Cache-Control', 'public, max-age=86400')
+    res.set('Access-Control-Allow-Origin', '*')
+    const buf = await resp.arrayBuffer()
+    res.send(Buffer.from(buf))
+  } catch {
+    res.status(500).end()
   }
 })
 
