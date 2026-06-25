@@ -161,7 +161,7 @@ export default function Dashboard() {
               <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{user.email}</div>
               <div style={{ marginTop: 2, display: 'flex', gap: 6, alignItems: 'center' }}>
                 <span className={`badge ${user.plano === 'premium' ? 'alta' : user.plano === 'gold' ? 'alta' : user.plano === 'basico' ? 'ativo' : 'info'}`}>
-                  {user.plano === 'premium' ? 'Premium' : user.plano === 'gold' ? 'Gold' : user.plano === 'basico' ? 'Basico' : 'Nenhum'}
+                  {user.plano === 'premium' ? 'Premium' : user.plano === 'gold' ? 'Gold' : user.plano === 'basico' ? 'Básico' : 'Nenhum'}
                 </span>
                 <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
                   {user.plano === 'nenhum' ? 'Sem plano' : 'Ilimitado'}

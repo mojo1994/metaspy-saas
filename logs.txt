@@ -1,36 +1,176 @@
-==> Downloading cache...
-==> Cloning from https://github.com/mojo1994/metaspy-saas
-==> Checking out commit e404219dc9ce1a6fb111b12642512f92520d9db5 in branch main
-==> Downloaded 25MB in 6s. Extraction took 0s.
-==> Requesting Node.js version 20
-==> Using Node.js version 20.20.2 via environment variable NODE_VERSION
-==> Docs on specifying a Node.js version: https://render.com/docs/node-version
-==> Installing Node.js version 20.20.2...
-==> Running build command 'npm install'...
-removed 2 packages, and audited 211 packages in 523ms
-26 packages are looking for funding
-  run `npm fund` for details
-found 0 vulnerabilities
-==> Uploading build...
-==> Uploaded in 2.0s. Compression took 1.4s
-==> Build successful 🎉
-==> Deploying...
-==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
-==> Exited with status 1
-==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
-==> Running 'node index.js'
-node:internal/modules/esm/resolve:873
-  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
-        ^
-Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'adm-zip' imported from /opt/render/project/src/server/index.js
-    at packageResolve (node:internal/modules/esm/resolve:873:9)
-    at moduleResolve (node:internal/modules/esm/resolve:946:18)
-    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
-    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
-    at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
-    at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
-    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
-    at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
-  code: 'ERR_MODULE_NOT_FOUND'
-}
-Node.js v20.20.2
+FIX SALES PAGE TEXT ENCODING, COPY QUALITY AND COMPARISON TABLE
+
+OBJECTIVE
+
+The current sales page suffers from UTF-8 encoding issues and low-quality AI-generated copy.
+
+Examples of broken encoding:
+
+â€¢
+â€”
+Â©
+Basico
+Analise
+Paginas
+Duvidas
+Nao
+
+This is unacceptable for a production SaaS.
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+TEXT ENCODING REQUIREMENTS
+
+1. Force UTF-8 encoding across the entire application.
+2. Ensure frontend renders UTF-8 correctly.
+3. Ensure database stores UTF-8 correctly.
+4. Ensure API responses use UTF-8 headers.
+5. Remove all malformed characters.
+6. Validate all generated content before rendering.
+
+Replace:
+
+Basico → Básico
+Paginas → Páginas
+Analise → Análise
+Duvidas → Dúvidas
+Nao → Não
+Ate → Até
+Tecnico → Técnico
+Programacao → Programação
+Excecao → Exceção
+Inteligencia → Inteligência
+
+Replace malformed symbols:
+
+â€¢ → •
+â€” → —
+Â© → ©
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+COPY IMPROVEMENTS
+
+The sales page should sound premium, direct-response oriented and professional.
+
+Current copy feels generic and AI-generated.
+
+Rewrite headlines and descriptions using persuasive language.
+
+Example:
+
+Current:
+
+Escolha seu Arsenal de Guerra
+
+Replace with:
+
+Escolha o Plano Ideal para Escalar suas Campanhas
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+COMPARISON TABLE IMPROVEMENTS
+
+The current comparison section is useless because every plan appears identical.
+
+Users cannot understand why they should upgrade.
+
+Create a real feature comparison.
+
+Example:
+
+FUNCIONALIDADE
+
+Clonador de Páginas
+MetaSpy Minerador de Ads
+Editor Visual
+Exportação CSV
+Filtros Inteligentes
+Análise Avançada
+Bypass Engine
+Cloacker Profissional
+Remover Metadados
+Suporte Prioritário
+
+BÁSICO
+
+✓ Clonador de Páginas
+✓ Minerador de Ads
+✓ Filtros Inteligentes
+✗ Editor Visual
+✗ Exportação CSV
+✗ Análise Avançada
+✗ Bypass Engine
+✗ Cloacker
+✗ Remover Metadados
+Suporte Padrão
+
+GOLD
+
+✓ Clonador de Páginas
+✓ Minerador de Ads
+✓ Editor Visual
+✓ Exportação CSV
+✓ Filtros Inteligentes
+✓ Análise Avançada
+✓ Bypass Engine
+✓ Cloacker Profissional
+✗ Remover Metadados
+Suporte Prioritário
+
+PREMIUM
+
+✓ Todas as funcionalidades
+✓ Atualizações prioritárias
+✓ Remover Metadados
+✓ Recursos futuros inclusos
+✓ Suporte Máximo
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+TESTIMONIAL SECTION
+
+Improve typography.
+
+Ensure proper quotation marks.
+
+Ensure names, roles and spacing are consistent.
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+FAQ SECTION
+
+Rewrite every FAQ using correct Portuguese grammar.
+
+Ensure:
+
+* Correct accents
+* Correct punctuation
+* Correct capitalization
+* Professional tone
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+FOOTER
+
+Replace:
+
+MetaSpy Â© 2026 â€” Inteligencia de ofertas em escala.
+
+With:
+
+MetaSpy © 2026 — Inteligência de Ofertas em Escala.
+Todos os direitos reservados.
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+FINAL GOAL
+
+The page must feel like a premium SaaS sales page.
+
+No encoding errors.
+No malformed characters.
+No AI-looking copy.
+No duplicated features.
+
+Every plan must clearly communicate value and justify upgrades.

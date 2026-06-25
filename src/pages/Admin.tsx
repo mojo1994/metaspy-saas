@@ -82,7 +82,7 @@ export default function Admin() {
           {['basico', 'gold', 'premium', 'nenhum'].map(p => {
             const count = users.filter(u => u.plan === p).length
             const pct = totalUsers > 0 ? (count / totalUsers * 100) : 0
-            const label = p === 'nenhum' ? 'Sem Plano' : p === 'basico' ? 'Basico' : p === 'gold' ? 'Gold' : 'Premium'
+            const label = p === 'nenhum' ? 'Sem Plano' : p === 'basico' ? 'Básico' : p === 'gold' ? 'Gold' : 'Premium'
             return (
               <div key={p} className="admin-chart-bar-wrap">
                 <div className="admin-chart-label">{label}</div>
@@ -153,7 +153,7 @@ export default function Admin() {
                     <td className="admin-email">{u.email}</td>
                     <td>
                       <span className={`badge ${u.plan === 'premium' ? 'alta' : u.plan === 'gold' ? 'alta' : u.plan === 'basico' ? 'ativo' : 'info'}`}>
-                        {u.plan === 'nenhum' ? 'Nenhum' : u.plan === 'basico' ? 'Basico' : u.plan === 'gold' ? 'Gold' : 'Premium'}
+                        {u.plan === 'nenhum' ? 'Nenhum' : u.plan === 'basico' ? 'Básico' : u.plan === 'gold' ? 'Gold' : 'Premium'}
                       </span>
                     </td>
                     <td>
@@ -168,7 +168,7 @@ export default function Admin() {
                       <div className="admin-actions">
                         {u.plan !== 'basico' && (
                           <button type="button" className="btn btn-sm btn-ativo" onClick={() => setPlan(u.id, 'basico')} disabled={setPlanLoading === u.id}>
-                            Basico
+                            Básico
                           </button>
                         )}
                         {u.plan !== 'gold' && (

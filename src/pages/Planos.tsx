@@ -7,11 +7,13 @@ import { Crosshair, Check, Minus, Star, Sparkle, ArrowRight } from '@phosphor-ic
 const FEATURES_BASICO = [
   { label: 'Clonador de Páginas', ok: true },
   { label: 'MetaSpy Minerador de Ads', ok: true },
+  { label: 'Filtros Inteligentes', ok: true },
   { label: 'Editor Visual de Páginas', ok: false },
+  { label: 'Exportação CSV', ok: false },
   { label: 'Estrutura de Arquivos + ZIP', ok: false },
-  { label: 'Cloacker Profissional', ok: false },
   { label: 'Análise Avançada de Ofertas', ok: false },
   { label: 'Bypass Engine Multicamada', ok: false },
+  { label: 'Cloacker Profissional', ok: false },
   { label: 'Remover Metadados', ok: false },
   { label: 'Suporte Prioritário', ok: false },
 ]
@@ -19,11 +21,13 @@ const FEATURES_BASICO = [
 const FEATURES_GOLD = [
   { label: 'Clonador de Páginas', ok: true },
   { label: 'MetaSpy Minerador de Ads', ok: true },
+  { label: 'Filtros Inteligentes', ok: true },
   { label: 'Editor Visual de Páginas', ok: true },
+  { label: 'Exportação CSV', ok: true },
   { label: 'Estrutura de Arquivos + ZIP', ok: true },
-  { label: 'Cloacker Profissional', ok: true },
   { label: 'Análise Avançada de Ofertas', ok: true },
   { label: 'Bypass Engine Multicamada', ok: true },
+  { label: 'Cloacker Profissional', ok: true },
   { label: 'Remover Metadados', ok: false },
   { label: 'Suporte Prioritário', ok: true },
 ]
@@ -31,11 +35,13 @@ const FEATURES_GOLD = [
 const FEATURES_PREMIUM = [
   { label: 'Clonador de Páginas', ok: true },
   { label: 'MetaSpy Minerador de Ads', ok: true },
+  { label: 'Filtros Inteligentes', ok: true },
   { label: 'Editor Visual de Páginas', ok: true },
+  { label: 'Exportação CSV', ok: true },
   { label: 'Estrutura de Arquivos + ZIP', ok: true },
-  { label: 'Cloacker Profissional', ok: true },
   { label: 'Análise Avançada de Ofertas', ok: true },
   { label: 'Bypass Engine Multicamada', ok: true },
+  { label: 'Cloacker Profissional', ok: true },
   { label: 'Remover Metadados', ok: true },
   { label: 'Suporte Prioritário', ok: true },
 ]
@@ -43,11 +49,13 @@ const FEATURES_PREMIUM = [
 const ALL_FEATURES = [
   'Clonador de Páginas',
   'MetaSpy Minerador de Ads',
+  'Filtros Inteligentes',
   'Editor Visual de Páginas',
+  'Exportação CSV',
   'Estrutura de Arquivos + ZIP',
-  'Cloacker Profissional',
   'Análise Avançada de Ofertas',
   'Bypass Engine Multicamada',
+  'Cloacker Profissional',
   'Remover Metadados',
   'Suporte Prioritário',
 ]
@@ -61,7 +69,7 @@ const DEPOIMENTOS = [
 const PLAN_CARD_DATA = [
   {
     key: 'basico',
-    title: 'Basico',
+    title: 'Básico',
     description: 'Para quem quer começar a escalar agora',
     original: 'R$ 97',
     current: 'R$ 49,90',
@@ -73,7 +81,7 @@ const PLAN_CARD_DATA = [
   {
     key: 'gold',
     title: 'Gold',
-    description: 'O pacote completo para maquinas de guerra',
+    description: 'O pacote completo para máquinas de guerra',
     original: 'R$ 197',
     current: 'R$ 97,00',
     button: 'Assinar Agora',
@@ -168,7 +176,7 @@ export default function Planos() {
             ACESSO IMEDIATO • CANCELAMENTO LIVRE
           </div>
           <h1 className="reveal-lift planos-hero-title" data-reveal style={revealStyle(120)}>
-            Escolha seu Arsenal de Guerra
+            Escolha o Plano Ideal para Escalar suas Campanhas
           </h1>
           <p className="planos-subtitle reveal-lift" data-reveal style={revealStyle(240)}>
             As ferramentas que os top players usam para escalar ofertas no Meta Ads. <br />
@@ -254,7 +262,7 @@ export default function Planos() {
             <div className="planos-table-row planos-table-header" role="row">
               <div className="planos-table-cell planos-table-feature" role="columnheader">Funcionalidade</div>
               <div className="planos-table-cell planos-plan-col" role="columnheader">
-                <span className="planos-plan-name">Basico</span>
+                <span className="planos-plan-name">Básico</span>
               </div>
               <div className="planos-table-cell planos-plan-col planos-plan-col-highlight" role="columnheader">
                 <span className="planos-plan-name">Gold</span>
@@ -324,10 +332,10 @@ export default function Planos() {
         <div className="planos-faq-grid">
           {[
             { p: 'Posso cancelar quando quiser?', r: 'Sim. Cancele a qualquer momento. Seu acesso continua até o fim do período pago.' },
-            { p: 'O pagamento e seguro?', r: 'Totalmente. Processamos via Kirvano com cartao, Pix ou boleto. Seus dados estao protegidos.' },
+            { p: 'O pagamento é seguro?', r: 'Totalmente. Processamos via Kirvano com cartão, Pix ou boleto. Seus dados estão protegidos.' },
             { p: 'Funciona para qualquer nicho?', r: 'Sim. O MetaSpy funciona para Nutra, Info, Ecommerce, leads e qualquer vertical do Meta Ads.' },
-            { p: 'Precisa de conhecimento tecnico?', r: 'Não. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiência em programação.' },
-            { p: 'Qual a diferença entre os planos?', r: 'O Basico da acesso ao Clonador de Páginas e MetaSpy Minerador. O Gold libera todas as ferramentas exceto Remover Metadados. O Premium libera todas as ferramentas sem exceção.' },
+            { p: 'Precisa de conhecimento técnico?', r: 'Não. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiência em programação.' },
+            { p: 'Qual a diferença entre os planos?', r: 'O Básico dá acesso ao Clonador de Páginas, MetaSpy Minerador e Filtros Inteligentes. O Gold libera todas as ferramentas exceto Remover Metadados. O Premium libera todas as ferramentas sem exceção.' },
           ].map((faq, index) => (
             <details key={faq.p} className="planos-faq-item" data-reveal style={revealStyle(index * 60)}>
               <summary>{faq.p}</summary>
@@ -346,7 +354,7 @@ export default function Planos() {
       </section>
 
       <footer className="planos-footer">
-        <p>MetaSpy © 2026 — Inteligência de ofertas em escala. By Banshee.ads</p>
+        <p>MetaSpy © 2026 — Inteligência de Ofertas em Escala. Todos os direitos reservados.</p>
       </footer>
     </div>
   )

@@ -56,7 +56,7 @@ const FEATURE_ITEMS = [
 
 const PRICE_ROWS = [
   {
-    title: 'Basico',
+    title: 'Básico',
     original: 'R$ 97',
     current: 'R$ 49,90',
     features: [
@@ -201,7 +201,7 @@ export default function Landing() {
       </section>
 
       <section className="landing-planos">
-        <h2 data-reveal style={delayStyle(120)}>Escolha seu Arsenal</h2>
+        <h2 data-reveal style={delayStyle(120)}>Escolha o Plano Ideal para Escalar</h2>
         <p className="landing-planos-sub" data-reveal style={delayStyle(200)}>
           Sem plano free. Sem enrolação. Resultado do primeiro dia.
         </p>
@@ -224,7 +224,7 @@ export default function Landing() {
                   )}
                 </div>
                 <p className="planos-card-desc">
-                  {plan.title === 'Basico'
+                  {plan.title === 'Básico'
                     ? 'Para quem quer começar a escalar agora'
                     : plan.title === 'Gold'
                       ? 'O pacote completo para máquinas de guerra'
@@ -263,7 +263,7 @@ export default function Landing() {
       </section>
 
       <footer className="landing-footer">
-        <p>MetaSpy &copy; 2026 — Inteligência de ofertas em escala. By Banshee.ads</p>
+        <p>MetaSpy © 2026 — Inteligência de Ofertas em Escala. Todos os direitos reservados.</p>
       </footer>
     </div>
   )

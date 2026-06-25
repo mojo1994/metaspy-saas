@@ -40,7 +40,7 @@ export default function DashboardHome() {
         >
           <div className="feature-icon">{user?.plano === 'nenhum' ? <IconLocked size={24} /> : <IconTarget size={24} />}</div>
           <h3>MetaSpy Ads</h3>
-          <p>Analise anuncios do Facebook com score de escala e deteccao de estrategias.</p>
+          <p>Análise anúncios do Facebook com score de escala e detecção de estratégias.</p>
           <div className="feature-action">
             {user?.plano === 'nenhum' ? 'Desbloquear →' : 'Acessar →'}
           </div>

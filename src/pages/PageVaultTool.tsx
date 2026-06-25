@@ -191,7 +191,7 @@ export default function PageVaultTool() {
   return (
     <div>
       <div className="tool-header">
-        <h3>Clonador — Clonagem Offline de Paginas Web</h3>
+        <h3>Clonador — Clonagem Offline de Páginas Web</h3>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn btn-accent" style={{ fontSize: 12 }}>
             <IconArrowDown size={14} /> Clonar

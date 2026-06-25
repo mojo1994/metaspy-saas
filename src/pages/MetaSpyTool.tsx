@@ -591,7 +591,6 @@ export default function MetaSpyTool() {
                 const ehDestaque = badge.texto === 'ALTA ESCALA' || badge.texto === 'ESCALADA'
                 return (
                   <div key={a.idAnuncio} className={`ad-card${ehDestaque ? ' destaque' : ''}`}>
-                    {ehDestaque && <span className="card-flag"><IconArrowUp size={12} /> {a.variacoesAtivas}</span>}
                     <div className="ad-thumb" style={{ display: 'grid', placeItems: 'center', fontSize: 24 }}>
                       {a.midias?.[0]?.url ? <img className="ad-thumb" src={a.midias[0].url} alt="" /> : <IconImage size={24} />}
                     </div>
@@ -627,13 +626,13 @@ export default function MetaSpyTool() {
         {analise && anuncios.length > 0 && (
           <details style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-secondary)', overflow: 'hidden' }}>
             <summary style={{ cursor: 'pointer', padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', userSelect: 'none' }}>
-              Analise Avancada
+              Análise Avançada
             </summary>
             <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ padding: 10, borderRadius: 'var(--radius-md)', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                   <h4 style={{ fontSize: 13, color: 'var(--purple-300)', marginBottom: 8, fontWeight: 600 }}>Estatisticas Gerais</h4>
-                  {[{ r: 'Total de ofertas', v: analise.total }, { r: 'Anuncios ativos', v: analise.ativos }, { r: 'Score medio', v: analise.scoreMedia }].map(s => (
+                  {[{ r: 'Total de ofertas', v: analise.total }, { r: 'Anúncios ativos', v: analise.ativos }, { r: 'Score medio', v: analise.scoreMedia }].map(s => (
                     <div key={s.r} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12, borderBottom: '1px solid var(--border-subtle)' }}>
                       <span style={{ color: 'var(--text-muted)' }}>{s.r}</span><span style={{ fontWeight: 600 }}>{s.v}</span>
                     </div>

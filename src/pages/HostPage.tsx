@@ -168,9 +168,9 @@ export default function HostPage() {
   return (
     <div className="tool-page">
       <div className="tool-header">
-        <h3>Hospedar Pagina</h3>
+        <h3>Hospedar Página</h3>
         <button className="btn btn-secondary" onClick={() => navigate('/dashboard/hospedar')} style={{ fontSize: 13 }}>
-          Minhas Paginas
+          Minhas Páginas
         </button>
       </div>
 
