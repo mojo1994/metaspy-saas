@@ -2364,16 +2364,19 @@ app.post('/api/pages/upload', authMiddleware, async (req, res, next) => {
   }
 })
 
-// Public route: serve hosted page assets by slug/path
+// Serve hosted page — index.html or asset by path
 app.get('/api/page/:slug/:path(*)', async (req, res) => {
   try {
-    const { slug, path } = req.params
-    const mimeType = mime.lookup(path) || 'application/octet-stream'
+    const slug = req.params.slug.toLowerCase()
+    const assetPath = req.params.path
+    const isIndex = !assetPath
+    const fileName = isIndex ? 'index.html' : assetPath
+    const mimeType = mime.lookup(fileName) || 'application/octet-stream'
 
     // Try R2 first
     if (USE_CF_STORAGE) {
       try {
-        const r2Data = await getPageContentFromR2(slug, path)
+        const r2Data = await getPageContentFromR2(slug, fileName)
         if (r2Data) {
           res.set('Content-Type', mimeType)
           res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
@@ -2384,54 +2387,30 @@ app.get('/api/page/:slug/:path(*)', async (req, res) => {
     }
 
     // Filesystem fallback
-    const filePath = join(PAGES_DIR, slug, path)
+    const filePath = join(PAGES_DIR, slug, fileName)
     if (existsSync(filePath)) {
-      const data = readFileSync(filePath)
-      res.set('Content-Type', mimeType)
-      res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-      return res.send(data)
+      const stat = statSync(filePath)
+      if (stat.isFile()) {
+        const data = readFileSync(filePath)
+        res.set('Content-Type', mimeType)
+        res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+        return res.send(data)
+      }
     }
 
-    // Last resort: try DB html column
-    const page = await one('SELECT html FROM pages WHERE slug = $1 AND published = 1', [slug])
-    if (!page) return res.status(404).send('Pagina nao encontrada.')
-    res.set('Content-Type', 'text/html; charset=utf-8')
-    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-    res.send(page.html || '')
-  } catch {
-    res.status(500).send('Erro ao carregar pagina.')
-  }
-})
+    // Last resort: DB html column (for index.html only)
+    if (isIndex) {
+      const page = await one('SELECT html FROM pages WHERE slug = $1 AND published = 1', [slug])
+      if (page) {
+        res.set('Content-Type', 'text/html; charset=utf-8')
+        res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+        return res.send(page.html || '')
+      }
+    }
 
-// Public route: serve hosted page by slug
-app.get('/api/page/:slug', async (req, res) => {
-  try {
-    const slug = req.params.slug.toLowerCase()
-    if (USE_CF_STORAGE) {
-      try {
-        const r2Data = await getPageContentFromR2(slug, 'index.html')
-        if (r2Data) {
-          res.set('Content-Type', 'text/html; charset=utf-8')
-          res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-          res.set('X-Cache', 'R2-HIT')
-          return res.send(r2Data.toString('utf-8'))
-        }
-      } catch {}
-    }
-    // Filesystem fallback
-    const filePath = join(PAGES_DIR, slug, 'index.html')
-    if (existsSync(filePath)) {
-      const data = readFileSync(filePath)
-      res.set('Content-Type', 'text/html; charset=utf-8')
-      res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-      return res.send(data)
-    }
-    const page = await one('SELECT html FROM pages WHERE slug = $1 AND published = 1', [slug])
-    if (!page) return res.status(404).send('Pagina nao encontrada.')
-    res.set('Content-Type', 'text/html; charset=utf-8')
-    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-    res.send(page.html || '')
-  } catch {
+    res.status(404).send('Arquivo nao encontrado.')
+  } catch (err) {
+    logger.error({ err }, 'Erro ao servir pagina')
     res.status(500).send('Erro ao carregar pagina.')
   }
 })
