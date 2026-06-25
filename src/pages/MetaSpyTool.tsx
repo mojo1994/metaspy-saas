@@ -200,15 +200,16 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
   if (!chave) return null
   const cacheado = cacheImagensPreview.get(chave)
   if (cacheado) return cacheado
-  // Strategy 1: Cloudflare Worker + linkUrl OG fallback (timeout 12s)
+  // Strategy 1: Cloudflare Worker + linkUrl OG fallback + screenshot (timeout 35s)
   try {
     const body: Record<string, string> = { snapshotUrl: anuncio.urlBiblioteca }
     if (anuncio.urlDestino) body.linkUrl = anuncio.urlDestino
+    if (anuncio.pageId) body.pageId = anuncio.pageId
     const resp = await fetch(`${CF_WORKER_URL}/api/ad-preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(12000)
+      signal: AbortSignal.timeout(35000)
     })
     if (resp.ok) {
       const data = await resp.json()
@@ -217,7 +218,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
         return data.imageUrl
       }
     }
-  } catch {}
+  } catch (e) { console.error('[extrairImagemPreview] CF Worker falhou:', e) }
   // Strategy 2: Render backend (Graph API + linkUrl OG + page pic fallback, timeout 10s)
   try {
     const params = new URLSearchParams()
@@ -235,7 +236,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
         return data.imageUrl
       }
     }
-  } catch {}
+  } catch (e) { console.error('[extrairImagemPreview] Backend fallback falhou:', e) }
   // Strategy 3: Puppeteer backend (Render, timeout 15s)
   try {
     const resp = await fetch(`/api/ad-snapshot-image?url=${encodeURIComponent(anuncio.urlBiblioteca)}`, {
@@ -248,7 +249,7 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
         return data.imageUrl
       }
     }
-  } catch {}
+  } catch (e) { console.error('[extrairImagemPreview] Puppeteer falhou:', e) }
   return null
 }
 

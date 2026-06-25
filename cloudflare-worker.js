@@ -43,7 +43,7 @@ export default {
             const val = item.results?.[0]?.attributes?.find(a => a.name === 'content' || a.name === 'href')?.value
             if (val && /^https?:\/\//.test(val)) { imageUrl = val; break }
           }
-        } catch {}
+        } catch (e) { console.error('[worker] Strat1 scrape falhou:', e?.message || e) }
 
         // Strategy 2: Scrape OG image from the landing page (linkUrl)
         if (!imageUrl && linkUrl) {
@@ -59,14 +59,14 @@ export default {
             if (resp.ok) {
               const html = await resp.text()
               let m = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i)
-            if (m) {
-              imageUrl = m[1].replace(/&amp;/g, '&')
-            } else {
-              m = html.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i)
-              if (m) imageUrl = m[1].replace(/&amp;/g, '&')
+              if (m) {
+                imageUrl = m[1].replace(/&amp;/g, '&')
+              } else {
+                m = html.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i)
+                if (m) imageUrl = m[1].replace(/&amp;/g, '&')
+              }
             }
-            }
-          } catch {}
+          } catch (e) { console.error('[worker] Strat2 HTTP fetch falhou:', e?.message || e) }
           // Fall back to Browser Run for JS-heavy pages
           if (!imageUrl) {
             try {
@@ -85,14 +85,56 @@ export default {
                 const val = item.results?.[0]?.attributes?.find(a => a.name === 'content')?.value
                 if (val && /^https?:\/\//.test(val)) { imageUrl = val; break }
               }
-            } catch {}
+            } catch (e) { console.error('[worker] Strat2 Browser Run scrape falhou:', e?.message || e) }
           }
+        }
+
+        // Strategy 3: Screenshot da pagina render_ad via Browser Run
+        if (!imageUrl && snapshotUrl) {
+          try {
+            const ss = await env.BROWSER.quickAction('screenshot', {
+              url: snapshotUrl,
+              userAgent: BROWSER_UA,
+              setExtraHTTPHeaders: EXTRA_HEADERS,
+              gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
+              bestAttempt: true,
+              viewport: { width: 800, height: 600 },
+              screenshotOptions: { type: 'jpeg', quality: 80 },
+            })
+            if (ss?.screenshot) {
+              const adId = new URL(snapshotUrl).searchParams.get('id') || Date.now().toString()
+              const filename = `${adId}_${Date.now()}.jpg`
+              const key = `screenshots/${filename}`
+              const binary = Uint8Array.from(atob(ss.screenshot), c => c.charCodeAt(0))
+              await env.METASPY_BUCKET.put(key, binary, {
+                httpMetadata: { contentType: 'image/jpeg' },
+              })
+              const baseUrl = `${url.protocol}//${url.host}`
+              imageUrl = `${baseUrl}/api/ad-screenshot/${filename}`
+            }
+          } catch (e) { console.error('[worker] Strat3 screenshot falhou:', e?.message || e) }
         }
 
         return new Response(JSON.stringify({ imageUrl }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
       }
+    }
+
+    // Serve screenshots stored in R2
+    if (path.startsWith('/api/ad-screenshot/') && request.method === 'GET') {
+      const filename = path.replace('/api/ad-screenshot/', '')
+      try {
+        const object = await env.METASPY_BUCKET.get(`screenshots/${filename}`)
+        if (object) {
+          const headers = new Headers()
+          object.writeHttpMetadata(headers)
+          headers.set('Access-Control-Allow-Origin', '*')
+          headers.set('Cache-Control', 'public, max-age=86400')
+          return new Response(object.body, { headers })
+        }
+      } catch (e) { console.error('[worker] screenshot serve falhou:', e?.message || e) }
+      return new Response('Not found', { status: 404 })
     }
 
     if (path === '/api/ad-preview' && request.method === 'OPTIONS') {
@@ -128,7 +170,7 @@ export default {
           const html = await originRes.text()
           env.METASPY_BUCKET.put(key, html, {
             httpMetadata: { contentType: 'text/html; charset=utf-8' },
-          }).catch(() => {})
+          }).catch(e => console.error('[worker] page cache put falhou:', e?.message || e))
           const headers = new Headers()
           headers.set('Content-Type', 'text/html; charset=utf-8')
           headers.set('Access-Control-Allow-Origin', '*')
@@ -139,7 +181,8 @@ export default {
       }
 
       return new Response('Not found', { status: 404 })
-    } catch {
+    } catch (e) {
+      console.error('[worker] page serve falhou:', e?.message || e)
       return new Response('Internal error', { status: 500 })
     }
   },

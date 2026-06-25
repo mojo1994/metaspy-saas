@@ -879,19 +879,71 @@ app.get('/api/ad-extract-image', async (req, res) => {
   let pageId = pageIdParam?.toString() || null
   if (id) {
     try {
-      const fields = encodeURIComponent('ad_creative_thumbnail_url,ad_snapshot_url,ad_creative_bodies,object_story_spec,page_id')
+      const fields = encodeURIComponent('ad_creative_thumbnail_url,ad_snapshot_url,ad_creative_bodies,object_story_spec,page_id,creative{id,thumbnail_url,image_hash}')
       const apiUrl = `https://graph.facebook.com/v22.0/${id}?fields=${fields}&access_token=${FB_TOKEN}`
       const resp = await fetchWithTimeout(apiUrl, {}, 5000)
       logger.info({ status: resp.status, id }, 'Estrat1: Graph API individual')
       if (resp.ok) {
         const data = await resp.json()
         pageId = data.page_id || null
+
+        // 1a: ad_creative_thumbnail_url direto
         if (data.ad_creative_thumbnail_url) {
           const result = { imageUrl: data.ad_creative_thumbnail_url }
           cachePreview.set(chaveCache, result)
           return res.json(result)
         }
-        // Try to find image URL in object_story_spec
+
+        // 1b: creative.thumbnail_url do objeto creative embutido
+        if (data.creative?.thumbnail_url) {
+          const result = { imageUrl: data.creative.thumbnail_url }
+          cachePreview.set(chaveCache, result)
+          return res.json(result)
+        }
+
+        // 1c: Se temos creative.id, consulta direto + thumbnails
+        const creativeId = data.creative?.id
+        if (creativeId) {
+          try {
+            const cResp = await fetchWithTimeout(
+              `https://graph.facebook.com/v22.0/${creativeId}?fields=thumbnail_url,image_hash&access_token=${FB_TOKEN}`,
+              {}, 5000
+            )
+            if (cResp.ok) {
+              const cData = await cResp.json()
+              if (cData.thumbnail_url) {
+                const result = { imageUrl: cData.thumbnail_url }
+                cachePreview.set(chaveCache, result)
+                return res.json(result)
+              }
+              // 1d: Se temos image_hash, constroi CDN URL
+              if (cData.image_hash) {
+                const cdnUrl = `https://scontent.xx.fbcdn.net/v/t45.1600-4/${cData.image_hash}_n.jpg`
+                const result = { imageUrl: cdnUrl }
+                cachePreview.set(chaveCache, result)
+                return res.json(result)
+              }
+            }
+          } catch (e) { logger.warn({ err: e?.message, creativeId }, 'Estrat1c: creative query falhou') }
+
+          try {
+            const thumbResp = await fetchWithTimeout(
+              `https://graph.facebook.com/v22.0/${creativeId}/thumbnails?access_token=${FB_TOKEN}`,
+              {}, 10000
+            )
+            if (thumbResp.ok) {
+              const thumbs = await thumbResp.json()
+              const uri = thumbs?.data?.[0]?.uri
+              if (uri) {
+                const result = { imageUrl: uri }
+                cachePreview.set(chaveCache, result)
+                return res.json(result)
+              }
+            }
+          } catch (e) { logger.warn({ err: e?.message, creativeId }, 'Estrat1d: creative thumbnails falhou') }
+        }
+
+        // 1e: object_story_spec - busca recursiva por URLs fbcdn e image_hash
         if (data.object_story_spec) {
           const specStr = JSON.stringify(data.object_story_spec)
           const imgMatch = specStr.match(/"(https:[^"]+?(?:fbcdn|scontent)[^"]+)"/)
@@ -902,19 +954,35 @@ app.get('/api/ad-extract-image', async (req, res) => {
           }
           const hashMatch = specStr.match(/"image_hash"\s*:\s*"([^"]+)"/)
           if (hashMatch) {
-            const imageUrl = `https://graph.facebook.com/v22.0/${id}/thumbnails?access_token=${FB_TOKEN}`
-            const thumbResp = await fetchWithTimeout(imageUrl, {}, 10000)
-            if (thumbResp.ok) {
-              const thumbs = await thumbResp.json()
-              const uri = thumbs?.data?.[0]?.uri
-              if (uri) {
-                const result = { imageUrl: uri }
-                cachePreview.set(chaveCache, result)
-                return res.json(result)
-              }
-            }
+            const cdnUrl = `https://scontent.xx.fbcdn.net/v/t45.1600-4/${hashMatch[1]}_n.jpg`
+            const result = { imageUrl: cdnUrl }
+            cachePreview.set(chaveCache, result)
+            return res.json(result)
           }
         }
+
+        // 1f: tenta /{ad_id}/creatives diretamente
+        try {
+          const creativesResp = await fetchWithTimeout(
+            `https://graph.facebook.com/v22.0/${id}/creatives?fields=thumbnail_url,image_hash&access_token=${FB_TOKEN}`,
+            {}, 5000
+          )
+          if (creativesResp.ok) {
+            const creativesData = await creativesResp.json()
+            const first = creativesData?.data?.[0]
+            if (first?.thumbnail_url) {
+              const result = { imageUrl: first.thumbnail_url }
+              cachePreview.set(chaveCache, result)
+              return res.json(result)
+            }
+            if (first?.image_hash) {
+              const cdnUrl = `https://scontent.xx.fbcdn.net/v/t45.1600-4/${first.image_hash}_n.jpg`
+              const result = { imageUrl: cdnUrl }
+              cachePreview.set(chaveCache, result)
+              return res.json(result)
+            }
+          }
+        } catch (e) { logger.warn({ err: e?.message, id }, 'Estrat1f: creatives endpoint falhou') }
       }
     } catch (e) { logger.warn({ err: e?.message, id }, 'Estrat1: Graph API individual falhou') }
   }
