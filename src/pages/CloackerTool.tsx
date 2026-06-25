@@ -50,7 +50,7 @@ export default function CloackerTool() {
     try {
       const res = await fetchWithAuth('/api/cloaker/generate', {
         method: 'POST',
-        body: JSON.stringify({ targetUrl, safeUrl })
+        body: JSON.stringify({ target_url: targetUrl, safe_url: safeUrl })
       })
       const data = await res.json()
       if (!res.ok) {
@@ -68,7 +68,7 @@ export default function CloackerTool() {
   }
 
   async function removeScript(id: string) {
-    const res = await fetchWithAuth(`/api/cloaker/script/${id}`, { method: 'DELETE' })
+    const res = await fetchWithAuth(`/api/cloaker/scripts/${id}`, { method: 'DELETE' })
     if (res.ok || res.status === 204) {
       setScripts(prev => prev.filter(s => s.id !== id))
     }
@@ -76,7 +76,7 @@ export default function CloackerTool() {
 
   async function downloadScript(script: CloackerScript) {
     try {
-      const res = await fetchWithAuth(`/api/cloaker/script/${script.id}/download`)
+      const res = await fetchWithAuth(`/api/cloaker/scripts/${script.id}/download`)
       if (res.ok) {
         const blob = await res.blob()
         const url = URL.createObjectURL(blob)
@@ -103,9 +103,9 @@ export default function CloackerTool() {
       <div className="tool-locked">
         <div className="tool-locked-icon"><IconLocked size={24} /></div>
         <h3>Cloacker</h3>
-        <p>Disponivel apenas nos planos Gold e Premium.</p>
+        <p>Disponivel apenas no plano Premium.</p>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-          Assine o plano Gold ou Premium e tenha acesso ao gerador de scripts de cloaking,
+          Assine o plano Premium e tenha acesso ao gerador de scripts de cloaking,
           minerador de anuncios, clonador de paginas e todas as ferramentas.
         </p>
         <button className="btn btn-primary" onClick={() => navigate('/planos')}>

@@ -156,6 +156,50 @@ export async function initSchema() {
   // Performance: Index on pages.slug for public queries
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_pages_slug ON pages(slug)`).catch(() => {})
 
+  // Cloaker: Campaigns for URL pool / redirect engine
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cloaker_campaigns (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      default_safe_url TEXT NOT NULL,
+      is_active INT NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS url_pool_urls (
+      id TEXT PRIMARY KEY,
+      pool_id TEXT NOT NULL,
+      url TEXT NOT NULL,
+      weight INT NOT NULL DEFAULT 10,
+      hit_count INT NOT NULL DEFAULT 0,
+      max_hits INT,
+      is_active INT NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS redirect_logs (
+      id TEXT PRIMARY KEY,
+      campaign_id TEXT,
+      user_id TEXT,
+      ip_hash TEXT,
+      ja4_hash TEXT,
+      decision TEXT NOT NULL,
+      fraud_score INT NOT NULL DEFAULT 0,
+      redirect_url TEXT,
+      geo_country TEXT,
+      device TEXT,
+      elapsed_ms INT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_redirect_logs_campaign ON redirect_logs(campaign_id, created_at DESC)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_url_pool_pool_id ON url_pool_urls(pool_id)`).catch(() => {})
+
   // Pillar 6: Form Submissions
   await pool.query(`
     CREATE TABLE IF NOT EXISTS form_submissions (
