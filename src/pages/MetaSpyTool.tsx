@@ -18,6 +18,11 @@ const CAMPOS_API_FALLBACK = [
   'ad_delivery_stop_time', 'ad_snapshot_url', 'ad_active_status',
   'ad_creative_thumbnail_url', 'page_id', 'page_name', 'publisher_platforms'
 ].join(',')
+const CAMPOS_API_MINIMO = [
+  'id', 'ad_creation_time', 'ad_creative_bodies',
+  'ad_snapshot_url', 'ad_active_status',
+  'page_id', 'page_name', 'publisher_platforms'
+].join(',')
 const PAUSA_RATE_LIMIT_MS = 15000
 const TIMEOUT_REQUISICAO_API_MS = 30000
 const CACHE_EXPIRACAO_MS = 5 * 60 * 1000
@@ -206,6 +211,7 @@ export default function MetaSpyTool() {
   const [mensagem, setMensagem] = useState('')
   const [alerta, setAlerta] = useState('')
   const [modalAnuncio, setModalAnuncio] = useState<Anuncio | null>(null)
+  const [erroDetalhado, setErroDetalhado] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [filtrosExpandidos, setFiltrosExpandidos] = useState(false)
   const [filtros, setFiltros] = useState<FilterState>({
@@ -320,7 +326,7 @@ export default function MetaSpyTool() {
     ]
   }, [])
 
-  const requisicaoApiComRetry = useCallback(async (url: string, tentativa = 0): Promise<{ data?: Record<string, unknown>[]; error?: { code?: number; message?: string } }> => {
+  const requisicaoApiComRetry = useCallback(async (url: string, tentativa = 0): Promise<{ data?: Record<string, unknown>[]; error?: { code?: number; message?: string; error_user_title?: string; error_user_msg?: string } }> => {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_REQUISICAO_API_MS)
     let resposta: Response
@@ -339,16 +345,34 @@ export default function MetaSpyTool() {
       return requisicaoApiComRetry(url, tentativa + 1)
     }
 
-    const json = await resposta.json()
+    let text: string
+    try {
+      text = await resposta.text()
+    } catch {
+      throw new Error(`Falha ao ler resposta (HTTP ${resposta.status})`)
+    }
+    let json: Record<string, unknown> = {}
+    try {
+      json = JSON.parse(text)
+    } catch {
+      const snippet = text.slice(0, 300)
+      throw new Error(`Resposta invalida (nao e JSON). HTTP ${resposta.status}. ${snippet}`)
+    }
     if (!resposta.ok || json.error) {
-      const codigo = Number(json?.error?.code || 0)
+      const err = json.error as Record<string, unknown> | undefined
+      const codigo = Number(err?.code || 0)
+      const msg = String(err?.message || '')
+      const errUser = String(err?.error_user_title || '')
+      const errUserMsg = String(err?.error_user_msg || '')
+      const detalhes = [`HTTP ${resposta.status}`, msg, errUser, errUserMsg].filter(Boolean).join(' | ')
+      setErroDetalhado(detalhes)
       if ((codigo === 4 || codigo === 800) && tentativa < 2) {
         await new Promise(r => setTimeout(r, PAUSA_RATE_LIMIT_MS))
         return requisicaoApiComRetry(url, tentativa + 1)
       }
-      throw new Error(json?.error?.message || `Erro na API (${resposta.status}).`)
+      throw new Error(msg || `Erro na API (${resposta.status}).`)
     }
-    return json
+    return json as { data?: Record<string, unknown>[]; error?: { code?: number; message?: string } }
   }, [])
 
   const buscarDaApi = useCallback(async (termo: string): Promise<Anuncio[]> => {
@@ -383,21 +407,28 @@ export default function MetaSpyTool() {
       ad_active_status: 'ACTIVE',
       ad_reached_countries: JSON.stringify([filtros.pais]),
       ad_type: 'ALL',
-      limit: '50',
-      fields: CAMPOS_API_PRINCIPAL
+      limit: '25',
+      fields: CAMPOS_API_MINIMO
     })
     const url = `${FB_API_BASE}?${params.toString()}`
     try {
+      setErroDetalhado('')
       const json = await requisicaoApiComRetry(url)
       const dados = (json.data || []).map(normalizarAnuncioApi).filter((a): a is Anuncio => a !== null)
+      if (dados.length === 0) {
+        setErroDetalhado('API retornou 0 anuncios. O token pode nao ter permissao ads_read.')
+      }
       dados.sort((a, b) => (b.scoreEscala || 0) - (a.scoreEscala || 0))
       setAnuncios(dados)
       setProgresso(100)
       setMensagem(`${dados.length} anuncios em alta`)
       setAlerta(`${dados.length} anuncios em alta carregados!`)
     } catch (err) {
-      setAlerta(`Erro ao carregar: ${err instanceof Error ? err.message : 'Falha'}`)
+      const msg = err instanceof Error ? err.message : 'Falha'
+      setAlerta(`Erro ao carregar: ${msg}`)
+      if (!erroDetalhado) setErroDetalhado(msg)
       setMensagem('Erro ao carregar')
+      console.error('buscarEmAlta error:', err)
     } finally {
       setCarregando(false)
     }
@@ -427,8 +458,11 @@ export default function MetaSpyTool() {
       setMensagem('Busca concluida')
       setAlerta(`${dados.length} ofertas encontradas!`)
     } catch (err) {
-      setAlerta(`Erro: ${err instanceof Error ? err.message : 'Falha na busca'}`)
+      const msg = err instanceof Error ? err.message : 'Falha na busca'
+      setAlerta(`Erro: ${msg}`)
+      if (!erroDetalhado) setErroDetalhado(msg)
       setMensagem('Erro na busca')
+      console.error('iniciarBusca error:', err)
     } finally {
       setCarregando(false)
       setTimeout(() => { if (!carregando) setAlerta('') }, 4000)
@@ -602,6 +636,14 @@ export default function MetaSpyTool() {
       )}
 
       {alerta && <div className="alerta" style={{ marginBottom: 16 }}>{alerta}</div>}
+      {erroDetalhado && (
+        <details style={{ marginBottom: 16, border: '1px solid var(--danger)', borderRadius: 8, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
+          <summary style={{ cursor: 'pointer', padding: '8px 12px', color: 'var(--danger)', fontSize: 12, fontWeight: 600, userSelect: 'none' }}>
+            Log de Erro (clique para expandir)
+          </summary>
+          <pre style={{ padding: 12, fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 200, overflowY: 'auto', color: 'var(--text-muted)' }}>{erroDetalhado}</pre>
+        </details>
+      )}
 
       <div className="results-area">
         <div className="results-header">

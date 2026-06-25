@@ -874,6 +874,7 @@ app.get('/api/ads-archive', async (req, res) => {
     }
     if (!params.has('access_token')) params.set('access_token', FB_TOKEN)
     const apiUrl = `https://graph.facebook.com/v22.0/ads_archive?${params.toString()}`
+    logger.info({ url: apiUrl.replace(FB_TOKEN, '***') }, 'Consultando Facebook Ads Archive')
     const resp = await fetchWithTimeout(apiUrl, {
       headers: {
         'User-Agent': 'MetaSpy/1.0',
@@ -881,10 +882,12 @@ app.get('/api/ads-archive', async (req, res) => {
       }
     }, 30000)
     const text = await resp.text()
+    logger.info({ status: resp.status, bodyPreview: text.slice(0, 500) }, 'Resposta do Facebook')
     res.set('Content-Type', 'application/json')
     res.status(resp.status).send(text)
   } catch (err) {
-    res.status(500).json({ error: 'Erro ao consultar ads_archive' })
+    logger.error({ err }, 'Erro ao consultar ads_archive')
+    res.status(500).json({ error: 'Erro ao consultar ads_archive', detalhe: err instanceof Error ? err.message : String(err) })
   }
 })
 
