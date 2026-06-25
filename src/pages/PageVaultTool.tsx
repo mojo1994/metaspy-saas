@@ -3,6 +3,7 @@ import type { CloneJob } from '../types'
 import HelpTooltip from '../components/HelpTooltip'
 import PageEditor from '../components/PageEditor'
 import { IconCheck, IconArrowDown, IconTarget, IconChevronDown, IconChevronRight } from '../components/Icons'
+import { useAuth } from '../contexts/AuthContext'
 
 declare global {
   interface Window {
@@ -13,6 +14,7 @@ declare global {
 const STEPS = ['HTML', 'Recursos', 'Render', 'Salvar']
 
 export default function PageVaultTool() {
+  const { fetchWithAuth } = useAuth()
   const [mode, setMode] = useState<'clone' | 'editor'>('clone')
   const [cloneHtml, setCloneHtml] = useState('')
   const [cloneUrl, setCloneUrl] = useState('')
@@ -108,7 +110,7 @@ export default function PageVaultTool() {
     let htmlContent = ''
     try {
       addLog(`URL: /api/page-fetch?url=${encodeURIComponent(urlTrimmed)}`)
-      const resp = await fetch(`/api/page-fetch?url=${encodeURIComponent(urlTrimmed)}`)
+      const resp = await fetchWithAuth(`/api/page-fetch?url=${encodeURIComponent(urlTrimmed)}`)
       if (!resp.ok) {
         let errorMsg = `HTTP ${resp.status}`
         try { const errBody = await resp.json(); errorMsg = errBody.error || errBody.message || errorMsg } catch {}

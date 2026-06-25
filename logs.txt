@@ -1,32 +1,11 @@
-
-up to date, audited 262 packages in 832ms
-42 packages are looking for funding
-  run `npm fund` for details
-found 0 vulnerabilities
-==> Uploading build...
-==> Uploaded in 2.3s. Compression took 2.5s
-==> Build successful 🎉
-==> Deploying...
-==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
-==> Running 'node index.js'
-file:///opt/render/project/src/server/index.js:14
-import archiver from 'archiver'
-       ^^^^^^^^
-SyntaxError: The requested module 'archiver' does not provide an export named 'default'
-    at ModuleJob._instantiate (node:internal/modules/esm/module_job:213:21)
-    at async ModuleJob.run (node:internal/modules/esm/module_job:320:5)
-    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
-    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
-Node.js v20.20.2
-==> Exited with status 1
-==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
-==> Running 'node index.js'
-file:///opt/render/project/src/server/index.js:14
-import archiver from 'archiver'
-       ^^^^^^^^
-SyntaxError: The requested module 'archiver' does not provide an export named 'default'
-    at ModuleJob._instantiate (node:internal/modules/esm/module_job:213:21)
-    at async ModuleJob.run (node:internal/modules/esm/module_job:320:5)
-    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
-    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
-Node.js v20.20.2
+[10:55:11] Abrindo seletor de pasta do Windows...
+[10:55:21] Pasta selecionada: pagina clonada
+[10:55:21] Clonando: https://lp.marinavolanski.com.br/super-filhotes
+[10:55:21] Opcoes: concorrencia=8, timeout=15s, render_wait=8s
+[10:55:21] Modo Resgate ativado: recursos externos forcados.
+[10:55:21] Buscando pagina original...
+[10:55:21] URL: /api/page-fetch?url=https%3A%2F%2Flp.marinavolanski.com.br%2Fsuper-filhotes
+[10:55:21] Erro ao buscar pagina: Token nao fornecido
+[10:55:21] Usando conteudo minimo como fallback.
+[10:55:21] Salvando arquivos...
+[10:55:22] Salvo: lp_marinavolanski_com_br_super_filhotes.html
