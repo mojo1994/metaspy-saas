@@ -72,7 +72,7 @@ const PLAN_CARD_DATA = [
     title: 'Básico',
     description: 'Para quem quer começar a escalar agora',
     original: 'R$ 97',
-    current: 'R$ 49,90',
+    current: 'R$ 39,90',
     button: 'Assinar Agora',
     features: FEATURES_BASICO,
     className: 'plan-card-basic',

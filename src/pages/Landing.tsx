@@ -58,7 +58,7 @@ const PRICE_ROWS = [
   {
     title: 'Básico',
     original: 'R$ 97',
-    current: 'R$ 49,90',
+    current: 'R$ 39,90',
     features: [
       ['Clonador de Páginas', true],
       ['MetaSpy Minerador de Ads', true],
