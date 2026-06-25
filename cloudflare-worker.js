@@ -1,8 +1,44 @@
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     const path = url.pathname
 
+    // Ad preview endpoint — uses Browser Run to extract ad image
+    if (path === '/api/ad-preview' && request.method === 'POST') {
+      try {
+        const { snapshotUrl } = await request.json()
+        if (!snapshotUrl) {
+          return new Response(JSON.stringify({ error: 'Missing snapshotUrl' }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+        }
+
+        // Scrape og:image from the fully rendered Facebook Ads Library page
+        const scraped = await env.BROWSER.quickAction('scrape', {
+          url: snapshotUrl,
+          elements: [
+            { selector: "meta[property='og:image']", attribute: 'content' },
+            { selector: "meta[name='twitter:image']", attribute: 'content' },
+          ],
+        })
+
+        const imageUrl = scraped?.[0]?.content?.[0] || scraped?.[1]?.content?.[0] || null
+
+        return new Response(JSON.stringify({ imageUrl }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message, stack: err.stack }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+      }
+    }
+
+    if (path === '/api/ad-preview' && request.method === 'OPTIONS') {
+      return new Response(null, { headers: CORS_HEADERS })
+    }
+
+    // Existing R2 hosting logic
     if (!path.startsWith('/p/')) {
       return new Response('Not found', { status: 404 })
     }

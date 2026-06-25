@@ -6,6 +6,7 @@ import type { Anuncio, FilterState } from '../types'
 import HelpTooltip from '../components/HelpTooltip'
 
 const FB_API_BASE = '/api/ads-archive'
+const CF_WORKER_URL = 'https://metaspy-host.09santos-felipe.workers.dev'
 const CAMPOS_API_PRINCIPAL = [
   'id', 'ad_creation_time', 'ad_creative_bodies', 'ad_creative_link_captions',
   'ad_creative_link_descriptions', 'ad_creative_link_titles', 'ad_delivery_start_time',
@@ -195,21 +196,36 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
   if (!chave) return null
   const cacheado = cacheImagensPreview.get(chave)
   if (cacheado) return cacheado
+  // Strategy 1: Cloudflare Worker with Browser Run (full JS rendering)
+  try {
+    const resp = await fetch(`${CF_WORKER_URL}/api/ad-preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshotUrl: anuncio.urlBiblioteca })
+    })
+    if (resp.ok) {
+      const data = await resp.json()
+      if (data.imageUrl) {
+        cacheImagensPreview.set(chave, data.imageUrl)
+        return data.imageUrl
+      }
+    }
+  } catch {}
+  // Strategy 2: Render backend (Graph API direct + snapshot scrape)
   try {
     const params = new URLSearchParams()
     if (anuncio.idAnuncio) params.set('id', anuncio.idAnuncio)
     if (anuncio.urlBiblioteca) params.set('snapshot', anuncio.urlBiblioteca)
     const resp = await fetch(`/api/ad-extract-image?${params.toString()}`)
-    if (!resp.ok) return null
-    const data = await resp.json()
-    if (data.imageUrl) {
-      cacheImagensPreview.set(chave, data.imageUrl)
-      return data.imageUrl
+    if (resp.ok) {
+      const data = await resp.json()
+      if (data.imageUrl) {
+        cacheImagensPreview.set(chave, data.imageUrl)
+        return data.imageUrl
+      }
     }
-    return null
-  } catch {
-    return null
-  }
+  } catch {}
+  return null
 }
 
 function urlImagemProxy(url: string): string {
