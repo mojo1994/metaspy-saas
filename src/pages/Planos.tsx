@@ -5,59 +5,31 @@ import { useAuth } from '../contexts/AuthContext'
 import { Check, Minus, Star } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
-  { label: 'Clonador de Páginas', ok: false },
-  { label: 'MetaSpy Minerador de Ads', ok: true },
-  { label: 'Filtros Inteligentes', ok: false },
-  { label: 'Editor Visual de Páginas', ok: false },
-  { label: 'Exportação CSV', ok: false },
-  { label: 'Estrutura de Arquivos + ZIP', ok: false },
-  { label: 'Análise Avançada de Ofertas', ok: false },
-  { label: 'Bypass Engine Multicamada', ok: false },
-  { label: 'Cloacker Profissional', ok: false },
-  { label: 'Remover Metadados', ok: true },
-  { label: 'Suporte Prioritário', ok: false },
+  { label: 'Minerador de Anúncios', ok: true },
+  { label: 'Hospedar Páginas', ok: false },
+  { label: 'Cloacker', ok: false },
+  { label: 'Removedor de Metadados', ok: true },
 ]
 
 const FEATURES_GOLD = [
-  { label: 'Clonador de Páginas', ok: false },
-  { label: 'MetaSpy Minerador de Ads', ok: true },
-  { label: 'Filtros Inteligentes', ok: true },
-  { label: 'Editor Visual de Páginas', ok: true },
-  { label: 'Exportação CSV', ok: true },
-  { label: 'Estrutura de Arquivos + ZIP', ok: true },
-  { label: 'Análise Avançada de Ofertas', ok: true },
-  { label: 'Bypass Engine Multicamada', ok: true },
-  { label: 'Cloacker Profissional', ok: false },
-  { label: 'Remover Metadados', ok: true },
-  { label: 'Suporte Prioritário', ok: true },
+  { label: 'Minerador de Anúncios', ok: true },
+  { label: 'Hospedar Páginas', ok: true },
+  { label: 'Cloacker', ok: false },
+  { label: 'Removedor de Metadados', ok: true },
 ]
 
 const FEATURES_PREMIUM = [
-  { label: 'Clonador de Páginas', ok: true },
-  { label: 'MetaSpy Minerador de Ads', ok: true },
-  { label: 'Filtros Inteligentes', ok: true },
-  { label: 'Editor Visual de Páginas', ok: true },
-  { label: 'Exportação CSV', ok: true },
-  { label: 'Estrutura de Arquivos + ZIP', ok: true },
-  { label: 'Análise Avançada de Ofertas', ok: true },
-  { label: 'Bypass Engine Multicamada', ok: true },
-  { label: 'Cloacker Profissional', ok: true },
-  { label: 'Remover Metadados', ok: true },
-  { label: 'Suporte Prioritário', ok: true },
+  { label: 'Minerador de Anúncios', ok: true },
+  { label: 'Hospedar Páginas', ok: true },
+  { label: 'Cloacker', ok: true },
+  { label: 'Removedor de Metadados', ok: true },
 ]
 
 const ALL_FEATURES = [
-  'Clonador de Páginas',
-  'MetaSpy Minerador de Ads',
-  'Filtros Inteligentes',
-  'Editor Visual de Páginas',
-  'Exportação CSV',
-  'Estrutura de Arquivos + ZIP',
-  'Análise Avançada de Ofertas',
-  'Bypass Engine Multicamada',
-  'Cloacker Profissional',
-  'Remover Metadados',
-  'Suporte Prioritário',
+  'Minerador de Anúncios',
+  'Hospedar Páginas',
+  'Cloacker',
+  'Removedor de Metadados',
 ]
 
 const DEPOIMENTOS = [
@@ -448,7 +420,7 @@ export default function Planos() {
             { p: 'O pagamento é seguro?', r: 'Totalmente. Processamos via Kirvano com cartão, Pix ou boleto. Seus dados estão protegidos.' },
             { p: 'Funciona para qualquer nicho?', r: 'Sim. O MetaSpy funciona para Nutra, Info, Ecommerce, leads e qualquer vertical do Meta Ads.' },
             { p: 'Precisa de conhecimento técnico?', r: 'Não. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiência em programação.' },
-            { p: 'Qual a diferença entre os planos?', r: 'O Básico dá acesso ao Clonador de Páginas, MetaSpy Minerador e Filtros Inteligentes. O Gold libera todas as ferramentas exceto Remover Metadados. O Premium libera todas as ferramentas sem exceção.' },
+            { p: 'Qual a diferença entre os planos?', r: 'O Básico dá acesso ao Minerador de Anúncios e ao Removedor de Metadados. O Gold inclui tudo isso mais Hospedar Páginas. O Premium libera todas as ferramentas incluindo o Cloacker profissional.' },
           ].map((faq, index) => (
             <details key={faq.p} className="planos-faq-item" data-reveal style={revealStyle(index * 60)}>
               <summary>{faq.p}</summary>
