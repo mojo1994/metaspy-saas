@@ -253,6 +253,19 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
       }
     }
   } catch (e) { console.error('[extrairImagemPreview] Puppeteer falhou:', e) }
+  // Strategy 4: Page profile picture as guaranteed fallback
+  if (anuncio.pageId) {
+    try {
+      const resp = await fetch(`/api/page-picture/${anuncio.pageId}`, { signal: AbortSignal.timeout(5000) })
+      if (resp.ok) {
+        const data = await resp.json()
+        if (data.imageUrl) {
+          cacheImagensPreview.set(chave, data.imageUrl)
+          return data.imageUrl
+        }
+      }
+    } catch (e) { console.error('[extrairImagemPreview] Page picture fallback falhou:', e) }
+  }
   return null
 }
 

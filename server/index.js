@@ -1156,6 +1156,14 @@ app.get('/api/ad-extract-image', async (req, res) => {
   res.json(result)
 })
 
+// ─── Page profile picture endpoint ────────────────────────────
+app.get('/api/page-picture/:pageId', async (req, res) => {
+  const { pageId } = req.params
+  const url = await getPageProfilePic(pageId, null)
+  if (url) return res.json({ imageUrl: url })
+  res.json({ imageUrl: null })
+})
+
 // ─── Page profile picture fallback ─────────────────────────────
 async function getPageProfilePic(pageId, adId) {
   const pid = pageId || adId?.split('_')?.[0]
