@@ -15,12 +15,11 @@ const CAMPOS_API_PRINCIPAL = [
 ].join(',')
 const CAMPOS_API_FALLBACK = [
   'id', 'ad_creation_time', 'ad_creative_bodies', 'ad_delivery_start_time',
-  'ad_delivery_stop_time', 'ad_snapshot_url', 'ad_active_status',
-  'ad_creative_thumbnail_url', 'page_id', 'page_name', 'publisher_platforms'
+  'ad_snapshot_url', 'ad_creative_thumbnail_url', 'page_id', 'page_name', 'publisher_platforms'
 ].join(',')
 const CAMPOS_API_MINIMO = [
   'id', 'ad_creation_time', 'ad_creative_bodies',
-  'ad_snapshot_url', 'ad_active_status',
+  'ad_snapshot_url', 'ad_creative_thumbnail_url',
   'page_id', 'page_name', 'publisher_platforms'
 ].join(',')
 const PAUSA_RATE_LIMIT_MS = 15000
@@ -143,20 +142,10 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
   const snapshot = (ad.ad_snapshot_url as string) || `https://www.facebook.com/ads/library/?id=${id}`
   const plataformas = normalizarPlataformas(ad.publisher_platforms)
   const criacao = (ad.ad_creation_time as string) || ''
-  const parada = (ad.ad_delivery_stop_time as string) || null
-  const activeStatus = String(ad.ad_active_status || 'UNKNOWN').toUpperCase()
-  const impressions = ad.impressions as { lower_bound?: number; upper_bound?: number } | undefined
-  const spend = ad.spend as { lower_bound?: number; upper_bound?: number } | undefined
-  const audience = ad.estimated_audience_size as { lower_bound?: number; upper_bound?: number } | undefined
   const pageName = String(ad.page_name || '').trim()
-
-  const spendMax = Math.max(Number(spend?.upper_bound || spend?.lower_bound || 0), extrairLimiteSuperior(ad.spend_max))
-  const impressionsMax = Math.max(Number(impressions?.upper_bound || impressions?.lower_bound || 0), extrairLimiteSuperior(ad.impressions_max))
-  const audienceMax = Math.max(Number(audience?.upper_bound || audience?.lower_bound || 0), extrairLimiteSuperior(ad.estimated_audience_size_upper))
   const quantCopias = Math.max(1, corpos.length)
   const diasAtivo = criacao ? Math.floor((Date.now() - new Date(criacao).getTime()) / 86400000) : 0
-  const fimNoPassado = !!(parada && new Date(parada).getTime() < Date.now())
-  const ativo = activeStatus === 'ACTIVE' && !fimNoPassado
+  const ativo = true
 
   const score = calcularScoreEscala({
     diasAtivo, impressionsMax: Number(impressionsMax), spendMax: Number(spendMax),
@@ -173,23 +162,23 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
     textoCompleto,
     midias: thumbnail ? [{ url: thumbnail, tipo: 'imagem' }] : [],
     dataInicioISO: criacao || null,
-    dataFimISO: parada,
+    dataFimISO: null,
     dataUltimaAtualizacaoISO: null,
     plataformas,
     urlDestino: (ad.ad_creative_link_url as string) || '',
     urlBiblioteca: snapshot,
     cta: 'Saiba mais',
-    adActiveStatus: activeStatus,
-    statusTexto: ativo ? 'Ativo' : 'Inativo',
+    adActiveStatus: 'ACTIVE',
+    statusTexto: 'Ativo',
     ativo,
     diasAtivo,
-    spendMax: Number(spendMax),
-    impressionsMax: Number(impressionsMax),
-    audienceMax: Number(audienceMax),
+    spendMax: 0,
+    impressionsMax: 0,
+    audienceMax: 0,
     variacoesAtivasEstimadas: quantCopias,
     variacoesAtivas: quantCopias,
-    consistenciaTemporal: !parada ? 100 : 55,
-    engajamentoEstimado: Math.round(Math.min(100, Number(impressionsMax) / 10000)),
+    consistenciaTemporal: 100,
+    engajamentoEstimado: 0,
     scoreEscala: score,
     statusEscala: score >= 80 ? 'ALTA ESCALA' : score >= 60 ? 'ESCALADA' : 'TESTANDO',
     evergreen: diasAtivo > 90,
