@@ -133,32 +133,6 @@ function detectarEntregavel(texto: string): string {
   return 'Indefinido'
 }
 
-function extractImageFromObjectStory(spec: unknown): string | null {
-  if (!spec || typeof spec !== 'object') return null
-  const s = spec as Record<string, unknown>
-  // link_data (most common for commercial ads)
-  const linkData = s.link_data as Record<string, unknown> | undefined
-  if (linkData?.image_hash && typeof linkData.image_hash === 'string') {
-    return `https://scontent.xx.fbcdn.net/v/t45.1600-4/${linkData.image_hash}_n.jpg`
-  }
-  // photo_data
-  const photoData = s.photo_data as Record<string, unknown> | undefined
-  if (photoData?.image_hash && typeof photoData.image_hash === 'string') {
-    return `https://scontent.xx.fbcdn.net/v/t45.1600-4/${photoData.image_hash}_n.jpg`
-  }
-  // video_data thumbnail
-  const videoData = s.video_data as Record<string, unknown> | undefined
-  if (videoData?.image_hash && typeof videoData.image_hash === 'string') {
-    return `https://scontent.xx.fbcdn.net/v/t45.1600-4/${videoData.image_hash}_n.jpg`
-  }
-  // direct image_url
-  if (linkData?.image_url && typeof linkData.image_url === 'string') return linkData.image_url
-  if (s.image_url && typeof s.image_url === 'string') return s.image_url
-  // call_to_action image
-  if (linkData?.call_to_action?.value?.image_url) return linkData.call_to_action.value.image_url
-  return null
-}
-
 function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
   const id = String(ad.id || '').trim()
   if (!id) return null
@@ -167,12 +141,7 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
   const titulos = (ad.ad_creative_link_titles as string[]) || []
   const descricoes = (ad.ad_creative_link_descriptions as string[]) || []
   const textoCompleto = (corpos.filter(Boolean).join(' ') || descricoes.filter(Boolean).join(' ') || titulos.filter(Boolean).join(' ')).trim()
-  let thumbnail = (ad.ad_creative_thumbnail_url as string) || ''
-  // If no direct thumbnail, try object_story_spec
-  if (!thumbnail) {
-    const fromSpec = extractImageFromObjectStory(ad.object_story_spec)
-    if (fromSpec) thumbnail = fromSpec
-  }
+  const thumbnail = (ad.ad_creative_thumbnail_url as string) || ''
   const snapshot = (ad.ad_snapshot_url as string) || `https://www.facebook.com/ads/library/?id=${id}`
   const plataformas = normalizarPlataformas(ad.publisher_platforms)
   const criacao = (ad.ad_creation_time as string) || ''
@@ -204,6 +173,7 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
     plataformas,
     urlDestino,
     urlBiblioteca: snapshot,
+    objectStorySpec: ad.object_story_spec,
     cta: 'Saiba mais',
     adActiveStatus: 'ACTIVE',
     statusTexto: 'Ativo',
@@ -238,6 +208,8 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
     if (anuncio.urlBiblioteca) params.set('snapshot', anuncio.urlBiblioteca)
     if (anuncio.urlDestino) params.set('linkUrl', anuncio.urlDestino)
     if (anuncio.pageId) params.set('pageId', anuncio.pageId)
+    // @ts-ignore
+    if (anuncio.objectStorySpec) params.set('objectStorySpec', JSON.stringify(anuncio.objectStorySpec))
     const resp = await fetch(`/api/ad-extract-image?${params.toString()}`, {
       signal: AbortSignal.timeout(15000)
     })

@@ -888,7 +888,7 @@ async function resolveImageHash(hash) {
   // ─── Ad Image Extraction ─────────────────────────────────────────
 const cachePreview = new Map()
 app.get('/api/ad-extract-image', async (req, res) => {
-  const { id, snapshot, linkUrl, pageId: pageIdParam } = req.query
+  const { id, snapshot, linkUrl, pageId: pageIdParam, objectStorySpec } = req.query
   if (!id && !snapshot) return res.status(400).json({ error: 'Informe id ou snapshot' })
   const chaveCache = id || snapshot.toString()
   const cacheado = cachePreview.get(chaveCache)
@@ -896,6 +896,31 @@ app.get('/api/ad-extract-image', async (req, res) => {
 
   let imageUrl = null
   let pageId = pageIdParam?.toString() || null
+
+  // Strategy 0: Se o frontend enviou objectStorySpec (da busca inicial), tenta extrair image_hash
+  if (!imageUrl && objectStorySpec) {
+    try {
+      const spec = typeof objectStorySpec === 'string' ? JSON.parse(objectStorySpec) : objectStorySpec
+      const findHash = (obj) => {
+        if (!obj || typeof obj !== 'object') return null
+        if (obj.image_hash && typeof obj.image_hash === 'string') return obj.image_hash
+        for (const sub of ['link_data', 'photo_data', 'video_data', 'child_attachments']) {
+          const child = obj[sub]
+          if (child) {
+            if (Array.isArray(child)) { for (const c of child) { const h = findHash(c); if (h) return h } }
+            else { const h = findHash(child); if (h) return h }
+          }
+        }
+        return null
+      }
+      const hash = findHash(spec)
+      if (hash) {
+        const resolved = await resolveImageHash(hash)
+        if (resolved) { imageUrl = resolved }
+      }
+    } catch (e) { logger.warn({ err: e?.message }, 'Estrat0: objectStorySpec parse falhou') }
+  }
+
   if (id) {
     try {
       const fields = encodeURIComponent('ad_creative_thumbnail_url,ad_snapshot_url,ad_creative_bodies,object_story_spec,page_id,creative{id,thumbnail_url,image_hash}')

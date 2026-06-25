@@ -33,6 +33,7 @@ export interface Anuncio {
   gastoDiarioEstimado?: number;
   alcanceDiarioEstimado?: number;
   custoPorMil?: number;
+  objectStorySpec?: unknown;
 }
 
 export interface CloneJob {
