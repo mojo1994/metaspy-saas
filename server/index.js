@@ -11,7 +11,7 @@ import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
-import archiver from 'archiver'
+import { Archiver } from 'archiver'
 import { exiftool } from 'exiftool-vendored'
 import mime from 'mime-types'
 import AdmZip from 'adm-zip'
@@ -1208,7 +1208,7 @@ app.get('/api/cloaker/camouflage-download/:id', authMiddleware, async (req, res)
     if (!htmlFile) return res.status(404).json({ erro: 'Arquivo nao encontrado.' })
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="camuflado-${req.params.id}.zip"`)
-    const archive = archiver('zip', { zlib: { level: 9 } })
+    const archive = new Archiver('zip', { zlib: { level: 9 } })
     archive.pipe(res)
     archive.file(join(dir, htmlFile), { name: htmlFile })
     if (mediaFile) archive.file(join(dir, mediaFile), { name: mediaFile })
@@ -1397,7 +1397,7 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
       const htmlPath = join(dir, 'index.html')
       writeFileSync(htmlPath, html, 'utf-8')
       const zipPath = join(dir, `output-${id}.zip`)
-      const archive = archiver('zip', { zlib: { level: 9 } })
+      const archive = new Archiver('zip', { zlib: { level: 9 } })
       const ws = createWriteStream(zipPath)
       await new Promise((resolve, reject) => {
         ws.on('finish', resolve)
