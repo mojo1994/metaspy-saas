@@ -2364,54 +2364,67 @@ app.post('/api/pages/upload', authMiddleware, async (req, res, next) => {
   }
 })
 
-// Serve hosted page — index.html or asset by path
-app.get('/api/page/:slug/:path(*)', async (req, res) => {
-  try {
-    const slug = req.params.slug.toLowerCase()
-    const assetPath = req.params.path
-    const isIndex = !assetPath
-    const fileName = isIndex ? 'index.html' : assetPath
-    const mimeType = mime.lookup(fileName) || 'application/octet-stream'
-
-    // Try R2 first
-    if (USE_CF_STORAGE) {
-      try {
-        const r2Data = await getPageContentFromR2(slug, fileName)
-        if (r2Data) {
-          res.set('Content-Type', mimeType)
-          res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-          res.set('X-Cache', 'R2-HIT')
-          return res.send(r2Data)
-        }
-      } catch {}
-    }
-
-    // Filesystem fallback
-    const filePath = join(PAGES_DIR, slug, fileName)
-    if (existsSync(filePath)) {
+async function servePage(slug, fileName, res) {
+  const mimeType = mime.lookup(fileName) || 'application/octet-stream'
+  // Try R2 first
+  if (USE_CF_STORAGE) {
+    try {
+      const r2Data = await getPageContentFromR2(slug, fileName)
+      if (r2Data) {
+        res.set('Content-Type', mimeType)
+        res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+        res.set('X-Cache', 'R2-HIT')
+        res.send(r2Data)
+        return true
+      }
+    } catch {}
+  }
+  // Filesystem fallback
+  const filePath = join(PAGES_DIR, slug, fileName)
+  if (existsSync(filePath)) {
+    try {
       const stat = statSync(filePath)
       if (stat.isFile()) {
         const data = readFileSync(filePath)
         res.set('Content-Type', mimeType)
         res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-        return res.send(data)
+        res.send(data)
+        return true
       }
-    }
+    } catch {}
+  }
+  return false
+}
 
-    // Last resort: DB html column (for index.html only)
-    if (isIndex) {
-      const page = await one('SELECT html FROM pages WHERE slug = $1 AND published = 1', [slug])
-      if (page) {
-        res.set('Content-Type', 'text/html; charset=utf-8')
-        res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-        return res.send(page.html || '')
-      }
-    }
-
-    res.status(404).send('Arquivo nao encontrado.')
+// Serve hosted page index.html
+app.get('/api/page/:slug', async (req, res) => {
+  try {
+    const slug = req.params.slug.toLowerCase()
+    const served = await servePage(slug, 'index.html', res)
+    if (served) return
+    const page = await one('SELECT html FROM pages WHERE slug = $1 AND published = 1', [slug])
+    if (!page) return res.status(404).send('Pagina nao encontrada.')
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+    res.send(page.html || '')
   } catch (err) {
     logger.error({ err }, 'Erro ao servir pagina')
     res.status(500).send('Erro ao carregar pagina.')
+  }
+})
+
+// Serve hosted page asset by path
+app.get('/api/page/:slug/:path(*)', async (req, res) => {
+  try {
+    const slug = req.params.slug.toLowerCase()
+    const assetPath = req.params.path
+    if (!assetPath) return res.status(404).send('Caminho do arquivo nao especificado.')
+    const served = await servePage(slug, assetPath, res)
+    if (served) return
+    res.status(404).send('Arquivo nao encontrado.')
+  } catch (err) {
+    logger.error({ err }, 'Erro ao servir arquivo')
+    res.status(500).send('Erro ao carregar arquivo.')
   }
 })
 
