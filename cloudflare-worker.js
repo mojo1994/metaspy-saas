@@ -24,67 +24,69 @@ export default {
         }
 
         let imageUrl = null
-        let debugInfo = {}
 
-        // Strategy 1: scrape for og:image + large images
+        // Strategy 1: Scrape OG meta tags from the snapshot page
         try {
           const scraped = await env.BROWSER.quickAction('scrape', {
             url: snapshotUrl,
             userAgent: BROWSER_UA,
             setExtraHTTPHeaders: EXTRA_HEADERS,
-            gotoOptions: { waitUntil: 'networkidle2', timeout: 45000 },
+            gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
             bestAttempt: true,
             elements: [
-              { selector: 'title' },
               { selector: "meta[property='og:image']" },
               { selector: "meta[name='twitter:image']" },
               { selector: "link[rel='image_src']" },
-              { selector: 'img[src*="fbcdn"]' },
-              { selector: 'img' },
             ],
           })
-          // Check each result type
           for (const item of scraped) {
-            if (!item.results?.length) continue
-            const sel = item.selector
-            for (const r of item.results) {
-              if (sel === 'title' && r.text && /^https?:\/\//.test(r.text.trim())) {
-                imageUrl = r.text.trim()
-                break
-              }
-              if (r.attributes?.length) {
-                const src = r.attributes.find(a => a.name === 'src')?.value
-                const content = r.attributes.find(a => a.name === 'content')?.value
-                const href = r.attributes.find(a => a.name === 'href')?.value
-                const val = src || content || href
-                if (val && /^https?:\/\//.test(val) && (val.includes('fbcdn') || val.includes('scontent') || sel.includes('og:image') || sel.includes('image_src'))) {
-                  imageUrl = val
-                  break
-                }
-              }
-            }
-            if (imageUrl) break
+            const val = item.results?.[0]?.attributes?.find(a => a.name === 'content' || a.name === 'href')?.value
+            if (val && /^https?:\/\//.test(val) && val.includes('fbcdn')) { imageUrl = val; break }
           }
-        } catch (e) { debugInfo.scrapeError = e.message }
+        } catch {}
 
-        // Strategy 2: try to get og:image from the link URL (landing page)
+        // Strategy 2: Scrape OG image from the landing page (linkUrl)
         if (!imageUrl && linkUrl) {
           try {
-            const scraped = await env.BROWSER.quickAction('scrape', {
-              url: linkUrl,
-              setJavaScriptEnabled: false,
-              gotoOptions: { waitUntil: 'load', timeout: 15000 },
-              bestAttempt: true,
-              elements: [
-                { selector: "meta[property='og:image']" },
-                { selector: "meta[name='twitter:image']" },
-              ],
+            // First try simple HTTP fetch (faster, works if the page is static)
+            const resp = await fetch(linkUrl, {
+              headers: {
+                'User-Agent': BROWSER_UA,
+                'Accept': 'text/html',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+              },
             })
-            for (const item of scraped) {
-              const content = item.results?.[0]?.attributes?.find(a => a.name === 'content')?.value
-              if (content && /^https?:\/\//.test(content)) { imageUrl = content; break }
+            if (resp.ok) {
+              const html = await resp.text()
+              let m = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i)
+            if (m) {
+              imageUrl = m[1].replace(/&amp;/g, '&')
+            } else {
+              m = html.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i)
+              if (m) imageUrl = m[1].replace(/&amp;/g, '&')
             }
-          } catch (e) { debugInfo.linkError = e.message }
+            }
+          } catch {}
+          // Fall back to Browser Run for JS-heavy pages
+          if (!imageUrl) {
+            try {
+              const scraped = await env.BROWSER.quickAction('scrape', {
+                url: linkUrl,
+                userAgent: BROWSER_UA,
+                gotoOptions: { waitUntil: 'load', timeout: 15000 },
+                bestAttempt: true,
+                setJavaScriptEnabled: false,
+                elements: [
+                  { selector: "meta[property='og:image']" },
+                  { selector: "meta[name='twitter:image']" },
+                ],
+              })
+              for (const item of scraped) {
+                const val = item.results?.[0]?.attributes?.find(a => a.name === 'content')?.value
+                if (val && /^https?:\/\//.test(val)) { imageUrl = val; break }
+              }
+            } catch {}
+          }
         }
 
         return new Response(JSON.stringify({ imageUrl }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
