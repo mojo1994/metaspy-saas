@@ -102,7 +102,7 @@ function ParticleField() {
     resize()
     window.addEventListener('resize', resize)
 
-    const count = Math.min(55, Math.floor(window.innerWidth * window.innerHeight / 20000))
+    const count = Math.min(120, Math.floor(window.innerWidth * window.innerHeight / 12000))
     const pts: { x: number; y: number; vx: number; vy: number; s: number; o: number }[] = []
 
     for (let i = 0; i < count; i++) {
@@ -111,8 +111,8 @@ function ParticleField() {
         y: Math.random() * window.innerHeight,
         vx: (Math.random() - 0.5) * 0.35,
         vy: (Math.random() - 0.5) * 0.35,
-        s: Math.random() * 1.8 + 0.4,
-        o: Math.random() * 0.35 + 0.08,
+        s: Math.random() * 2.4 + 0.6,
+        o: Math.random() * 0.45 + 0.15,
       })
     }
 
@@ -153,13 +153,13 @@ function ParticleField() {
           const a = pts[i], b = pts[j]
           const dx = a.x - b.x, dy = a.y - b.y
           const d = dx * dx + dy * dy
-          if (d < 110 * 110) {
-            const alpha = (1 - Math.sqrt(d) / 110) * 0.06
+          if (d < 150 * 150) {
+            const alpha = (1 - Math.sqrt(d) / 150) * 0.12
             ctx!.beginPath()
             ctx!.moveTo(a.x, a.y)
             ctx!.lineTo(b.x, b.y)
             ctx!.strokeStyle = `rgba(168,85,247,${alpha})`
-            ctx!.lineWidth = 0.5
+            ctx!.lineWidth = 0.8
             ctx!.stroke()
           }
         }
