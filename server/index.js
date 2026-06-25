@@ -875,14 +875,16 @@ app.get('/api/ad-extract-image', async (req, res) => {
   const cacheado = cachePreview.get(chaveCache)
   if (cacheado) return res.json(cacheado)
 
-  // Strategy 1: Graph API individual endpoint (mais campos)
+  let imageUrl = null
+  let pageId = null
   if (id) {
     try {
-      const fields = encodeURIComponent('ad_creative_thumbnail_url,ad_snapshot_url,ad_creative_bodies,object_story_spec')
+      const fields = encodeURIComponent('ad_creative_thumbnail_url,ad_snapshot_url,ad_creative_bodies,object_story_spec,page_id')
       const apiUrl = `https://graph.facebook.com/v22.0/${id}?fields=${fields}&access_token=${FB_TOKEN}`
-      const resp = await fetchWithTimeout(apiUrl, {}, 15000)
+      const resp = await fetchWithTimeout(apiUrl, {}, 5000)
       if (resp.ok) {
         const data = await resp.json()
+        pageId = data.page_id || null
         if (data.ad_creative_thumbnail_url) {
           const result = { imageUrl: data.ad_creative_thumbnail_url }
           cachePreview.set(chaveCache, result)
@@ -925,10 +927,10 @@ app.get('/api/ad-extract-image', async (req, res) => {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
         }
-      }, 20000)
+      }, 5000)
       if (resp.ok) {
         const html = await resp.text()
-        let imageUrl = null
+        imageUrl = null
 
         // og:image and twitter:image
         const metaMatch = html.match(/<meta\s+(?:property|name)="(?:og:image|twitter:image)"\s+content="([^"]+)"/i)
@@ -981,27 +983,8 @@ app.get('/api/ad-extract-image', async (req, res) => {
           imageUrl = fbcdn?.[1] || null
         }
 
-        const result = { imageUrl }
-        if (imageUrl) cachePreview.set(chaveCache, result)
-        return res.json(result)
-      }
-    } catch {}
-  }
-
-  // Strategy 5: Try OG image from the landing page (linkUrl)
-  if (linkUrl) {
-    try {
-      const resp = await fetchWithTimeout(linkUrl.toString(), {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-        }
-      }, 10000)
-      if (resp.ok) {
-        const html = await resp.text()
-        const ogMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)
-        if (ogMatch) {
-          const result = { imageUrl: ogMatch[1] }
+        if (imageUrl) {
+          const result = { imageUrl }
           cachePreview.set(chaveCache, result)
           return res.json(result)
         }
@@ -1009,13 +992,65 @@ app.get('/api/ad-extract-image', async (req, res) => {
     } catch {}
   }
 
+  // Strategy 5: Try OG image from the landing page (linkUrl)
+  if (linkUrl && !imageUrl) {
+    try {
+      const resp = await fetchWithTimeout(linkUrl.toString(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+        }
+      }, 5000)
+      if (resp.ok) {
+        const html = await resp.text()
+        const m = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i)
+        if (m) {
+          imageUrl = m[1].replace(/&amp;/g, '&')
+          const result = { imageUrl }
+          cachePreview.set(chaveCache, result)
+          return res.json(result)
+        }
+        const twitterMatch = html.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i)
+        if (twitterMatch) {
+          imageUrl = twitterMatch[1].replace(/&amp;/g, '&')
+          const result = { imageUrl }
+          cachePreview.set(chaveCache, result)
+          return res.json(result)
+        }
+      }
+    } catch {}
+  }
+
+  // Strategy 6: Page profile picture as last resort
+  if (!imageUrl) {
+    imageUrl = await getPageProfilePic(pageId, id)
+  }
+
   // Enqueue background extraction if no image found
-  if (id || snapshot) {
+  if (!imageUrl && (id || snapshot)) {
     enqueueThumbnailExtraction(id || '', snapshot?.toString() || '', linkUrl?.toString() || '').catch(() => {})
   }
 
-  res.json({ imageUrl: null })
+  const result = { imageUrl }
+  if (imageUrl) cachePreview.set(chaveCache, result)
+  res.json(result)
 })
+
+// ─── Page profile picture fallback ─────────────────────────────
+async function getPageProfilePic(pageId, adId) {
+  const pid = pageId || adId?.split('_')?.[0]
+  if (!pid || !FB_TOKEN) return null
+  try {
+    const url = `https://graph.facebook.com/v22.0/${pid}/picture?type=large&redirect=false&access_token=${FB_TOKEN}`
+    const resp = await fetchWithTimeout(url, {}, 5000)
+    if (resp.ok) {
+      const data = await resp.json()
+      if (data?.data?.url) return data.data.url
+    }
+  } catch {}
+  return null
+}
 
 // ─── Image Proxy (bypass CDN blocking via browser fingerprint) ──
 const DOMINIOS_PERMITIDOS = ['.fbcdn.net', '.facebook.com', '.meta.com']
@@ -1181,7 +1216,7 @@ app.get('/api/ads-archive', async (req, res) => {
       }
     }, 30000)
     const text = await resp.text()
-    logger.info({ status: resp.status, bodyPreview: text.slice(0, 500) }, 'Resposta do Facebook')
+    logger.info({ status: resp.status, bodyPreview: text.slice(0, 2000) }, 'Resposta do Facebook')
     res.set('Content-Type', 'application/json')
     res.status(resp.status).send(text)
   } catch (err) {

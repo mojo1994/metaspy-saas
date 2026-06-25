@@ -196,14 +196,15 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
   if (!chave) return null
   const cacheado = cacheImagensPreview.get(chave)
   if (cacheado) return cacheado
-  // Strategy 1: Cloudflare Worker + linkUrl OG fallback
+  // Strategy 1: Cloudflare Worker + linkUrl OG fallback (timeout 12s)
   try {
     const body: Record<string, string> = { snapshotUrl: anuncio.urlBiblioteca }
     if (anuncio.urlDestino) body.linkUrl = anuncio.urlDestino
     const resp = await fetch(`${CF_WORKER_URL}/api/ad-preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(12000)
     })
     if (resp.ok) {
       const data = await resp.json()
@@ -213,13 +214,15 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
       }
     }
   } catch {}
-  // Strategy 2: Render backend (Graph API + snapshot scrape + linkUrl OG)
+  // Strategy 2: Render backend (Graph API + linkUrl OG + page pic fallback, timeout 10s)
   try {
     const params = new URLSearchParams()
     if (anuncio.idAnuncio) params.set('id', anuncio.idAnuncio)
     if (anuncio.urlBiblioteca) params.set('snapshot', anuncio.urlBiblioteca)
     if (anuncio.urlDestino) params.set('linkUrl', anuncio.urlDestino)
-    const resp = await fetch(`/api/ad-extract-image?${params.toString()}`)
+    const resp = await fetch(`/api/ad-extract-image?${params.toString()}`, {
+      signal: AbortSignal.timeout(15000)
+    })
     if (resp.ok) {
       const data = await resp.json()
       if (data.imageUrl) {
@@ -228,9 +231,11 @@ async function extrairImagemPreview(anuncio: Anuncio): Promise<string | null> {
       }
     }
   } catch {}
-  // Strategy 3: Puppeteer backend (Render)
+  // Strategy 3: Puppeteer backend (Render, timeout 15s)
   try {
-    const resp = await fetch(`/api/ad-snapshot-image?url=${encodeURIComponent(anuncio.urlBiblioteca)}`)
+    const resp = await fetch(`/api/ad-snapshot-image?url=${encodeURIComponent(anuncio.urlBiblioteca)}`, {
+      signal: AbortSignal.timeout(15000)
+    })
     if (resp.ok) {
       const data = await resp.json()
       if (data.imageUrl) {
