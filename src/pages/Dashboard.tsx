@@ -120,6 +120,21 @@ export default function Dashboard() {
               <NavLink to="/dashboard/cloacker" end onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
                 Gerar Script
               </NavLink>
+              <NavLink to="/dashboard/cloacker/avancado" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Script Avancado
+              </NavLink>
+              <NavLink to="/dashboard/cloacker/campanhas" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Campanhas
+              </NavLink>
+              <NavLink to="/dashboard/cloacker/steganografia" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Esteganografia
+              </NavLink>
+              <NavLink to="/dashboard/cloacker/fingerprint" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Detector Fingerprint
+              </NavLink>
+              <NavLink to="/dashboard/cloacker/logs" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                Logs
+              </NavLink>
               <NavLink to="/dashboard/cloacker/detector" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
                 Quebra de Cloacker
               </NavLink>

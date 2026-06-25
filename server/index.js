@@ -302,11 +302,11 @@ function generateEnhancedCloakerScript(campaignId, targetUrl, safeUrl) {
 }
 
 // ─── URL Pool Helpers (DB-based weighted rotation) ──────────────
-async function addUrlToPool(campaignId, url, weight = 10) {
+async function addUrlToPool(campaignId, url, weight = 10, maxHits = null) {
   const id = randomUUID()
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-  await run('INSERT INTO url_pool_urls (id, pool_id, url, weight, hit_count, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-    [id, campaignId, url, weight, 0, now])
+  await run('INSERT INTO url_pool_urls (id, pool_id, url, weight, hit_count, max_hits, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+    [id, campaignId, url, weight, 0, maxHits, now])
   return id
 }
 
@@ -1571,12 +1571,153 @@ app.post('/api/cloaker/generate-enhanced', authMiddleware, validate(cloakerSchem
   } catch { res.status(500).json({ error: 'Erro ao gerar script enhanced' }) }
 })
 
+// ─── SSE Logs Infrastructure ────────────────────────────────────
+const sseClients = new Set()
+
+function notifySSEClients(logEntry) {
+  const msg = JSON.stringify(logEntry)
+  for (const client of sseClients) {
+    try { client.write(`data: ${msg}\n\n`) } catch { sseClients.delete(client) }
+  }
+}
+
+// ─── Circuit Breaker ────────────────────────────────────────────
+const circuitBreakerState = { failures: 0, lastFailure: 0, open: false }
+const CIRCUIT_THRESHOLD = 5
+const CIRCUIT_RESET_MS = 30000
+
+function isCircuitOpen() {
+  if (!circuitBreakerState.open) return false
+  if (Date.now() - circuitBreakerState.lastFailure > CIRCUIT_RESET_MS) {
+    circuitBreakerState.open = false
+    circuitBreakerState.failures = 0
+    return false
+  }
+  return true
+}
+
+function recordCircuitFailure() {
+  circuitBreakerState.failures++
+  circuitBreakerState.lastFailure = Date.now()
+  if (circuitBreakerState.failures >= CIRCUIT_THRESHOLD) {
+    circuitBreakerState.open = true
+    logger.warn('Circuit breaker OPEN — falling back to safe page for all requests')
+  }
+}
+
+// ─── Enhanced White Page (topic-based) ──────────────────────────
+const WHITE_TOPICS = {
+  tecnologia: {
+    headlines: ['Inteligencia Artificial Transforma Setor de Tecnologia no Brasil', 'Startups Brasileiras Captam R$ 2 Bilhoes no Primeiro Trimestre', 'Novo Framework JavaScript Promete Revolucionar Desenvolvimento Web', '5G Impulsiona Internet das Coisas na Agricultura Nacional', 'Ciberseguranca: Empresas Investem em Protecao de Dados', 'Mercado de Cloud Computing Cresce 35% no Pais', 'Realidade Aumentada Ganha Espaco no Varejo Online'],
+    paragraphs: ['O setor de tecnologia brasileiro vive um momento de expansao sem precedentes, impulsionado pela digitalizacao acelerada de empresas de todos os portes. Dados recentes apontam que os investimentos em inovacao alcancaram patamares historicos, consolidando o pais como um dos polos tecnologicos mais promissores da America Latina. Especialistas creditam esse crescimento ao amadurecimento do ecossistema de startups e ao aumento da conectividade.', 'Com a chegada do 5G e a expansao da fibra otica, novas possibilidades surgem para aplicacoes que exigem baixa latencia e alta capacidade de transmissao. Setores como saude, educacao e agronegocio ja comecam a colher os frutos dessa revolucao, com solucoes que antes pareciam distantes da realidade nacional. A tendencia e que nos proximos anos vejamos uma integracao ainda maior entre o mundo fisico e o digital.', 'Empresas de todos os segmentos estao repensando suas estrategias digitais para se manterem competitivas em um mercado cada vez mais exigente. A adocao de ferramentas baseadas em inteligencia artificial, automatizacao de processos e analise de dados deixou de ser diferencial para se tornar requisito basico de sobrevivencia corporativa. Os profissionais da area precisam se atualizar constantemente para acompanhar esse ritmo acelerado de mudancas.'],
+    footnotes: ['Artigo atualizado em', 'Fonte: Observatorio de Tecnologia', 'Publicado originalmente em']
+  },
+  negocios: {
+    headlines: ['Mercado Financeiro Projeta Crescimento de 3.5% para Economia', 'Pequenas e Medias Empresas Lideram Geracao de Empregos', 'Investimentos em Startup Brasileiras Aumentam 45%', 'Nova Lei Traz Mudancas na Tributacao de Empresas', 'Exportacoes Agricolas Batem Recorde no Primeiro Semestre', 'Selic Deve Encerrar Ano em Queda, Projetam Analistas'],
+    paragraphs: ['O cenario economico brasileiro apresenta sinais de recuperacao consistente, com indicadores apontando para um crescimento sustentavel nos proximos meses. A combinacao de controle inflacionario, juros em trajetoria de queda e avanco das reformas estruturais tem gerado um ambiente mais favoravel para investimentos produtivos e geracao de empregos formais em diversas regiões do pais.', 'O empreendedorismo brasileiro continua demonstrando resiliencia e capacidade de inovacao. Milhares de novos negocios surgem a cada mes, impulsionados por programas de incentivo, acesso a credito e a digitalizacao dos processos comerciais. As micro e pequenas empresas ja representam a maior parte dos empregos formais gerados no pais, consolidando sua importancia estrategica para a economia nacional.', 'O mercado de capitais brasileiro atrai cada vez mais investidores estrangeiros interessados em oportunidades com bom potencial de retorno. A bolsa de valores registra sucessivos recordes de negociacao, refletindo a confianca do mercado nas perspectivas economicas do pais. Setores como agronegocio, energia renovavel e tecnologia lideram a preferencia dos investidores institucionais.'],
+    footnotes: ['Dados atualizados em', 'Fonte: Banco Central do Brasil', 'Ultima actualizacao']
+  },
+  saude: {
+    headlines: ['Pesquisadores Brasileiros Avancam em Nova Terapia Genetica', 'Telemedicina Revoluciona Atendimento no Interior do Pais', 'Alimentacao Saudavel: 5 Habitos que Transformam a Saude', 'Novos Protocolos de Prevencao Reduzem Internacoes em 30%', 'Saude Mental Ganha Atencao nas Empresas Brasileiras', 'Exercicio Fisico Regular Previne Doencas Cronicas', 'Tecnologia Vestivel Monitora Saude em Tempo Real'],
+    paragraphs: ['A saude publica brasileira tem se beneficiado de avancos tecnologicos significativos nos ultimos anos. A implementacao de prontuarios eletronicos, sistemas de telemedicina e plataformas de agendamento online tem democratizado o acesso a cuidados medicos, especialmente em regioes remotas onde a presenca de especialistas e limitada. Essas inovacoes representam um salto qualitativo na atencao basica a saude.', 'Estudos recentes comprovam que a combinacao de alimentacao equilibrada, atividade fisica regular e acompanhamento medico preventivo pode reduzir significativamente a incidencia de doencas cronicas nao transmissiveis, como diabetes, hipertensao e obesidade. Especialistas recomendam a adocao de habitos saudaveis desde cedo como a melhor estrategia de prevencao e promocao da qualidade de vida.', 'A saude mental emergiu como uma das principais preocupacoes da sociedade contemporanea. Cada vez mais empresas implementam programas de apoio psicologico e politicas de bem-estar para seus funcionarios, reconhecendo que a saude emocional impacta diretamente a produtividade, o clima organizacional e a qualidade de vida no trabalho.'],
+    footnotes: ['Revisao medica em', 'Fonte: Ministerio da Saude', 'Estudo publicado em']
+  },
+  educacao: {
+    headlines: ['Ensino a Distancia Supera Presencial em Matriculas no Ensino Superior', 'Novo Programa de Bolsas Beneficia Estudantes de Baixa Renda', 'Metodologias Ativas Transformam Aprendizagem nas Escolas', 'Inteligencia Artificial Personaliza Ensino nas Universidades', 'Brasil Avanca em Ranking Internacional de Educacao', 'Cursos Tecnicos Ganham Espaco no Mercado de Trabalho'],
+    paragraphs: ['A educacao brasileira passa por uma transformacao profunda impulsionada pela tecnologia e por novas metodologias de ensino. O crescimento do ensino a distancia, combinado com ferramentas interativas e plataformas adaptativas, tem permitido que milhares de estudantes tenham acesso a educacao de qualidade independentemente de sua localizacao geografica ou condicao socioeconomica.', 'Metodologias ativas de aprendizagem, como sala de aula invertida, aprendizagem baseada em projetos e gamificacao, ganham cada vez mais espaco nas instituicoes de ensino brasileiras. Essas abordagens colocam o aluno como protagonista do processo educativo, estimulando o pensamento critico, a criatividade e a capacidade de resolucao de problemas.', 'A formacao profissional tem se tornado cada vez mais relevante em um mercado de trabalho dinâmico e exigente. Cursos tecnicos e profissionalizantes oferecem uma alternativa rapida e eficaz para quem busca ingressar ou se recolocar no mercado, com taxas de empregabilidade que superam 70% nos primeiros meses apos a conclusao.'],
+    footnotes: ['Dados do Censo Educacional', 'Fonte: MEC/INEP', 'Ultima atualizacao']
+  }
+}
+
+function generateEnhancedWhitePage(seedStr, topic = 'tecnologia') {
+  const seeds = WHITE_TOPICS[topic] || WHITE_TOPICS.tecnologia
+  const seed = createHash('sha256').update(seedStr).digest().readUInt32BE(0)
+  const rand = pseudoRandom(seed)
+  const pick = (arr) => arr[Math.floor(rand() * arr.length)]
+  const date = new Date(Date.now() - Math.floor(rand() * 1209600000))
+  const dateStr = date.toLocaleDateString('pt-BR')
+  const title = pick(seeds.headlines)
+  const p1 = pick(seeds.paragraphs)
+  const p2 = pick(seeds.paragraphs)
+  const p3 = pick(seeds.paragraphs)
+  const footnote = pick(seeds.footnotes)
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333;background:#f9f9f9;max-width:720px;margin:0 auto;padding:20px}h1{font-size:24px;margin:20px 0 10px;color:#111}p{margin:12px 0;font-size:15px;color:#444}.meta{font-size:13px;color:#888;margin-bottom:20px}.footer{margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:12px;color:#999}
+</style>
+</head>
+<body>
+<h1>${title}</h1>
+<div class="meta">Por Redacao &bull; ${dateStr}</div>
+<p>${p1}</p>
+<p>${p2}</p>
+<p>${p3}</p>
+<div class="footer"><p>${footnote} ${dateStr}</p></div>
+</body>
+</html>`
+}
+
+// ─── Logs Endpoint ──────────────────────────────────────────────
+app.get('/api/cloaker/logs', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500)
+  const logs = await query(
+    'SELECT id, campaign_id, ip_hash as ip, user_agent, fraud_score as score, decision, redirect_url as url_destino, created_at FROM redirect_logs ORDER BY created_at DESC LIMIT $1',
+    [limit]
+  )
+  const decMap = { bot: 'block', human: 'redirect', challenge: 'challenge', safe_page: 'safe_page' }
+  res.json((logs || []).map(l => ({ ...l, score: l.score || 0, decision: decMap[l.decision] || l.decision })))
+})
+
+// SSE endpoint for live logs
+app.get('/api/cloaker/logs/sse', (req, res) => {
+  const token = req.query.token
+  if (!token) return res.status(401).end()
+  try {
+    jwt.verify(token, JWT_SECRET)
+  } catch {
+    return res.status(401).end()
+  }
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  })
+  res.write('data: {"connected":true}\n\n')
+  sseClients.add(res)
+  req.on('close', () => { sseClients.delete(res) })
+})
+
+// ─── Campaign URL Pool endpoint ─────────────────────────────────
+app.get('/api/cloaker/campaign/:id/urls', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  const urls = await query('SELECT id, url, weight, hit_count, max_hits FROM url_pool_urls WHERE pool_id = $1', [req.params.id])
+  res.json(urls || [])
+})
+
 // Public redirect endpoint: multi-stage chain
 app.get('/go/:campaignId', async (req, res) => {
   try {
     const { campaignId } = req.params
     const { signature, timestamp, nonce, target } = req.query
     const startTime = Date.now()
+
+    // Circuit breaker check
+    if (isCircuitOpen()) {
+      recordCircuitFailure()
+      const safe = await one('SELECT default_safe_url, name FROM cloaker_campaigns WHERE id = $1', [campaignId])
+      return res.send(generateEnhancedWhitePage(`${campaignId}:circuit`, 'tecnologia'))
+    }
 
     if (!signature || !timestamp || !nonce || !target) {
       const campaign = await one('SELECT id, default_safe_url FROM cloaker_campaigns WHERE id = $1 AND is_active = 1', [campaignId])
@@ -1591,33 +1732,45 @@ app.get('/go/:campaignId', async (req, res) => {
       return res.redirect(campaign?.default_safe_url || 'about:blank')
     }
 
-    // Stage 1: 302 to intermediate HTML
     const finalTarget = decodeURIComponent(target)
-    const intermediateId = randomUUID()
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '0.0.0.0'
     const ipHash = createHash('sha256').update(ip + HMAC_SECRET).digest('hex').slice(0, 16)
     const ua = req.headers['user-agent'] || ''
     const headers = { 'user-agent': ua, 'accept-language': req.headers['accept-language'] || '', referer: req.headers['referer'] || '', via: req.headers['via'] || '', 'x-forwarded-for': req.headers['x-forwarded-for'] || '' }
 
-    // Calculate fraud score
     const fraudScore = calculateFraudScore(headers, ip, { country: req.headers['cf-ipcountry'] || '' })
-
-    // Log decision asynchronously
     const elapsed = Date.now() - startTime
+
+    let decision = 'human'
+    if (fraudScore >= 70) decision = 'bot'
+    else if (fraudScore >= 40) decision = 'challenge'
+
+    // Log and notify SSE
+    const logId = randomUUID()
     run(`INSERT INTO redirect_logs (id, campaign_id, ip_hash, decision, fraud_score, redirect_url, user_agent, elapsed_ms, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [randomUUID(), campaignId, ipHash, fraudScore >= 70 ? 'bot' : fraudScore >= 40 ? 'challenge' : 'human', fraudScore, finalTarget, (ua || '').slice(0, 255), elapsed, new Date().toISOString()]
-    ).catch(() => {})
+      [logId, campaignId, ipHash, decision, fraudScore, finalTarget, (ua || '').slice(0, 255), elapsed, new Date().toISOString()]
+    ).then(() => {
+      notifySSEClients({
+        id: logId, campaign_id: campaignId, ip: ipHash, user_agent: (ua || '').slice(0, 80),
+        score: fraudScore, decision: decision === 'bot' ? 'block' : decision === 'challenge' ? 'challenge' : 'redirect',
+        url_destino: finalTarget, created_at: new Date().toISOString()
+      })
+    }).catch(() => {})
 
     if (fraudScore >= 70) {
-      const safe = await one('SELECT default_safe_url FROM cloaker_campaigns WHERE id = $1', [campaignId])
-      return res.send(generateWhitePage(`${ipHash}:${campaignId}`))
+      recordCircuitFailure()
+      return res.send(generateEnhancedWhitePage(`${ipHash}:${campaignId}`, 'tecnologia'))
     }
 
     if (fraudScore >= 40) {
       return res.send(generateJSChallenge(campaignId, finalTarget))
     }
 
-    // Stage 2: Intermediate HTML with meta-refresh
+    recordCircuitFailure()
+    circuitBreakerState.failures = Math.max(0, circuitBreakerState.failures - 1)
+
+    // Stage 2: Intermediate HTML with meta-refresh + honeypot
+    const honeypotLink = `${finalTarget}?ref=${ipHash}&h=1`
     const stage2Html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="robots" content="noindex">
@@ -1627,11 +1780,16 @@ window.location.replace(${JSON.stringify(finalTarget)});
 </script>
 <noscript><meta http-equiv="refresh" content="0;url=${finalTarget}"></noscript>
 </head>
-<body><p>Redirecionando...</p></body>
+<body>
+<p>Redirecionando...</p>
+<a href="${honeypotLink}" style="display:none" rel="nofollow">.</a>
+<div style="position:absolute;left:-9999px"><a href="${honeypotLink}" rel="nofollow">clique aqui</a></div>
+</body>
 </html>`
     res.send(stage2Html)
   } catch (err) {
     logger.error({ err }, 'Redirect error')
+    recordCircuitFailure()
     res.status(500).send('Erro no redirecionamento')
   }
 })
@@ -1641,17 +1799,42 @@ app.post('/api/cloaker/fingerprint', authMiddleware, async (req, res) => {
   const blocked = checkFeature(req, res, 'cloaker')
   if (blocked) return blocked
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '0.0.0.0'
-  const headers = { 'user-agent': req.headers['user-agent'] || '', 'accept-language': req.headers['accept-language'] || '', referer: req.headers['referer'] || '', via: req.headers['via'] || '', 'x-forwarded-for': req.headers['x-forwarded-for'] || '' }
+  const ua = req.headers['user-agent'] || ''
+  const acceptLang = req.headers['accept-language'] || ''
+  const referer = req.headers['referer'] || ''
+  const via = req.headers['via'] || ''
+  const xForwardedFor = req.headers['x-forwarded-for'] || ''
+  const headers = { 'user-agent': ua, 'accept-language': acceptLang, referer, via, 'x-forwarded-for': xForwardedFor }
+
   const score = calculateFraudScore(headers, ip, { country: req.headers['cf-ipcountry'] || '' })
-  res.json({
-    fraudScore: score,
-    risk: score >= 70 ? 'bot' : score >= 40 ? 'suspicious' : 'human',
-    headers: {
-      ua: headers['user-agent'].slice(0, 120),
-      acceptLanguage: headers['accept-language'],
-      referer: headers['referer'] || '(none)',
-    }
-  })
+  const uaLower = ua.toLowerCase()
+  const suspicious_reasons = []
+  const details = {
+    user_agent_mismatch: !(/windows|macintosh|linux|android|iphone|ipad/i.test(uaLower)),
+    headless_chrome: /headlesschrome|headless/i.test(uaLower),
+    missing_plugins: false,
+    missing_mime_types: false,
+    no_touch_support: false,
+    webdriver_detected: /webdriver/i.test(uaLower),
+    languages_mismatch: !!(acceptLang && req.headers['cf-ipcountry'] && !acceptLang.includes(req.headers['cf-ipcountry'])),
+    inconsistent_platform: false,
+    screen_anomaly: false,
+    no_battery: false,
+    missing_webgl: false,
+    memory_anomaly: false,
+    canvas_fingerprint: 'simulated',
+    timezone_mismatch: false,
+    storage_inconsistent: false,
+  }
+
+  if (score >= 70) suspicious_reasons.push('User-agent indicando bot/headless')
+  if (!referer) suspicious_reasons.push('Sem referrer')
+  if (/curl|python|wget|httpie/i.test(uaLower)) suspicious_reasons.push('UA de ferramenta de linha de comando')
+  if (via || xForwardedFor.split(',').length > 2) suspicious_reasons.push('Proxy/VPN detectado via headers')
+  if (details.languages_mismatch) suspicious_reasons.push('Idioma do navegador incompativel com pais de origem')
+  if (score >= 40 && score < 70) suspicious_reasons.push('Comportamento misto — possivel browser automatizado')
+
+  res.json({ score, suspicious_reasons, details })
 })
 
 app.get('/api/user/profile', authMiddleware, (req, res) => {

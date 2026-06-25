@@ -11,6 +11,11 @@ import CloackerTool from './pages/CloackerTool'
 import CloakDetector from './pages/CloakDetector'
 import CamuflagemTexto from './pages/CamuflagemTexto'
 import CamuflagemMidia from './pages/CamuflagemMidia'
+import CloakerEnhanced from './pages/CloakerEnhanced'
+import CloakerCampanhas from './pages/CloakerCampanhas'
+import CloakerSteganografia from './pages/CloakerSteganografia'
+import CloakerFingerprint from './pages/CloakerFingerprint'
+import CloakerLogs from './pages/CloakerLogs'
 import HostPage from './pages/HostPage'
 import MetadataCleaner from './pages/MetadataCleaner'
 import Profile from './pages/Profile'
@@ -40,6 +45,11 @@ export default function App() {
         <Route path="cloacker/detector" element={<CloakDetector />} />
         <Route path="cloacker/camouflage/texto" element={<CamuflagemTexto />} />
         <Route path="cloacker/camouflage/midia" element={<CamuflagemMidia />} />
+        <Route path="cloacker/avancado" element={<CloakerEnhanced />} />
+        <Route path="cloacker/campanhas" element={<CloakerCampanhas />} />
+        <Route path="cloacker/steganografia" element={<CloakerSteganografia />} />
+        <Route path="cloacker/fingerprint" element={<CloakerFingerprint />} />
+        <Route path="cloacker/logs" element={<CloakerLogs />} />
         <Route path="hospedar" element={<HostPage />} />
         <Route path="cleaner" element={<MetadataCleaner />} />
         <Route path="perfil" element={<Profile />} />
