@@ -189,7 +189,28 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
   return anuncio
 }
 
-
+function gerarPaginas(total: number, atual: number): (number | '...')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+  const paginas: (number | '...')[] = []
+  if (atual <= 4) {
+    for (let i = 1; i <= 5; i++) paginas.push(i)
+    paginas.push('...')
+    paginas.push(total)
+  } else if (atual >= total - 3) {
+    paginas.push(1)
+    paginas.push('...')
+    for (let i = total - 4; i <= total; i++) paginas.push(i)
+  } else {
+    paginas.push(1)
+    paginas.push('...')
+    for (let i = atual - 1; i <= atual + 1; i++) paginas.push(i)
+    paginas.push('...')
+    paginas.push(total)
+  }
+  return paginas
+}
 
 export default function MetaSpyTool() {
   const { user } = useAuth()
@@ -203,6 +224,8 @@ export default function MetaSpyTool() {
   const [erroDetalhado, setErroDetalhado] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [filtrosExpandidos, setFiltrosExpandidos] = useState(false)
+  const [paginaAtual, setPaginaAtual] = useState(1)
+  const ITENS_POR_PAGINA = 20
   const [filtros, setFiltros] = useState<FilterState>({
     ordenacao: 'maior_escala',
     plataforma: 'ambos',
@@ -318,6 +341,14 @@ export default function MetaSpyTool() {
     }
     return lista
   }, [anuncios, filtros])
+
+  const totalPaginas = useMemo(() => Math.max(1, Math.ceil(anunciosFiltrados.length / ITENS_POR_PAGINA)), [anunciosFiltrados.length])
+  const anunciosPaginados = useMemo(() => {
+    const inicio = (paginaAtual - 1) * ITENS_POR_PAGINA
+    return anunciosFiltrados.slice(inicio, inicio + ITENS_POR_PAGINA)
+  }, [anunciosFiltrados, paginaAtual])
+
+  useEffect(() => { setPaginaAtual(1) }, [anunciosFiltrados.length])
 
   const analise = useMemo(() => {
     const base = anunciosFiltrados.length ? anunciosFiltrados : anuncios
@@ -673,17 +704,19 @@ export default function MetaSpyTool() {
         ) : (
           <>
             <div className="results-grid">
-              {anunciosFiltrados.slice(0, 50).map(a => {
+              {anunciosPaginados.map(a => {
                 const badge = badgeScore(a.scoreEscala || 0)
                 const ehDestaque = badge.texto === 'ALTA ESCALA' || badge.texto === 'ESCALADA'
                 return (
                   <div key={a.idAnuncio} className={`ad-card${ehDestaque ? ' destaque' : ''}`}>
-                    <div className="ad-thumb" style={{ display: 'grid', placeItems: 'center', fontSize: 24 }}>
-                      {a.midias?.[0]?.url ? <img className="ad-thumb" src={a.midias[0].url} alt="" /> : <IconImage size={24} />}
-                    </div>
-                    <div className="ad-content">
+                    {a.midias?.[0]?.url ? (
+                      <img className="ad-card-image" src={a.midias[0].url} alt="" loading="lazy" />
+                    ) : (
+                      <div className="ad-card-image-placeholder"><IconImage size={32} /></div>
+                    )}
+                    <div className="ad-card-body">
                       <h3>{a.anunciante}</h3>
-                      <div className="ad-text">{a.texto?.slice(0, 140) || 'Sem descricao capturada.'}</div>
+                      <div className="ad-card-text">{a.texto?.slice(0, 140) || 'Sem descricao capturada.'}</div>
                       <div className="ad-badges">
                         <span className={`badge ${badge.classe}`}>{badge.texto}</span>
                         <span className={`badge ${statusAnuncio(a) === 'Ativo' ? 'ativo' : 'inativo'}`}>{statusAnuncio(a)}</span>
@@ -702,9 +735,23 @@ export default function MetaSpyTool() {
                 )
               })}
             </div>
-            {anunciosFiltrados.length > 50 && (
-              <div style={{ textAlign: 'center', padding: 12 }}>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Mostrando 50 de {anunciosFiltrados.length}</span>
+            {totalPaginas > 1 && (
+              <div className="paginacao">
+                <button disabled={paginaAtual <= 1} onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}>
+                  &laquo; Anterior
+                </button>
+                {gerarPaginas(totalPaginas, paginaAtual).map((p, i) =>
+                  p === '...' ? (
+                    <span key={`e${i}`} className="paginacao-ellipsis">...</span>
+                  ) : (
+                    <button key={p} className={p === paginaAtual ? 'paginacao-ativa' : ''} onClick={() => setPaginaAtual(p)}>
+                      {p}
+                    </button>
+                  )
+                )}
+                <button disabled={paginaAtual >= totalPaginas} onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}>
+                  Proximo &raquo;
+                </button>
               </div>
             )}
           </>
