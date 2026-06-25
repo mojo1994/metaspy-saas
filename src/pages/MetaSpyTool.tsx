@@ -11,7 +11,7 @@ const CAMPOS_API_PRINCIPAL = [
   'ad_creative_link_descriptions', 'ad_creative_link_titles', 'ad_delivery_start_time',
   'ad_delivery_stop_time', 'ad_snapshot_url', 'ad_active_status',
   'ad_creative_thumbnail_url', 'page_id', 'page_name', 'publisher_platforms',
-  'ad_creative_link_url', 'estimated_audience_size', 'impressions', 'spend'
+  'ad_creative_link_url'
 ].join(',')
 const CAMPOS_API_FALLBACK = [
   'id', 'ad_creation_time', 'ad_creative_bodies', 'ad_delivery_start_time',
@@ -365,6 +365,7 @@ export default function MetaSpyTool() {
       const errUser = String(err?.error_user_title || '')
       const errUserMsg = String(err?.error_user_msg || '')
       const detalhes = [`HTTP ${resposta.status}`, msg, errUser, errUserMsg].filter(Boolean).join(' | ')
+      ;(window as any).__ultimoErroApi = detalhes
       setErroDetalhado(detalhes)
       if ((codigo === 4 || codigo === 800) && tentativa < 2) {
         await new Promise(r => setTimeout(r, PAUSA_RATE_LIMIT_MS))
@@ -402,36 +403,44 @@ export default function MetaSpyTool() {
     throw ultimoErro || new Error('Nenhum cenario de consulta funcionou.')
   }, [filtros.pais, filtros.statusApi, montarCenariosApi])
 
+  const TERMOS_EM_ALTA = ['comprar', 'receita', 'whatsapp', 'desconto', 'curso', 'resultado', 'academia', 'emagrecer', 'digital', 'saude']
+
   const buscarEmAlta = useCallback(async () => {
-    const params = new URLSearchParams({
-      ad_active_status: 'ACTIVE',
-      ad_reached_countries: JSON.stringify([filtros.pais]),
-      ad_type: 'ALL',
-      limit: '25',
-      fields: CAMPOS_API_MINIMO
-    })
-    const url = `${FB_API_BASE}?${params.toString()}`
-    try {
-      setErroDetalhado('')
-      const json = await requisicaoApiComRetry(url)
-      const dados = (json.data || []).map(normalizarAnuncioApi).filter((a): a is Anuncio => a !== null)
-      if (dados.length === 0) {
-        setErroDetalhado('API retornou 0 anuncios. O token pode nao ter permissao ads_read.')
+    let todos: Anuncio[] = []
+    let ultimoErro = ''
+    for (const termo of TERMOS_EM_ALTA) {
+      if (todos.length >= 40) break
+      const params = new URLSearchParams({
+        ad_active_status: 'ACTIVE',
+        ad_reached_countries: JSON.stringify([filtros.pais]),
+        search_terms: termo,
+        limit: '10',
+        fields: CAMPOS_API_MINIMO
+      })
+      const url = `${FB_API_BASE}?${params.toString()}`
+      try {
+        const json = await requisicaoApiComRetry(url)
+        const dados = (json.data || []).map(normalizarAnuncioApi).filter((a): a is Anuncio => a !== null)
+        todos.push(...dados)
+      } catch (err) {
+        ultimoErro = err instanceof Error ? err.message : 'Falha'
+        continue
       }
-      dados.sort((a, b) => (b.scoreEscala || 0) - (a.scoreEscala || 0))
-      setAnuncios(dados)
-      setProgresso(100)
-      setMensagem(`${dados.length} anuncios em alta`)
-      setAlerta(`${dados.length} anuncios em alta carregados!`)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Falha'
-      setAlerta(`Erro ao carregar: ${msg}`)
-      if (!erroDetalhado) setErroDetalhado(msg)
-      setMensagem('Erro ao carregar')
-      console.error('buscarEmAlta error:', err)
-    } finally {
-      setCarregando(false)
     }
+    if (todos.length === 0) {
+      setErroDetalhado(ultimoErro || (window as any).__ultimoErroApi || 'Nenhum anuncio encontrado. Verifique o token e a permissao ads_read.')
+      setMensagem('Nenhum anuncio')
+    } else {
+      setErroDetalhado('')
+      const vistos = new Set<string>()
+      const unicos = todos.filter(a => { if (vistos.has(a.idAnuncio)) return false; vistos.add(a.idAnuncio); return true })
+      unicos.sort((a, b) => (b.scoreEscala || 0) - (a.scoreEscala || 0))
+      setAnuncios(unicos)
+      setMensagem(`${unicos.length} anuncios em alta`)
+      setAlerta(`${unicos.length} anuncios em alta carregados!`)
+    }
+    setProgresso(100)
+    setCarregando(false)
   }, [filtros.pais, requisicaoApiComRetry])
 
   async function iniciarBusca() {
