@@ -5,21 +5,21 @@ import { useAuth } from '../contexts/AuthContext'
 import { Check, Minus, Star } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
-  { label: 'Clonador de Páginas', ok: true },
+  { label: 'Clonador de Páginas', ok: false },
   { label: 'MetaSpy Minerador de Ads', ok: true },
-  { label: 'Filtros Inteligentes', ok: true },
+  { label: 'Filtros Inteligentes', ok: false },
   { label: 'Editor Visual de Páginas', ok: false },
   { label: 'Exportação CSV', ok: false },
   { label: 'Estrutura de Arquivos + ZIP', ok: false },
   { label: 'Análise Avançada de Ofertas', ok: false },
   { label: 'Bypass Engine Multicamada', ok: false },
   { label: 'Cloacker Profissional', ok: false },
-  { label: 'Remover Metadados', ok: false },
+  { label: 'Remover Metadados', ok: true },
   { label: 'Suporte Prioritário', ok: false },
 ]
 
 const FEATURES_GOLD = [
-  { label: 'Clonador de Páginas', ok: true },
+  { label: 'Clonador de Páginas', ok: false },
   { label: 'MetaSpy Minerador de Ads', ok: true },
   { label: 'Filtros Inteligentes', ok: true },
   { label: 'Editor Visual de Páginas', ok: true },
@@ -27,8 +27,8 @@ const FEATURES_GOLD = [
   { label: 'Estrutura de Arquivos + ZIP', ok: true },
   { label: 'Análise Avançada de Ofertas', ok: true },
   { label: 'Bypass Engine Multicamada', ok: true },
-  { label: 'Cloacker Profissional', ok: true },
-  { label: 'Remover Metadados', ok: false },
+  { label: 'Cloacker Profissional', ok: false },
+  { label: 'Remover Metadados', ok: true },
   { label: 'Suporte Prioritário', ok: true },
 ]
 

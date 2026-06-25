@@ -58,15 +58,15 @@ export default function DashboardHome() {
           </div>
         </div>
         <div
-          className={`feature-card${user?.plano === 'nenhum' || user?.plano === 'basico' ? ' locked' : ''}`}
-          onClick={() => user?.plano === 'nenhum' || user?.plano === 'basico' ? navigate('/planos') : navigate('/dashboard/cloacker')}
+          className={`feature-card${user?.plano !== 'premium' ? ' locked' : ''}`}
+          onClick={() => user?.plano !== 'premium' ? navigate('/planos') : navigate('/dashboard/cloacker')}
           style={{ cursor: 'pointer', '--i': 2 } as React.CSSProperties}
         >
           <div className="feature-icon"><IconLocked size={24} /></div>
           <h3>Cloacker</h3>
           <p>Gere scripts de cloaking para proteger suas campanhas de bots.</p>
           <div className="feature-action">
-            {user?.plano === 'nenhum' || user?.plano === 'basico' ? 'Desbloquear →' : 'Acessar →'}
+            {user?.plano !== 'premium' ? 'Desbloquear →' : 'Acessar →'}
           </div>
         </div>
       </div>

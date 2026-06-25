@@ -92,10 +92,10 @@ const PLAN_CONFIG = {
 }
 
 const PLAN_FEATURES = {
-  nenhum: { clone: false, minerador: false, cloaker: false, pagevault: false, analise: false, cleaner: false },
-  basico: { clone: true, minerador: true, cloaker: false, pagevault: false, analise: false, cleaner: false },
-  gold: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: false },
-  premium: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: true },
+  nenhum: { clone: false, minerador: false, cloaker: false, pagevault: false, analise: false, cleaner: false, bypass: false },
+  basico: { clone: false, minerador: true, cloaker: false, pagevault: false, analise: false, cleaner: true, bypass: false },
+  gold: { clone: false, minerador: true, cloaker: false, pagevault: true, analise: true, cleaner: true, bypass: true },
+  premium: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: true, bypass: true },
 }
 
 function generateToken(userId) {
@@ -114,6 +114,12 @@ async function authMiddleware(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET)
     const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [decoded.userId])
     if (!user) return res.status(401).json({ error: 'Usuario nao encontrado' })
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    if (user.subscription_expiry && user.subscription_expiry < now && user.plan !== 'nenhum') {
+      await run('UPDATE users SET plan = $1, subscription_status = $2 WHERE id = $3', ['nenhum', 'expired', user.id])
+      user.plan = 'nenhum'
+      user.subscription_status = 'expired'
+    }
     req.user = user
     next()
   } catch {
@@ -439,7 +445,17 @@ app.post('/api/clone', authMiddleware, validate(cloneSchema), async (req, res) =
 })
 
 // ─── Deep Clone ─────────────────────────────────────────────────
-app.post('/api/clone/deep', async (req, res) => {
+function checkFeature(req, res, feature) {
+  const features = PLAN_FEATURES[req.user?.plan]
+  if (!features?.[feature]) {
+    return res.status(403).json({ error: 'Seu plano nao inclui este recurso.' })
+  }
+  return null
+}
+
+app.post('/api/clone/deep', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'bypass')
+  if (blocked) return blocked
   try {
     const { url } = req.body
     if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
@@ -454,7 +470,9 @@ app.post('/api/clone/deep', async (req, res) => {
   }
 })
 
-app.get('/api/clone/deep/:id/files', async (req, res) => {
+app.get('/api/clone/deep/:id/files', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'bypass')
+  if (blocked) return blocked
   const dir = join(CLONES_DIR, req.params.id)
   if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
   try {
@@ -481,7 +499,9 @@ app.get('/api/clone/deep/:id/files', async (req, res) => {
   }
 })
 
-app.get('/api/clone/deep/:id/download', async (req, res) => {
+app.get('/api/clone/deep/:id/download', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'bypass')
+  if (blocked) return blocked
   const dir = join(CLONES_DIR, req.params.id)
   if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
   try {
@@ -510,7 +530,9 @@ app.get('/api/clone/deep/:id/download', async (req, res) => {
 })
 
 // ─── Page Fetch (CORS bypass) ────────────────────────────────────
-app.get('/api/page-fetch', async (req, res) => {
+app.get('/api/page-fetch', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'minerador')
+  if (blocked) return blocked
   const { url } = req.query
   if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
   try {
@@ -529,11 +551,13 @@ const KIRVANO_API = 'https://api.kirvano.com'
 const KIRVANO_STATIC_LINKS = {
   basico: 'https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd',
   gold: 'https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad',
+  premium: 'https://pay.kirvano.com/5a1e8b2c-3d4f-5678-9012-345678901234',
 }
 
 const KIRVANO_CHECKOUT_UUIDS = {
   '879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd': 'basico',
   '2498bd06-c4e9-412f-ab0d-bd9cededb5ad': 'gold',
+  '5a1e8b2c-3d4f-5678-9012-345678901234': 'premium',
 }
 
 app.post('/api/subscription/create-checkout', authMiddleware, validate(checkoutSchema), async (req, res) => {
@@ -689,11 +713,15 @@ function generateCloakerScript(targetUrl, safeUrl, scriptId) {
 }
 
 app.get('/api/cloaker/scripts', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
   const scripts = await query('SELECT id, target_url, safe_url, created_at FROM cloaker_scripts WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id])
   res.json(scripts)
 })
 
 app.delete('/api/cloaker/scripts/:id', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
   const result = await run('DELETE FROM cloaker_scripts WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
   if (result.changes === 0) return res.status(404).json({ error: 'Script nao encontrado' })
   res.json({ ok: true })
@@ -846,7 +874,9 @@ app.post('/api/cloaker/upload-camouflage', authMiddleware, (req, res, next) => {
   }
 })
 
-app.get('/api/cloaker/camouflage-download/:id', async (req, res) => {
+app.get('/api/cloaker/camouflage-download/:id', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
   try {
     const dir = join(CAMO_DIR, req.params.id)
     if (!existsSync(dir)) return res.status(404).json({ erro: 'Arquivo nao encontrado ou expirado.' })
@@ -1060,7 +1090,9 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
   }
 })
 
-app.get('/api/cloaker/camouflage/media/download/:id', async (req, res) => {
+app.get('/api/cloaker/camouflage/media/download/:id', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
   const filePath = CAMO_MEDIA_OUTPUTS.get(req.params.id)
   if (!filePath || !existsSync(filePath)) return res.status(404).json({ erro: 'Arquivo nao encontrado ou expirado.' })
   const ext = extname(filePath)
@@ -1242,6 +1274,8 @@ app.post('/api/cleaner/upload', authMiddleware, async (req, res) => {
 })
 
 app.get('/api/cleaner/download/:id', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cleaner')
+  if (blocked) return blocked
   try {
     const asset = await one('SELECT * FROM cleaned_assets WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
     if (!asset) return res.status(404).json({ error: 'Arquivo nao encontrado.' })
@@ -1296,7 +1330,11 @@ async function createPageRecord(userId, title, customSlug, cfUrl) {
   return { id, slug }
 }
 
-app.post('/api/pages/upload', authMiddleware, uploadPage.array('files', 500), async (req, res) => {
+app.post('/api/pages/upload', authMiddleware, async (req, res, next) => {
+  const blocked = checkFeature(req, res, 'pagevault')
+  if (blocked) return blocked
+  next()
+}, uploadPage.array('files', 500), async (req, res) => {
   try {
     const files = req.files
     if (!files || files.length === 0) return res.status(400).json({ error: 'Arquivo(s) obrigatorio(s).' })

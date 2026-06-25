@@ -96,7 +96,7 @@ export default function CloackerTool() {
     })
   }
 
-  const hasCloaker = user?.plano === 'gold' || user?.plano === 'premium'
+  const hasCloaker = user?.plano === 'premium'
 
   if (!hasCloaker) {
     return (
