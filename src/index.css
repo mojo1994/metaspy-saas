@@ -1113,7 +1113,7 @@ select {
 .planos-features { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .planos-features li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-secondary); }
 .planos-features li.off { opacity: 0.35; }
-.planos-check { font-weight: 700; color: var(--success); width: 18px; text-align: center; }
+.planos-check { font-weight: 700; color: var(--success); width: 18px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
 .planos-features li.off .planos-check { color: var(--text-muted); }
 .planos-cta { width: 100%; padding: 14px; font-size: 15px; font-weight: 700; margin-top: auto; border-radius: var(--radius-md); }
 .planos-comparison { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; padding: 40px 24px; }
@@ -2812,7 +2812,11 @@ button:active,
   }
 
   .planos-table {
-    min-width: 760px;
+    min-width: 600px;
+  }
+
+  .planos-table-row {
+    grid-template-columns: minmax(160px, 1.4fr) repeat(3, minmax(80px, 1fr));
   }
 
   .planos-card-price {

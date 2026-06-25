@@ -228,7 +228,7 @@ export default function Planos() {
                   <span className="planos-check">
                     {f.ok ? <Check size={12} weight="bold" /> : <Minus size={12} weight="bold" />}
                   </span>
-                  {f.label}
+                    <span>{f.label}</span>
                 </li>
               ))}
             </ul>

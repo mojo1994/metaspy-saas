@@ -246,7 +246,7 @@ export default function Landing() {
                     <span className="planos-check">
                       {ok ? <Check size={12} weight="bold" /> : <Minus size={12} weight="bold" />}
                     </span>
-                    {label}
+                    <span>{label}</span>
                   </li>
                 ))}
               </ul>
