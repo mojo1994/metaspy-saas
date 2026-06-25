@@ -38,6 +38,13 @@ const DEPOIMENTOS = [
   { nome: 'Lucas O.', cargo: 'Diretor de Tráfego', texto: 'Uso o cloacker em todas as campanhas. Zero denúncias desde que comecei a usar. Vale cada centavo.' },
 ]
 
+const DEPO_IMAGENS = [
+  { handle: '@thzmkt', idade: '25 anos', arquivo: '/depoimentos/foto1.jpg' },
+  { handle: '@lucas.digital', idade: '23 anos', arquivo: '/depoimentos/foto2.jpg' },
+  { handle: '@alberto nogueira', idade: '23 anos', arquivo: '/depoimentos/foto3.jpg' },
+  { handle: '@nandokz', idade: '22 anos', arquivo: '/depoimentos/foto4.jpg' },
+]
+
 const PLAN_CARD_DATA = [
   {
     key: 'basico',
@@ -392,6 +399,22 @@ export default function Planos() {
 
       <section className="planos-depoimentos" data-reveal style={revealStyle(160)}>
         <h2>Quem usa, recomenda</h2>
+        <div className="planos-depo-grid-fotos">
+          {DEPO_IMAGENS.map((d, index) => (
+            <div key={d.handle} className="planos-depo-card-foto" data-reveal style={revealStyle(index * 60)}>
+              <div className="planos-depo-moldura">
+                <div className="planos-depo-moldura-borda" />
+                <div className="planos-depo-moldura-brilho" />
+                <img src={d.arquivo} alt={`Depoimento de ${d.handle}`} className="planos-depo-img" loading="lazy" />
+                <div className="planos-depo-img-overlay" />
+              </div>
+              <div className="planos-depo-info">
+                <strong className="planos-depo-handle">{d.handle}</strong>
+                <span className="planos-depo-idade">{d.idade}</span>
+              </div>
+            </div>
+          ))}
+        </div>
         <div className="planos-depoimentos-grid">
           {DEPOIMENTOS.map((d, index) => (
             <div key={d.nome} className="planos-depoimento-card" data-reveal style={revealStyle(index * 80)}>
