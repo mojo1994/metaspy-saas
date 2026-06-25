@@ -4,38 +4,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 }
 
-function extrairUrlImg(scraped) {
-  for (const item of scraped) {
-    if (!item.results?.length) continue
-    for (const r of item.results) {
-      if (!r.attributes?.length) continue
-      if (item.selector.startsWith('img')) {
-        const src = r.attributes.find(a => a.name === 'src')?.value
-        if (src) return src
-      } else if (item.selector.startsWith('link')) {
-        const href = r.attributes.find(a => a.name === 'href')?.value
-        if (href && href.startsWith('http')) return href
-      } else {
-        const content = r.attributes.find(a => a.name === 'content')?.value
-        if (content && (content.startsWith('http://') || content.startsWith('https://') || content.startsWith('//'))) {
-          return content.startsWith('//') ? 'https:' + content : content
-        }
-      }
-    }
-  }
-  return null
-}
-
-function extrairUrlHtml(html) {
-  const match = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)
-  if (match) return match[1]
-  const imgMatch = html.match(/<img[^>]+src="(https:[^"]*fbcdn[^"]+)"/i)
-  if (imgMatch) return imgMatch[1]
-  const jsonMatch = html.match(/"thumbnails":\s*\["([^"]+)"/)
-  if (jsonMatch) return jsonMatch[1]
-  return null
-}
-
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 const EXTRA_HEADERS = {
   'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -50,49 +18,78 @@ export default {
 
     if (path === '/api/ad-preview' && request.method === 'POST') {
       try {
-        const { snapshotUrl } = await request.json()
+        const { snapshotUrl, linkUrl } = await request.json()
         if (!snapshotUrl) {
           return new Response(JSON.stringify({ error: 'Missing snapshotUrl' }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
         }
 
         let imageUrl = null
+        let debugInfo = {}
 
-        // --- Strategy 1: scrape meta tags ---
+        // Strategy 1: scrape for og:image + large images
         try {
           const scraped = await env.BROWSER.quickAction('scrape', {
             url: snapshotUrl,
             userAgent: BROWSER_UA,
             setExtraHTTPHeaders: EXTRA_HEADERS,
-            gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
+            gotoOptions: { waitUntil: 'networkidle2', timeout: 45000 },
             bestAttempt: true,
             elements: [
+              { selector: 'title' },
               { selector: "meta[property='og:image']" },
               { selector: "meta[name='twitter:image']" },
               { selector: "link[rel='image_src']" },
-              { selector: "img[src*='fbcdn']" },
-              { selector: "img[src*='facebook']" },
+              { selector: 'img[src*="fbcdn"]' },
+              { selector: 'img' },
             ],
           })
-          imageUrl = extrairUrlImg(scraped)
-        } catch {}
+          // Check each result type
+          for (const item of scraped) {
+            if (!item.results?.length) continue
+            const sel = item.selector
+            for (const r of item.results) {
+              if (sel === 'title' && r.text && /^https?:\/\//.test(r.text.trim())) {
+                imageUrl = r.text.trim()
+                break
+              }
+              if (r.attributes?.length) {
+                const src = r.attributes.find(a => a.name === 'src')?.value
+                const content = r.attributes.find(a => a.name === 'content')?.value
+                const href = r.attributes.find(a => a.name === 'href')?.value
+                const val = src || content || href
+                if (val && /^https?:\/\//.test(val) && (val.includes('fbcdn') || val.includes('scontent') || sel.includes('og:image') || sel.includes('image_src'))) {
+                  imageUrl = val
+                  break
+                }
+              }
+            }
+            if (imageUrl) break
+          }
+        } catch (e) { debugInfo.scrapeError = e.message }
 
-        // --- Strategy 2: full HTML search ---
-        if (!imageUrl) {
+        // Strategy 2: try to get og:image from the link URL (landing page)
+        if (!imageUrl && linkUrl) {
           try {
-            const html = await env.BROWSER.quickAction('content', {
-              url: snapshotUrl,
-              userAgent: BROWSER_UA,
-              setExtraHTTPHeaders: EXTRA_HEADERS,
-              gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
+            const scraped = await env.BROWSER.quickAction('scrape', {
+              url: linkUrl,
+              setJavaScriptEnabled: false,
+              gotoOptions: { waitUntil: 'load', timeout: 15000 },
               bestAttempt: true,
+              elements: [
+                { selector: "meta[property='og:image']" },
+                { selector: "meta[name='twitter:image']" },
+              ],
             })
-            imageUrl = extrairUrlHtml(html)
-          } catch {}
+            for (const item of scraped) {
+              const content = item.results?.[0]?.attributes?.find(a => a.name === 'content')?.value
+              if (content && /^https?:\/\//.test(content)) { imageUrl = content; break }
+            }
+          } catch (e) { debugInfo.linkError = e.message }
         }
 
         return new Response(JSON.stringify({ imageUrl }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
       } catch (err) {
-        return new Response(JSON.stringify({ error: err.message, stack: err.stack }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
       }
     }
 

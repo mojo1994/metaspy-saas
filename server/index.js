@@ -869,16 +869,17 @@ app.get('/api/page-fetch', authMiddleware, async (req, res) => {
 // ─── Ad Image Extraction ─────────────────────────────────────────
 const cachePreview = new Map()
 app.get('/api/ad-extract-image', async (req, res) => {
-  const { id, snapshot } = req.query
+  const { id, snapshot, linkUrl } = req.query
   if (!id && !snapshot) return res.status(400).json({ error: 'Informe id ou snapshot' })
   const chaveCache = id || snapshot.toString()
   const cacheado = cachePreview.get(chaveCache)
   if (cacheado) return res.json(cacheado)
 
-  // Strategy 1: Graph API individual endpoint
+  // Strategy 1: Graph API individual endpoint (mais campos)
   if (id) {
     try {
-      const apiUrl = `https://graph.facebook.com/v22.0/${id}?fields=ad_creative_thumbnail_url,ad_snapshot_url&access_token=${FB_TOKEN}`
+      const fields = encodeURIComponent('ad_creative_thumbnail_url,ad_snapshot_url,ad_creative_bodies,object_story_spec')
+      const apiUrl = `https://graph.facebook.com/v22.0/${id}?fields=${fields}&access_token=${FB_TOKEN}`
       const resp = await fetchWithTimeout(apiUrl, {}, 15000)
       if (resp.ok) {
         const data = await resp.json()
@@ -886,6 +887,30 @@ app.get('/api/ad-extract-image', async (req, res) => {
           const result = { imageUrl: data.ad_creative_thumbnail_url }
           cachePreview.set(chaveCache, result)
           return res.json(result)
+        }
+        // Try to find image URL in object_story_spec
+        if (data.object_story_spec) {
+          const specStr = JSON.stringify(data.object_story_spec)
+          const imgMatch = specStr.match(/"(https:[^"]+?(?:fbcdn|scontent)[^"]+)"/)
+          if (imgMatch) {
+            const result = { imageUrl: imgMatch[1].replace(/\\\//g, '/') }
+            cachePreview.set(chaveCache, result)
+            return res.json(result)
+          }
+          const hashMatch = specStr.match(/"image_hash"\s*:\s*"([^"]+)"/)
+          if (hashMatch) {
+            const imageUrl = `https://graph.facebook.com/v22.0/${id}/thumbnails?access_token=${FB_TOKEN}`
+            const thumbResp = await fetchWithTimeout(imageUrl, {}, 10000)
+            if (thumbResp.ok) {
+              const thumbs = await thumbResp.json()
+              const uri = thumbs?.data?.[0]?.uri
+              if (uri) {
+                const result = { imageUrl: uri }
+                cachePreview.set(chaveCache, result)
+                return res.json(result)
+              }
+            }
+          }
         }
       }
     } catch {}
@@ -963,6 +988,27 @@ app.get('/api/ad-extract-image', async (req, res) => {
     } catch {}
   }
 
+  // Strategy 5: Try OG image from the landing page (linkUrl)
+  if (linkUrl) {
+    try {
+      const resp = await fetchWithTimeout(linkUrl.toString(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
+      }, 10000)
+      if (resp.ok) {
+        const html = await resp.text()
+        const ogMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)
+        if (ogMatch) {
+          const result = { imageUrl: ogMatch[1] }
+          cachePreview.set(chaveCache, result)
+          return res.json(result)
+        }
+      }
+    } catch {}
+  }
+
   // Enqueue background extraction if no image found
   if (id || snapshot) {
     enqueueThumbnailExtraction(id || '', snapshot?.toString() || '').catch(() => {})
@@ -1009,6 +1055,31 @@ function proxyImagemHandler(req, res) {
 
 app.get('/api/ad-image-proxy', proxyImagemHandler)
 app.get('/api/image-proxy', proxyImagemHandler)
+
+// ─── OG Image from landing page ─────────────────────────────────
+app.get('/api/og-image', async (req, res) => {
+  const { url } = req.query
+  if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
+  try {
+    const resp = await fetchWithTimeout(url.toString(), {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+      }
+    }, 10000)
+    if (resp.ok) {
+      const html = await resp.text()
+      const ogMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)
+      if (ogMatch) return res.json({ imageUrl: ogMatch[1] })
+      const twitterMatch = html.match(/<meta\s+name="twitter:image"\s+content="([^"]+)"/i)
+      if (twitterMatch) return res.json({ imageUrl: twitterMatch[1] })
+    }
+    res.json({ imageUrl: null })
+  } catch {
+    res.json({ imageUrl: null })
+  }
+})
 
 // ─── Batch thumbnail enqueue for background extraction ────────────
 app.post('/api/enqueue-thumbnails', async (req, res) => {
