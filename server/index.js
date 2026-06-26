@@ -89,8 +89,8 @@ const uploadPage = multer({
 })
 
 const PLAN_CONFIG = {
-  basico: { price: 49.90, days: 30, kirvanoPlan: 'basico' },
-  gold: { price: 97.00, days: 30, kirvanoPlan: 'gold' },
+  basico: { price: 39.90, days: 30, kirvanoPlan: 'basico' },
+  gold: { price: 57.90, days: 30, kirvanoPlan: 'gold' },
   premium: { price: 197.00, days: 30, kirvanoPlan: 'premium' },
 }
 
@@ -1452,15 +1452,15 @@ app.get('/api/ads-archive', async (req, res) => {
 const KIRVANO_API = 'https://api.kirvano.com'
 
 const KIRVANO_STATIC_LINKS = {
-  basico: 'https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd',
-  gold: 'https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad',
-  premium: 'https://pay.kirvano.com/5a1e8b2c-3d4f-5678-9012-345678901234',
+  basico: 'https://pay.kirvano.com/c921cdd9-aefd-40db-95a7-fcbd7952006d',
+  gold: 'https://pay.kirvano.com/879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd',
+  premium: 'https://pay.kirvano.com/2498bd06-c4e9-412f-ab0d-bd9cededb5ad',
 }
 
 const KIRVANO_CHECKOUT_UUIDS = {
-  '879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd': 'basico',
-  '2498bd06-c4e9-412f-ab0d-bd9cededb5ad': 'gold',
-  '5a1e8b2c-3d4f-5678-9012-345678901234': 'premium',
+  'c921cdd9-aefd-40db-95a7-fcbd7952006d': 'basico',
+  '879cf3f0-5be2-42a4-b9bb-f9d0c03a8dcd': 'gold',
+  '2498bd06-c4e9-412f-ab0d-bd9cededb5ad': 'premium',
 }
 
 app.post('/api/subscription/create-checkout', authMiddleware, validate(checkoutSchema), async (req, res) => {
