@@ -44,8 +44,8 @@ const PLAN_CARD_DATA = [
     key: 'basico',
     title: 'Básico',
     description: 'Para quem quer começar a escalar agora',
-    original: 'R$ 97',
-    current: 'R$ 39,90',
+    original: null,
+    current: 'R$ 49,90',
     button: 'Assinar Agora',
     features: FEATURES_BASICO,
     className: 'plan-card-basic',
@@ -55,8 +55,8 @@ const PLAN_CARD_DATA = [
     key: 'gold',
     title: 'Gold',
     description: 'O pacote completo para máquinas de guerra',
-    original: 'R$ 197',
-    current: 'R$ 57,00',
+    original: null,
+    current: 'R$ 97,00',
     button: 'Assinar Agora',
     features: FEATURES_GOLD,
     className: 'plan-card-gold',
@@ -317,9 +317,11 @@ export default function Planos() {
             </div>
 
             <div className="planos-card-price">
-              <span className="planos-original">
-                <span>{plan.original}</span>
-              </span>
+              {plan.original && (
+                <span className="planos-original">
+                  <span>{plan.original}</span>
+                </span>
+              )}
               <span className="planos-current">{plan.current}</span>
               <span className="planos-period">/mes</span>
             </div>
