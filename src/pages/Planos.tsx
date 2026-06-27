@@ -294,12 +294,6 @@ export default function Planos() {
             )}
           </div>
         </div>
-        <div className="planos-help-btn" data-reveal style={revealStyle(420)}>
-          <button type="button" className="btn btn-secondary" onClick={() => navigate('/ajuda')}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            Ajuda
-          </button>
-        </div>
       </section>
 
       <section className="planos-vsl" data-reveal style={revealStyle(120)}>
@@ -367,6 +361,13 @@ export default function Planos() {
           </article>
         ))}
       </section>
+
+      <div className="planos-help-btn" data-reveal style={revealStyle(160)}>
+        <button type="button" className="btn btn-secondary" onClick={() => navigate('/ajuda')}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Ajuda
+        </button>
+      </div>
 
       <section className="planos-comparison" data-reveal style={revealStyle(160)}>
         <div className="planos-section-heading">
