@@ -3,6 +3,7 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
 import Planos from './pages/Planos'
+import Ajuda from './pages/Ajuda'
 import Dashboard from './pages/Dashboard'
 import DashboardHome from './pages/DashboardHome'
 import MetaSpyTool from './pages/MetaSpyTool'
@@ -41,6 +42,7 @@ export default function App() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/esqueci-senha" element={<ForgotPassword />} />
       <Route path="/planos" element={<Planos />} />
+      <Route path="/ajuda" element={<Ajuda />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}>
         <Route index element={<DashboardHome />} />
         <Route path="metaspy" element={<MetaSpyTool />} />
