@@ -729,9 +729,9 @@ export default function Ajuda() {
       <section className="ajuda-cta-bottom" data-reveal style={revealStyle(180)}>
         <h2>Precisa de mais ajuda?</h2>
         <p>Entre em contato com nosso time de suporte</p>
-        <button type="button" className="btn btn-gradient" onClick={() => navigate(isAuthenticated ? '/dashboard/perfil' : '/signup')}>
+        <a href="https://wa.me/5519971152964" target="_blank" rel="noopener noreferrer" className="btn btn-gradient" style={{ display: 'inline-block', textDecoration: 'none' }}>
           FALAR COM SUPORTE
-        </button>
+        </a>
       </section>
 
       <footer className="ajuda-footer">
