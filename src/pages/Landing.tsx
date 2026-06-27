@@ -176,6 +176,19 @@ export default function Landing() {
         })}
       </section>
 
+      <section className="landing-vsl" data-reveal style={delayStyle(120)}>
+        <div className="landing-vsl-wrapper">
+          <iframe
+            src="https://www.youtube.com/embed/5biW6t1NAkM?start=3"
+            title="MetaSpy VSL"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="landing-vsl-iframe"
+          />
+        </div>
+      </section>
+
       <section className="landing-planos">
         <h2 data-reveal style={delayStyle(120)}>Escolha o Plano Ideal para Escalar</h2>
         <p className="landing-planos-sub" data-reveal style={delayStyle(200)}>
