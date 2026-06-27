@@ -296,6 +296,19 @@ export default function Planos() {
         </div>
       </section>
 
+      <section className="planos-vsl" data-reveal style={revealStyle(120)}>
+        <div className="planos-vsl-wrapper">
+          <iframe
+            src="https://www.youtube.com/embed/5biW6t1NAkM?start=3"
+            title="MetaSpy VSL"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="planos-vsl-iframe"
+          />
+        </div>
+      </section>
+
       <section className="planos-cards" data-reveal style={revealStyle(120)}>
         {PLAN_CARD_DATA.map((plan, index) => (
           <article
