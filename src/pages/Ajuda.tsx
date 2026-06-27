@@ -125,7 +125,7 @@ interface CategoriaProps {
   titulo: string
   icone: string
   itens: { pergunta: string; resposta: string }[]
-  index: number
+  index?: number
 }
 
 function iconeSvg(nome: string) {
