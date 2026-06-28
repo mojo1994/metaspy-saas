@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { IconVideo, IconImage, IconDownload } from '../components/Icons'
 
@@ -13,19 +13,43 @@ export default function CamuflagemMidia() {
   const [camoLoading, setCamoLoading] = useState(false)
   const [camoResult, setCamoResult] = useState<any>(null)
   const [camoError, setCamoError] = useState('')
+  const [realPreview, setRealPreview] = useState<string | null>(null)
+  const [disguisePreview, setDisguisePreview] = useState<string | null>(null)
 
   // Simple
   const [file, setFile] = useState<File | null>(null)
+  const [filePreview, setFilePreview] = useState<string | null>(null)
   const [safeUrl, setSafeUrl] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<any>(null)
   const [uploadErro, setUploadErro] = useState('')
   const [copiadoEmbed, setCopiadoEmbed] = useState(false)
 
+  const realPreviewRef = useRef<string | null>(null)
+  const disguisePreviewRef = useRef<string | null>(null)
+  const filePreviewRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (realPreviewRef.current) URL.revokeObjectURL(realPreviewRef.current)
+      if (disguisePreviewRef.current) URL.revokeObjectURL(disguisePreviewRef.current)
+      if (filePreviewRef.current) URL.revokeObjectURL(filePreviewRef.current)
+    }
+  }, [])
+
+  async function tryParseResponse(res: Response) {
+    const text = await res.text()
+    if (!text) return null
+    try { return JSON.parse(text) } catch { return null }
+  }
+
   function handleRealMediaChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
     if (!f) return
     if (f.size > 200 * 1024 * 1024) { setCamoError('Arquivo muito grande. Maximo: 200MB.'); return }
+    const url = URL.createObjectURL(f)
+    setRealPreview(url)
+    realPreviewRef.current = url
     setRealMedia(f); setCamoError('')
   }
 
@@ -33,6 +57,9 @@ export default function CamuflagemMidia() {
     const f = e.target.files?.[0]
     if (!f) return
     if (f.size > 200 * 1024 * 1024) { setCamoError('Arquivo muito grande. Maximo: 200MB.'); return }
+    const url = URL.createObjectURL(f)
+    setDisguisePreview(url)
+    disguisePreviewRef.current = url
     setDisguiseMedia(f); setCamoError('')
   }
 
@@ -45,14 +72,12 @@ export default function CamuflagemMidia() {
       fd.append('disguise_media', disguiseMedia)
       fd.append('strategy', strategy)
       if (camoSafeUrl) fd.append('safe_url', camoSafeUrl)
-      const token = localStorage.getItem('metaspy_access_token')
-      const res = await fetch('/api/cloaker/camouflage/media', {
+      const res = await fetchWithAuth('/api/cloaker/camouflage/media', {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.erro || 'Falha no processamento')
+      const data = await tryParseResponse(res)
+      if (!res.ok) throw new Error(data?.erro || `Erro ${res.status}`)
       setCamoResult(data)
     } catch (err: any) {
       setCamoError(err.message)
@@ -63,18 +88,17 @@ export default function CamuflagemMidia() {
 
   async function handleCamoDownload() {
     if (!camoResult?.downloadUrl) return
-    const token = localStorage.getItem('metaspy_access_token')
-    const res = await fetch(camoResult.downloadUrl, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
-    })
-    if (!res.ok) return
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = camoResult.fileName || 'camouflage-output.mp4'
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const res = await fetchWithAuth(camoResult.downloadUrl)
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = camoResult.fileName || 'camouflage-output.mp4'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { /* silent */ }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -89,6 +113,9 @@ export default function CamuflagemMidia() {
     if (f.size > maxSize) {
       setUploadErro(`Limite: ${isVideo ? '200MB' : '30MB'}.`); setFile(null); return
     }
+    const url = URL.createObjectURL(f)
+    setFilePreview(url)
+    filePreviewRef.current = url
     setUploadErro(''); setFile(f)
   }
 
@@ -99,12 +126,11 @@ export default function CamuflagemMidia() {
       const fd = new FormData()
       fd.append('file', file)
       if (safeUrl) fd.append('safe_url', safeUrl)
-      const token = localStorage.getItem('metaspy_access_token')
-      const res = await fetch('/api/cloaker/upload-camouflage', {
-        method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd,
+      const res = await fetchWithAuth('/api/cloaker/upload-camouflage', {
+        method: 'POST', body: fd,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.erro || 'Falha')
+      const data = await tryParseResponse(res)
+      if (!res.ok) throw new Error(data?.erro || `Erro ${res.status}`)
       setUploadResult(data)
     } catch (err: any) { setUploadErro(err.message) }
     finally { setUploading(false) }
@@ -118,17 +144,24 @@ export default function CamuflagemMidia() {
 
   async function handleSimpleDownload() {
     if (!uploadResult?.downloadUrl) return
-    const token = localStorage.getItem('metaspy_access_token')
-    const res = await fetch(uploadResult.downloadUrl, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
-    })
-    if (!res.ok) return
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = uploadResult.fileName?.replace('.html', '.zip') || 'camuflado.zip'
-    a.click(); URL.revokeObjectURL(url)
+    try {
+      const res = await fetchWithAuth(uploadResult.downloadUrl)
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = uploadResult.fileName?.replace('.html', '.zip') || 'camuflado.zip'
+      a.click(); URL.revokeObjectURL(url)
+    } catch { /* silent */ }
+  }
+
+  function renderPreview(previewUrl: string | null, isVideo: boolean, alt: string) {
+    if (!previewUrl) return null
+    if (isVideo) {
+      return <video src={previewUrl} style={{ maxWidth: '100%', maxHeight: 140, borderRadius: 6, objectFit: 'contain' }} controls />
+    }
+    return <img src={previewUrl} alt={alt} style={{ maxWidth: '100%', maxHeight: 140, borderRadius: 6, objectFit: 'contain' }} />
   }
 
   return (
@@ -158,13 +191,16 @@ export default function CamuflagemMidia() {
                 <input id="camo-real-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg,video/quicktime" onChange={handleRealMediaChange} style={{ display: 'none' }} />
                 <div className="camouflage-upload-placeholder" onClick={() => document.getElementById('camo-real-input')?.click()}>
                   {realMedia ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <span>{realMedia.type.startsWith('video/') ? <IconVideo size={24} /> : <IconImage size={24} />}</span>
-                      <div style={{ flex: 1, textAlign: 'left' }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{realMedia.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(realMedia.size / 1024 / 1024).toFixed(1)}MB</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: '100%' }}>
+                      {renderPreview(realPreview, realMedia.type.startsWith('video/'), 'Midia Real')}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                        <span>{realMedia.type.startsWith('video/') ? <IconVideo size={24} /> : <IconImage size={24} />}</span>
+                        <div style={{ flex: 1, textAlign: 'left' }}>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{realMedia.name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(realMedia.size / 1024 / 1024).toFixed(1)}MB</div>
+                        </div>
+                        <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={e => { e.stopPropagation(); if (realPreviewRef.current) URL.revokeObjectURL(realPreviewRef.current); setRealMedia(null); setRealPreview(null) }}>X</button>
                       </div>
-                      <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={e => { e.stopPropagation(); setRealMedia(null) }}>X</button>
                     </div>
                   ) : (
                     <><span style={{ fontSize: 28, opacity: 0.4 }}>+</span><span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Clique ou arraste a midia REAL</span><span style={{ color: 'var(--text-muted)', fontSize: 10 }}>Imagem ou Video — ate 200MB</span></>
@@ -182,13 +218,16 @@ export default function CamuflagemMidia() {
                 <input id="camo-disguise-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg,video/quicktime" onChange={handleDisguiseMediaChange} style={{ display: 'none' }} />
                 <div className="camouflage-upload-placeholder" onClick={() => document.getElementById('camo-disguise-input')?.click()}>
                   {disguiseMedia ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <span>{disguiseMedia.type.startsWith('video/') ? <IconVideo size={24} /> : <IconImage size={24} />}</span>
-                      <div style={{ flex: 1, textAlign: 'left' }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{disguiseMedia.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(disguiseMedia.size / 1024 / 1024).toFixed(1)}MB</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: '100%' }}>
+                      {renderPreview(disguisePreview, disguiseMedia.type.startsWith('video/'), 'Midia Disfarce')}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                        <span>{disguiseMedia.type.startsWith('video/') ? <IconVideo size={24} /> : <IconImage size={24} />}</span>
+                        <div style={{ flex: 1, textAlign: 'left' }}>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{disguiseMedia.name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(disguiseMedia.size / 1024 / 1024).toFixed(1)}MB</div>
+                        </div>
+                        <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={e => { e.stopPropagation(); if (disguisePreviewRef.current) URL.revokeObjectURL(disguisePreviewRef.current); setDisguiseMedia(null); setDisguisePreview(null) }}>X</button>
                       </div>
-                      <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={e => { e.stopPropagation(); setDisguiseMedia(null) }}>X</button>
                     </div>
                   ) : (
                     <><span style={{ fontSize: 28, opacity: 0.4 }}>+</span><span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Clique ou arraste a midia DISFARCE</span><span style={{ color: 'var(--text-muted)', fontSize: 10 }}>Imagem ou Video — ate 200MB</span></>
@@ -249,13 +288,16 @@ export default function CamuflagemMidia() {
             <input id="camo-simple-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg,video/quicktime" onChange={handleFileChange} style={{ display: 'none' }} />
             <div className="camouflage-upload-placeholder" onClick={() => document.getElementById('camo-simple-input')?.click()}>
               {file ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 28 }}>{file.type.startsWith('video/') ? <IconVideo size={28} /> : <IconImage size={28} />}</span>
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{file.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(1)}MB</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: '100%' }}>
+                  {renderPreview(filePreview, file.type.startsWith('video/'), 'Arquivo')}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                    <span style={{ fontSize: 28 }}>{file.type.startsWith('video/') ? <IconVideo size={28} /> : <IconImage size={28} />}</span>
+                    <div style={{ flex: 1, textAlign: 'left' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{file.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(1)}MB</div>
+                    </div>
+                    <button className="btn btn-secondary" onClick={e => { e.stopPropagation(); if (filePreviewRef.current) URL.revokeObjectURL(filePreviewRef.current); setFile(null); setFilePreview(null); setUploadResult(null) }}>Remover</button>
                   </div>
-                  <button className="btn btn-secondary" onClick={e => { e.stopPropagation(); setFile(null); setUploadResult(null) }}>Remover</button>
                 </div>
               ) : (
                 <><span style={{ fontSize: 32, opacity: 0.4 }}>+</span><span style={{ color: 'var(--text-muted)', fontSize: 13 }}>Clique ou arraste arquivo aqui</span><span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Imagem ate 30MB — Video ate 200MB</span></>
