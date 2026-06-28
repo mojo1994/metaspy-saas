@@ -299,6 +299,7 @@ interface QuizState {
   selectedEdgeId: string | null
   selectedFreehandId: string | null
   savedVersion: number
+  nodeVersion: number
 
   past: Quiz[]
   future: Quiz[]
@@ -353,6 +354,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
   selectedEdgeId: null,
   selectedFreehandId: null,
   savedVersion: 0,
+  nodeVersion: 0,
   past: [] as Quiz[],
   future: [] as Quiz[],
 
@@ -449,10 +451,20 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       s.past.push(cloneQuiz(s.currentQuiz))
       s.future = []
       const id = crypto.randomUUID()
+
+      let pos = { ...position }
+      const NODE_W = 220, NODE_H = 100, GAP = 30
+      let attempts = 0
+      while (attempts < 50 && s.currentQuiz.nodes.some(n =>
+        Math.abs(n.position.x - pos.x) < NODE_W + GAP && Math.abs(n.position.y - pos.y) < NODE_H + GAP
+      )) {
+        pos = { x: pos.x + NODE_W + GAP, y: pos.y }
+        attempts++
+      }
       const node: Node<QuizNodeData> = {
         id,
         type: 'quizNode',
-        position,
+        position: pos,
         data: { label: getDefaultLabel(type), type, styles: {} },
       }
       if (type === 'question') {
@@ -477,16 +489,15 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       }
       s.currentQuiz.nodes.push(node)
       s.isDirty = true
+      s.nodeVersion++
     }))
   },
 
   updateNodeData: (nodeId, data) => {
     set(produce((s: QuizState) => {
       if (!s.currentQuiz) return
-      s.past.push(cloneQuiz(s.currentQuiz))
-      s.future = []
       const node = s.currentQuiz.nodes.find(n => n.id === nodeId)
-      if (node) { Object.assign(node.data, data); s.isDirty = true }
+      if (node) { Object.assign(node.data, data); s.isDirty = true; s.nodeVersion++ }
     }))
   },
 
@@ -498,6 +509,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       s.currentQuiz.nodes = s.currentQuiz.nodes.filter(n => n.id !== nodeId)
       s.currentQuiz.edges = s.currentQuiz.edges.filter(e => e.source !== nodeId && e.target !== nodeId)
       s.isDirty = true
+      s.nodeVersion++
       if (s.selectedNodeId === nodeId) s.selectedNodeId = null
     }))
   },
@@ -515,6 +527,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       newNode.data.label = orig.data.label + ' (copia)'
       s.currentQuiz.nodes.push(newNode)
       s.isDirty = true
+      s.nodeVersion++
     }))
   },
 
@@ -522,7 +535,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     set(produce((s: QuizState) => {
       if (!s.currentQuiz) return
       const node = s.currentQuiz.nodes.find(n => n.id === nodeId)
-      if (node) { node.position = position; s.isDirty = true }
+      if (node) { node.position = position; s.isDirty = true; s.nodeVersion++ }
     }))
   },
 
@@ -531,6 +544,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       if (!s.currentQuiz) return
       s.currentQuiz.nodes = nodes as Node<QuizNodeData>[]
       s.isDirty = true
+      s.nodeVersion++
     }))
   },
 
@@ -608,6 +622,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       s.future.push(cloneQuiz(s.currentQuiz))
       s.currentQuiz = s.past.pop()!
       s.isDirty = true
+      s.nodeVersion++
     }))
   },
 
@@ -617,6 +632,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       s.past.push(cloneQuiz(s.currentQuiz))
       s.currentQuiz = s.future.pop()!
       s.isDirty = true
+      s.nodeVersion++
     }))
   },
 

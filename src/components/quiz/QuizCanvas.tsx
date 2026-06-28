@@ -51,12 +51,14 @@ function CanvasInner() {
     }
   }, [setLocalNodes, setLocalEdges])
 
+  const nodeVersion = useQuizStore(s => s.nodeVersion)
+
   useEffect(() => {
     if (currentQuiz) {
       setLocalNodes(currentQuiz.nodes)
       setLocalEdges(currentQuiz.edges)
     }
-  }, [currentQuiz?.id])
+  }, [currentQuiz?.id, nodeVersion])
 
   const onConnect = useCallback((connection: Connection) => {
     setError('')
