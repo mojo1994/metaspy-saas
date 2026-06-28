@@ -11,10 +11,14 @@ import {
   type NodeTypes,
   useNodesState,
   useEdgesState,
+  type EdgeChange,
+  type NodeChange,
+  SelectionMode,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuizStore, type QuizNodeData } from '../../stores/quizStore'
 import QuizNodeComponent from './QuizNodeComponent'
+import FreehandWidgetRenderer from './FreehandWidgetRenderer'
 
 const nodeTypes: NodeTypes = { quizNode: QuizNodeComponent }
 
@@ -28,7 +32,10 @@ function CanvasInner() {
   const updateNodePosition = useQuizStore(s => s.updateNodePosition)
   const isPreview = useQuizStore(s => s.isPreview)
   const pushHistory = useQuizStore(s => s.pushHistory)
-  const [nodes, setLocalNodes, onNodesChange] = useNodesState(currentQuiz?.nodes || [])
+  const duplicateNode = useQuizStore(s => s.duplicateNode)
+  const removeNode = useQuizStore(s => s.removeNode)
+
+  const [nodes, setLocalNodes, onNodesChange] = useNodesState((currentQuiz?.nodes || []) as Node<QuizNodeData>[])
   const [edges, setLocalEdges, onEdgesChange] = useEdgesState(currentQuiz?.edges || [])
   const [error, setError] = useState('')
 
@@ -56,15 +63,14 @@ function CanvasInner() {
     updateNodePosition(node.id, node.position)
   }, [updateNodePosition])
 
-  const onNodesChangeHandler = useCallback((changes: any) => {
+  const onNodesChangeHandler = useCallback((changes: NodeChange[]) => {
     if (isPreview) return
-    onNodesChange(changes)
+    ;(onNodesChange as (c: NodeChange[]) => void)(changes)
   }, [isPreview, onNodesChange])
 
-  const onEdgesChangeHandler = useCallback((changes: any) => {
+  const onEdgesChangeHandler = useCallback((changes: EdgeChange[]) => {
     if (isPreview) return
     onEdgesChange(changes)
-    // If edge was deleted by user click
     for (const c of changes) {
       if (c.type === 'remove') {
         removeEdge(c.id)
@@ -105,11 +111,26 @@ function CanvasInner() {
           setLocalEdges([...state.currentQuiz.edges])
         }
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault()
         const sel = useQuizStore.getState().selectedNodeId
         if (sel) {
-          useQuizStore.getState().removeNode(sel)
+          duplicateNode(sel)
           const state = useQuizStore.getState()
+          setLocalNodes([...state.currentQuiz!.nodes])
+          setLocalEdges([...state.currentQuiz!.edges])
+        }
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const state = useQuizStore.getState()
+        if (state.selectedEdgeId) {
+          removeEdge(state.selectedEdgeId)
+          setLocalEdges([...state.currentQuiz!.edges])
+          return
+        }
+        const sel = state.selectedNodeId
+        if (sel) {
+          removeNode(sel)
           setLocalNodes([...state.currentQuiz!.nodes])
           setLocalEdges([...state.currentQuiz!.edges])
         }
@@ -118,6 +139,12 @@ function CanvasInner() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
+
+  const defaultEdgeOptions = {
+    type: 'smoothstep',
+    animated: true,
+    style: { stroke: '#a855f7', strokeWidth: 2 },
+  }
 
   return (
     <div className="quiz-canvas-wrapper" ref={reactFlowWrapper}>
@@ -132,24 +159,37 @@ function CanvasInner() {
         onDrop={onDrop}
         onDragOver={onDragOver}
         onNodeClick={(_, node) => selectNode(node.id)}
-        onPaneClick={() => selectNode(null)}
+        onEdgeClick={(_, edge) => useQuizStore.getState().selectEdge(edge.id)}
+        onPaneClick={() => { selectNode(null); useQuizStore.getState().selectEdge(null); useQuizStore.getState().selectFreehandWidget(null) }}
         nodeTypes={nodeTypes}
         fitView
         minZoom={0.1}
-        maxZoom={2}
+        maxZoom={4}
         nodesDraggable={!isPreview}
         nodesConnectable={!isPreview}
         elementsSelectable={!isPreview}
         colorMode="dark"
+        defaultEdgeOptions={defaultEdgeOptions}
+        selectionMode={SelectionMode.Partial}
+        panOnDrag={[1, 2]}
+        selectNodesOnDrag
+        multiSelectionKeyCode="Shift"
+        snapToGrid
+        snapGrid={[20, 20]}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(168,85,247,0.08)" />
         <Controls showInteractive={false} />
         <MiniMap
-          nodeColor={() => '#a855f7'}
+          nodeColor={(n) => {
+            const d = (n as Node<QuizNodeData>).data
+            if (d?.styles?.color) return d.styles.color
+            return '#a855f7'
+          }}
           maskColor="rgba(0,0,0,0.6)"
           style={{ background: '#1a1a2e', border: '1px solid rgba(168,85,247,0.15)', borderRadius: 6 }}
         />
       </ReactFlow>
+      <FreehandWidgetRenderer />
     </div>
   )
 }

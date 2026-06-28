@@ -4,7 +4,7 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { useAuth } from '../contexts/AuthContext'
 import { useQuizStore } from '../stores/quizStore'
 import QuizCanvas from '../components/quiz/QuizCanvas'
-import NodePalette from '../components/quiz/NodePalette'
+import LayersPanel from '../components/quiz/LayersPanel'
 import PropertyPanel from '../components/quiz/PropertyPanel'
 import QuizTopBar from '../components/quiz/QuizTopBar'
 import PreviewQuiz from '../components/quiz/PreviewQuiz'
@@ -41,7 +41,7 @@ export default function QuizBuilder() {
             </div>
           ) : (
             <>
-              <NodePalette />
+              <LayersPanel />
               <QuizCanvas />
               <PropertyPanel />
             </>

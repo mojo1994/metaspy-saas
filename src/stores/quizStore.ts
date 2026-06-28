@@ -3,8 +3,27 @@ import { produce } from 'immer'
 import type { Node, Edge, Connection, XYPosition } from '@xyflow/react'
 import slugify from 'slugify'
 
-export type QuestionType = 'multiple' | 'truefalse' | 'text' | 'rating'
-export type NodeType = 'start' | 'question' | 'logic' | 'result' | 'redirect' | 'score' | 'custom'
+export type QuestionType = 'multiple' | 'truefalse' | 'text' | 'text_area' | 'rating' | 'number' | 'date' | 'file_upload' | 'consent' | 'range' | 'ranking' | 'matrix'
+export type NodeType = 'start' | 'question' | 'logic' | 'result' | 'redirect' | 'score' | 'wait' | 'webhook' | 'subflow' | 'custom'
+
+export interface HandleConfig {
+  id: string
+  label: string
+  position: 'right' | 'bottom' | 'left' | 'top'
+  conditionType?: 'score' | 'answer' | 'custom_variable' | 'always'
+  operator?: '>' | '<' | '>=' | '<=' | '==' | '!=' | 'contains' | 'starts_with' | 'ends_with'
+  value?: string
+  weight?: number
+}
+
+export interface LogicBranch {
+  id: string
+  label: string
+  conditionType: 'score' | 'answer' | 'custom_variable' | 'always'
+  operator: '>' | '<' | '>=' | '<=' | '==' | '!=' | 'contains' | 'starts_with' | 'ends_with'
+  value: string
+  variable: string
+}
 
 export interface QuestionConfig {
   type: QuestionType
@@ -14,13 +33,26 @@ export interface QuestionConfig {
   mediaUrl: string
   required: boolean
   multiple: boolean
+  min?: number
+  max?: number
+  step?: number
+  unit?: string
+  acceptedTypes?: string
+  maxFileSize?: number
+  consentText?: string
+  rangeLabels?: { min: string; max: string }
+  rankingItems?: string[]
+  matrixRows?: string[]
+  matrixColumns?: { label: string; value: string }[]
 }
 
 export interface LogicConfig {
+  mode: 'if_else' | 'switch' | 'weighted'
   conditionType: 'score' | 'answer' | 'custom_variable'
-  operator: '>' | '<' | '>=' | '<=' | '==' | '!=' | 'contains'
+  operator: '>' | '<' | '>=' | '<=' | '==' | '!=' | 'contains' | 'starts_with' | 'ends_with'
   value: string
   variable: string
+  branches: LogicBranch[]
 }
 
 export interface ResultConfig {
@@ -40,21 +72,128 @@ export interface ScoreConfig {
   value: number
 }
 
+export interface WaitConfig {
+  seconds: number
+}
+
+export interface WebhookConfig {
+  url: string
+  method: 'POST' | 'GET'
+  headers: { key: string; value: string }[]
+  bodyTemplate: string
+}
+
+export interface SubflowConfig {
+  quizId: string
+  quizTitle: string
+}
+
+export interface TypographyStyle {
+  fontFamily?: string
+  fontSize?: number
+  fontWeight?: number
+  lineHeight?: number
+  letterSpacing?: number
+  textColor?: string
+  textAlign?: 'left' | 'center' | 'right' | 'justify'
+  textDecoration?: 'none' | 'underline' | 'overline' | 'line-through'
+  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
+}
+
+export interface BackgroundStyle {
+  bgColor?: string
+  bgImage?: string
+  gradient?: string
+}
+
+export interface BoxModelStyle {
+  paddingTop?: number
+  paddingRight?: number
+  paddingBottom?: number
+  paddingLeft?: number
+  marginTop?: number
+  marginRight?: number
+  marginBottom?: number
+  marginLeft?: number
+  borderWidth?: number
+  borderStyle?: 'solid' | 'dashed' | 'dotted'
+  borderColor?: string
+  borderRadius?: number
+  borderTopLeftRadius?: number
+  borderTopRightRadius?: number
+  borderBottomRightRadius?: number
+  borderBottomLeftRadius?: number
+}
+
+export interface ShadowStyle {
+  shadowX?: number
+  shadowY?: number
+  shadowBlur?: number
+  shadowSpread?: number
+  shadowColor?: string
+}
+
 export interface NodeStyles {
   color?: string
   icon?: string
+  typography?: TypographyStyle
+  background?: BackgroundStyle
+  boxModel?: BoxModelStyle
+  shadow?: ShadowStyle
+  opacity?: number
+  rotation?: number
+  scale?: number
+  zIndex?: number
+  width?: number | string
+  height?: number | string
+}
+
+export interface FreehandWidgetData {
+  id: string
+  type: 'text' | 'image' | 'shape' | 'icon' | 'divider' | 'button' | 'counter' | 'timer' | 'progress_bar'
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  rotation: number
+  zIndex: number
+  locked: boolean
+  visible: boolean
+  styles: NodeStyles
+  content?: string
+  shapeType?: 'rect' | 'circle' | 'triangle' | 'line' | 'arrow'
+  iconName?: string
+}
+
+export interface ActionConfig {
+  type: 'redirect' | 'jump' | 'update_score' | 'set_variable' | 'submit' | 'show_hide' | 'webhook' | 'modal' | 'email_capture'
+  url?: string
+  target?: string
+  newTab?: boolean
+  scoreAction?: 'add' | 'subtract' | 'set'
+  scoreValue?: number
+  variableName?: string
+  variableValue?: string
+  elementId?: string
+  show?: boolean
+  webhookUrl?: string
+  webhookBody?: string
 }
 
 export interface QuizNodeData {
   [key: string]: unknown
   label: string
   type: NodeType
+  handles?: HandleConfig[]
   question?: QuestionConfig
   logic?: LogicConfig
   result?: ResultConfig
   redirect?: RedirectConfig
   score?: ScoreConfig
+  wait?: WaitConfig
+  webhook?: WebhookConfig
+  subflow?: SubflowConfig
+  actions?: ActionConfig[]
   styles?: NodeStyles
+  freehand?: boolean
 }
 
 export interface QuizSettings {
@@ -65,6 +204,11 @@ export interface QuizSettings {
   randomizeQuestions: boolean
   timeLimit: number
   redirectAfterComplete: string
+  defaultFontFamily?: string
+  defaultTextColor?: string
+  defaultBgColor?: string
+  defaultButtonStyle?: 'solid' | 'outline' | 'ghost' | 'text'
+  globalBackground?: BackgroundStyle
 }
 
 export interface Quiz {
@@ -80,6 +224,7 @@ export interface Quiz {
   version: number
   createdAt: string
   updatedAt: string
+  freehand?: FreehandWidgetData[]
 }
 
 const DEFAULT_SETTINGS: QuizSettings = {
@@ -105,15 +250,56 @@ function createStartNode(position: XYPosition): Node<QuizNodeData> {
   }
 }
 
+function getHandlesForNode(data: QuizNodeData): HandleConfig[] {
+  if (data.type === 'start') return [{ id: 'out', label: 'Iniciar', position: 'right' }]
+  if (data.type === 'logic') {
+    if (data.logic?.branches && data.logic.branches.length > 0) {
+      return data.logic.branches.map(b => ({
+        id: b.id,
+        label: b.label,
+        position: 'right' as const,
+        conditionType: b.conditionType,
+        operator: b.operator,
+        value: b.value,
+        weight: 1,
+      }))
+    }
+    return [
+      { id: 'true', label: 'Sim', position: 'right', conditionType: 'score', operator: '>=', value: '70' },
+      { id: 'false', label: 'Nao', position: 'bottom' },
+    ]
+  }
+  if (data.type === 'question') {
+    if (data.question?.options && data.question.options.length > 0) {
+      return data.question.options.map(o => ({
+        id: `opt-${o.value}`,
+        label: o.label,
+        position: 'right' as const,
+        conditionType: 'answer' as const,
+        operator: '==' as const,
+        value: o.value,
+      }))
+    }
+  }
+  if (data.type === 'wait' || data.type === 'webhook' || data.type === 'subflow' || data.type === 'score' || data.type === 'custom') {
+    return [{ id: 'out', label: 'Prosseguir', position: 'right' }]
+  }
+  if (data.handles && data.handles.length > 0) {
+    return data.handles
+  }
+  return [{ id: 'out', label: '', position: 'right' }]
+}
+
 interface QuizState {
   currentQuiz: Quiz | null
   isDirty: boolean
   isSaving: boolean
   isPreview: boolean
   selectedNodeId: string | null
+  selectedEdgeId: string | null
+  selectedFreehandId: string | null
   savedVersion: number
 
-  // History
   past: Quiz[]
   future: Quiz[]
 
@@ -124,34 +310,34 @@ interface QuizState {
   setTitle: (title: string) => void
   setDescription: (desc: string) => void
 
-  // Nodes
   addNode: (type: NodeType, position: XYPosition) => void
   updateNodeData: (nodeId: string, data: Partial<QuizNodeData>) => void
   removeNode: (nodeId: string) => void
   updateNodePosition: (nodeId: string, position: XYPosition) => void
   setNodes: (nodes: Node<QuizNodeData>[]) => void
+  duplicateNode: (nodeId: string) => void
 
-  // Edges
   addEdge: (connection: Connection) => boolean
   removeEdge: (edgeId: string) => void
   setEdges: (edges: Edge[]) => void
+  selectEdge: (edgeId: string | null) => void
 
-  // Selection
   selectNode: (nodeId: string | null) => void
+  selectFreehandWidget: (id: string | null) => void
 
-  // Preview
   togglePreview: () => void
 
-  // Undo/Redo
   undo: () => void
   redo: () => void
   pushHistory: () => void
 
-  // Settings
   updateSettings: (settings: Partial<QuizSettings>) => void
 
-  // Publish
   publishQuiz: (fetchWithAuth: (url: string, opts?: any) => Promise<Response>) => Promise<boolean>
+
+  addFreehandWidget: (widget: FreehandWidgetData) => void
+  updateFreehandWidget: (id: string, data: Partial<FreehandWidgetData>) => void
+  removeFreehandWidget: (id: string) => void
 }
 
 function cloneQuiz(q: Quiz): Quiz {
@@ -164,9 +350,11 @@ export const useQuizStore = create<QuizState>((set, get) => ({
   isSaving: false,
   isPreview: false,
   selectedNodeId: null,
+  selectedEdgeId: null,
+  selectedFreehandId: null,
   savedVersion: 0,
-  past: [],
-  future: [],
+  past: [] as Quiz[],
+  future: [] as Quiz[],
 
   setQuiz: (quiz) => set({ currentQuiz: quiz, savedVersion: quiz.version, isDirty: false }),
 
@@ -179,9 +367,10 @@ export const useQuizStore = create<QuizState>((set, get) => ({
         currentQuiz: data,
         savedVersion: data.version,
         isDirty: false,
-        past: [],
-        future: [],
+        past: [] as Quiz[],
+        future: [] as Quiz[],
         selectedNodeId: null,
+        selectedFreehandId: null,
         isPreview: false,
       })
       return data.id
@@ -197,9 +386,10 @@ export const useQuizStore = create<QuizState>((set, get) => ({
         currentQuiz: quiz,
         savedVersion: quiz.version,
         isDirty: false,
-        past: [],
-        future: [],
+        past: [] as Quiz[],
+        future: [] as Quiz[],
         selectedNodeId: null,
+        selectedFreehandId: null,
         isPreview: false,
       })
     } catch {}
@@ -256,13 +446,22 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       if (type === 'question') {
         node.data.question = { type: 'multiple', text: '', description: '', options: [{ label: 'Opcao 1', value: '1', correct: false }], mediaUrl: '', required: false, multiple: false }
       } else if (type === 'logic') {
-        node.data.logic = { conditionType: 'score', operator: '>=', value: '70', variable: '' }
+        node.data.logic = { mode: 'if_else', conditionType: 'score', operator: '>=', value: '70', variable: '', branches: [
+          { id: crypto.randomUUID(), label: 'Sim', conditionType: 'always', operator: '==', value: 'true', variable: '' },
+          { id: crypto.randomUUID(), label: 'Nao', conditionType: 'always', operator: '==', value: 'false', variable: '' },
+        ]}
       } else if (type === 'result') {
         node.data.result = { title: '', content: '', imageUrl: '', redirectUrl: '' }
       } else if (type === 'redirect') {
         node.data.redirect = { url: '', timeout: 5 }
       } else if (type === 'score') {
         node.data.score = { action: 'add', value: 10 }
+      } else if (type === 'wait') {
+        node.data.wait = { seconds: 3 }
+      } else if (type === 'webhook') {
+        node.data.webhook = { url: '', method: 'POST', headers: [], bodyTemplate: '{}' }
+      } else if (type === 'subflow') {
+        node.data.subflow = { quizId: '', quizTitle: '' }
       }
       s.currentQuiz.nodes.push(node)
       s.isDirty = true
@@ -291,6 +490,22 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     }))
   },
 
+  duplicateNode: (nodeId) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      const orig = s.currentQuiz.nodes.find(n => n.id === nodeId)
+      if (!orig) return
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.future = []
+      const newNode: Node<QuizNodeData> = JSON.parse(JSON.stringify(orig))
+      newNode.id = crypto.randomUUID()
+      newNode.position = { x: orig.position.x + 50, y: orig.position.y + 50 }
+      newNode.data.label = orig.data.label + ' (copia)'
+      s.currentQuiz.nodes.push(newNode)
+      s.isDirty = true
+    }))
+  },
+
   updateNodePosition: (nodeId, position) => {
     set(produce((s: QuizState) => {
       if (!s.currentQuiz) return
@@ -311,9 +526,8 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     let valid = true
     set(produce((s: QuizState) => {
       if (!s.currentQuiz) { valid = false; return }
-      // Self-connection check
       if (connection.source === connection.target) { valid = false; return }
-      // Circular dependency check
+      // Multi-output cycle detection: traverse via all edges
       const visited = new Set<string>()
       function dfs(nodeId: string): boolean {
         if (nodeId === connection.source) return true
@@ -323,13 +537,16 @@ export const useQuizStore = create<QuizState>((set, get) => ({
         for (const e of outgoing) {
           if (e.target && dfs(e.target)) return true
         }
-        // Also check through nodes
-        const node = s.currentQuiz!.nodes.find(n => n.id === nodeId)
         return false
       }
       if (connection.target && dfs(connection.target)) { valid = false; return }
       s.past.push(cloneQuiz(s.currentQuiz))
       s.future = []
+      const sourceNode = s.currentQuiz.nodes.find(n => n.id === connection.source)
+      const handles = sourceNode ? getHandlesForNode(sourceNode.data) : []
+      const handle = handles.find(h => h.id === connection.sourceHandle)
+      const edgeLabel = handle?.label || ''
+
       const edge: Edge = {
         id: crypto.randomUUID(),
         source: connection.source!,
@@ -338,9 +555,9 @@ export const useQuizStore = create<QuizState>((set, get) => ({
         targetHandle: connection.targetHandle || undefined,
         type: 'smoothstep',
         animated: true,
+        label: edgeLabel,
+        style: getEdgeStyle(connection.sourceHandle),
       }
-      if (connection.sourceHandle === 'true') edge.label = 'Sim'
-      if (connection.sourceHandle === 'false') edge.label = 'Nao'
       s.currentQuiz.edges.push(edge)
       s.isDirty = true
     }))
@@ -354,6 +571,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       s.future = []
       s.currentQuiz.edges = s.currentQuiz.edges.filter(e => e.id !== edgeId)
       s.isDirty = true
+      if (s.selectedEdgeId === edgeId) s.selectedEdgeId = null
     }))
   },
 
@@ -365,7 +583,10 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     }))
   },
 
-  selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
+  selectEdge: (edgeId) => set({ selectedEdgeId: edgeId }),
+
+  selectNode: (nodeId) => set({ selectedNodeId: nodeId, selectedEdgeId: null, selectedFreehandId: null }),
+  selectFreehandWidget: (id) => set({ selectedFreehandId: id, selectedNodeId: null, selectedEdgeId: null }),
 
   togglePreview: () => set(produce((s: QuizState) => { s.isPreview = !s.isPreview })),
 
@@ -414,7 +635,38 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       return true
     } catch { return false }
   },
+
+  addFreehandWidget: (widget) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      if (!s.currentQuiz.freehand) s.currentQuiz.freehand = []
+      s.currentQuiz.freehand.push(widget)
+      s.isDirty = true
+    }))
+  },
+
+  updateFreehandWidget: (id, data) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz?.freehand) return
+      const w = s.currentQuiz.freehand.find(fw => fw.id === id)
+      if (w) { Object.assign(w, data); s.isDirty = true }
+    }))
+  },
+
+  removeFreehandWidget: (id) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz?.freehand) return
+      s.currentQuiz.freehand = s.currentQuiz.freehand.filter(fw => fw.id !== id)
+      s.isDirty = true
+    }))
+  },
 }))
+
+function getEdgeStyle(sourceHandle?: string | null): React.CSSProperties {
+  if (sourceHandle === 'true') return { stroke: '#22c55e', strokeWidth: 2 }
+  if (sourceHandle === 'false') return { stroke: '#ef4444', strokeWidth: 2, strokeDasharray: '6 3' }
+  return { stroke: '#a855f7', strokeWidth: 2 }
+}
 
 function getDefaultLabel(type: NodeType): string {
   const map: Record<NodeType, string> = {
@@ -424,7 +676,12 @@ function getDefaultLabel(type: NodeType): string {
     result: 'Resultado',
     redirect: 'Redirecionar',
     score: 'Pontuacao',
+    wait: 'Aguardar',
+    webhook: 'Webhook',
+    subflow: 'Sub-quiz',
     custom: 'Personalizado',
   }
   return map[type] || 'Card'
 }
+
+export { getHandlesForNode, getEdgeStyle, getDefaultLabel }

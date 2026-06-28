@@ -44,11 +44,21 @@ export default function CloakerCampanhas() {
     await loadCampaigns()
   }
 
-  function selectCampaign(c: Campaign) {
+  async function selectCampaign(c: Campaign) {
     setSelectedId(c.id)
-    setPoolUrls([])
     setNewUrl(''); setNewWeight('10'); setNewMaxHits('')
     setHmacLink(`${window.location.origin}/go/${c.id}`)
+    const res = await fetchWithAuth(`/api/cloaker/campaign/${c.id}/urls`)
+    if (res.ok) setPoolUrls(await res.json())
+  }
+
+  async function deleteCampaign(id: string) {
+    if (!confirm('Excluir campanha? Todas as URLs e logs serao removidos.')) return
+    const res = await fetchWithAuth(`/api/cloaker/campaign/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      if (selectedId === id) setSelectedId('')
+      await loadCampaigns()
+    }
   }
 
   async function addUrl() {

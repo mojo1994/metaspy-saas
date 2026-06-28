@@ -216,7 +216,8 @@ function generateWhitePage(seedStr) {
 }
 
 // ─── JS Challenge Page Generator ─────────────────────────────────
-function generateJSChallenge(campaignId, safeUrl) {
+function generateJSChallenge(campaignId, safeUrl, targetUrl) {
+  const challengePassTarget = targetUrl || campaignId
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -249,7 +250,7 @@ function unlock(){
       window.location.href='${safeUrl.replace(/'/g, "\\'")}';
     } else {
       document.querySelector('.card').innerHTML='<p style="color:#22c55e">✓ Verificado</p>';
-      setTimeout(()=>{window.location.href='${campaignId}';},600);
+      setTimeout(()=>{window.location.href='${challengePassTarget.replace(/'/g, "\\'")}';},600);
     }
   });
 }
@@ -2143,6 +2144,40 @@ app.post('/api/cloaker/campaign/:id/url', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Erro ao adicionar URL' }) }
 })
 
+app.put('/api/cloaker/campaign/:id', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  try {
+    const { name, default_safe_url, is_active } = req.body
+    const existing = await one('SELECT id FROM cloaker_campaigns WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!existing) return res.status(404).json({ error: 'Campanha nao encontrada' })
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    const sets = []
+    const vals = []
+    if (name !== undefined) { sets.push('name = $' + (vals.length + 1)); vals.push(name) }
+    if (default_safe_url !== undefined) { sets.push('default_safe_url = $' + (vals.length + 1)); vals.push(default_safe_url) }
+    if (is_active !== undefined) { sets.push('is_active = $' + (vals.length + 1)); vals.push(is_active ? 1 : 0) }
+    if (sets.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' })
+    sets.push('updated_at = $' + (vals.length + 1)); vals.push(now)
+    vals.push(req.params.id)
+    await run(`UPDATE cloaker_campaigns SET ${sets.join(', ')} WHERE id = $${vals.length}`, vals)
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro ao atualizar campanha' }) }
+})
+
+app.delete('/api/cloaker/campaign/:id', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  try {
+    const existing = await one('SELECT id FROM cloaker_campaigns WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!existing) return res.status(404).json({ error: 'Campanha nao encontrada' })
+    await run('DELETE FROM url_pool_urls WHERE pool_id = $1', [req.params.id])
+    await run('DELETE FROM redirect_logs WHERE campaign_id = $1', [req.params.id])
+    await run('DELETE FROM cloaker_campaigns WHERE id = $1', [req.params.id])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro ao excluir campanha' }) }
+})
+
 // Enhanced generate with fraud score script
 app.post('/api/cloaker/generate-enhanced', authMiddleware, validate(cloakerSchema), async (req, res) => {
   const blocked = checkFeature(req, res, 'cloaker')
@@ -2270,7 +2305,7 @@ app.get('/api/cloaker/logs', authMiddleware, async (req, res) => {
 
 // SSE endpoint for live logs
 app.get('/api/cloaker/logs/sse', (req, res) => {
-  const token = req.query.token
+  const token = req.query.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null)
   if (!token) return res.status(401).end()
   try {
     jwt.verify(token, JWT_SECRET)
@@ -2296,41 +2331,76 @@ app.get('/api/cloaker/campaign/:id/urls', authMiddleware, async (req, res) => {
   res.json(urls || [])
 })
 
+// ─── Rate limiter for public redirect endpoint ──────────────────
+const redirectRateMap = new Map()
+const REDIRECT_RATE_LIMIT = 50
+const REDIRECT_RATE_WINDOW = 60000
+
+function checkRedirectRateLimit(ip) {
+  const now = Date.now()
+  const entry = redirectRateMap.get(ip) || { count: 0, windowStart: now }
+  if (now - entry.windowStart > REDIRECT_RATE_WINDOW) {
+    entry.count = 0
+    entry.windowStart = now
+  }
+  entry.count++
+  redirectRateMap.set(ip, entry)
+  return entry.count <= REDIRECT_RATE_LIMIT
+}
+
+// Periodic cleanup of expired rate limit entries (every 5 min)
+setInterval(() => {
+  const cutoff = Date.now() - REDIRECT_RATE_WINDOW
+  for (const [ip, entry] of redirectRateMap) {
+    if (entry.windowStart < cutoff) redirectRateMap.delete(ip)
+  }
+}, 300000)
+
 // Public redirect endpoint: multi-stage chain
 app.get('/go/:campaignId', async (req, res) => {
   try {
     const { campaignId } = req.params
     const { signature, timestamp, nonce, target } = req.query
     const startTime = Date.now()
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '0.0.0.0'
+    const ipHash = createHash('sha256').update(ip + HMAC_SECRET).digest('hex').slice(0, 16)
+
+    // Rate limit: 50 req/min per IP
+    if (!checkRedirectRateLimit(ip)) {
+      return res.status(429).send(generateEnhancedWhitePage(`${ipHash}:429`, 'tecnologia'))
+    }
+
+    // Load campaign
+    const campaign = await one('SELECT id, name, default_safe_url, is_active FROM cloaker_campaigns WHERE id = $1', [campaignId])
+    if (!campaign) return res.status(404).send('Campaign not found')
+
+    const defaultSafeUrl = campaign.default_safe_url || 'about:blank'
 
     // Circuit breaker check
     if (isCircuitOpen()) {
-      recordCircuitFailure()
-      const safe = await one('SELECT default_safe_url, name FROM cloaker_campaigns WHERE id = $1', [campaignId])
       return res.send(generateEnhancedWhitePage(`${campaignId}:circuit`, 'tecnologia'))
     }
 
-    if (!signature || !timestamp || !nonce || !target) {
-      const campaign = await one('SELECT id, default_safe_url FROM cloaker_campaigns WHERE id = $1 AND is_active = 1', [campaignId])
-      if (!campaign) return res.status(404).send('Campaign not found')
-      return res.redirect(campaign.default_safe_url)
-    }
-
-    const valid = verifyHMACSignature(campaignId, target, timestamp, nonce, signature)
-    const timeDrift = Math.abs(Date.now() - parseInt(timestamp))
-    if (!valid || timeDrift > 60000) {
-      const campaign = await one('SELECT default_safe_url FROM cloaker_campaigns WHERE id = $1', [campaignId])
-      return res.redirect(campaign?.default_safe_url || 'about:blank')
-    }
-
-    const finalTarget = decodeURIComponent(target)
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '0.0.0.0'
-    const ipHash = createHash('sha256').update(ip + HMAC_SECRET).digest('hex').slice(0, 16)
     const ua = req.headers['user-agent'] || ''
     const headers = { 'user-agent': ua, 'accept-language': req.headers['accept-language'] || '', referer: req.headers['referer'] || '', via: req.headers['via'] || '', 'x-forwarded-for': req.headers['x-forwarded-for'] || '' }
-
     const fraudScore = calculateFraudScore(headers, ip, { country: req.headers['cf-ipcountry'] || '' })
     const elapsed = Date.now() - startTime
+
+    // Validate HMAC if present, resolve target
+    let finalTarget
+    if (signature && timestamp && nonce && target) {
+      const valid = verifyHMACSignature(campaignId, target, timestamp, nonce, signature)
+      const timeDrift = Math.abs(Date.now() - parseInt(timestamp))
+      if (!valid || timeDrift > 60000) {
+        finalTarget = defaultSafeUrl
+      } else {
+        finalTarget = decodeURIComponent(target)
+      }
+    } else {
+      // No HMAC — try URL pool, fall back to default_safe_url
+      const poolUrl = await getNextUrlFromPool(campaignId)
+      finalTarget = poolUrl || defaultSafeUrl
+    }
 
     let decision = 'human'
     if (fraudScore >= 70) decision = 'bot'
@@ -2354,13 +2424,10 @@ app.get('/go/:campaignId', async (req, res) => {
     }
 
     if (fraudScore >= 40) {
-      return res.send(generateJSChallenge(campaignId, finalTarget))
+      return res.send(generateJSChallenge(campaignId, defaultSafeUrl, finalTarget))
     }
 
-    recordCircuitFailure()
-    circuitBreakerState.failures = Math.max(0, circuitBreakerState.failures - 1)
-
-    // Stage 2: Intermediate HTML with meta-refresh + honeypot
+    // Human: redirect with honeypot meta-refresh page
     const honeypotLink = `${finalTarget}?ref=${ipHash}&h=1`
     const stage2Html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -2512,29 +2579,41 @@ function validateQuizAst(ast) {
   if (!ast || typeof ast !== 'object') return 'AST invalido'
   if (!Array.isArray(ast.nodes)) return 'nodes deve ser um array'
   if (!Array.isArray(ast.edges)) return 'edges deve ser um array'
+  const validTypes = ['start', 'question', 'logic', 'result', 'redirect', 'score', 'wait', 'webhook', 'subflow', 'custom']
   for (const n of ast.nodes) {
     if (!n.id || !n.type || !n.position) return `Node invalido: ${n.id || 'sem id'}`
-    if (!['start', 'question', 'logic', 'result', 'redirect', 'score', 'custom'].includes(n.type)) return `Tipo de node desconhecido: ${n.type}`
+    if (!validTypes.includes(n.type)) return `Tipo de node desconhecido: ${n.type}`
+    // Validate style fields
+    if (n.data?.styles) {
+      const s = n.data.styles
+      if (s.opacity !== undefined && (typeof s.opacity !== 'number' || s.opacity < 0 || s.opacity > 1)) s.opacity = 1
+      if (s.fontSize !== undefined && (typeof s.fontSize !== 'number' || s.fontSize < 8 || s.fontSize > 120)) s.fontSize = 16
+      if (s.rotation !== undefined && (typeof s.rotation !== 'number' || s.rotation < -360 || s.rotation > 360)) s.rotation = 0
+    }
   }
-  // Check circular dependencies
-  const adj = {}
-  for (const e of ast.edges) {
-    if (!adj[e.source]) adj[e.source] = []
-    adj[e.source].push(e.target)
+  // Validate freehand widgets
+  if (ast.freehand) {
+    if (!Array.isArray(ast.freehand)) return 'freehand deve ser um array'
+    for (const w of ast.freehand) {
+      if (!w.id || !w.type || !w.position) return `Widget invalido: ${w.id || 'sem id'}`
+    }
   }
+  // Multi-output cycle detection: traverse via all edges
   for (const n of ast.nodes) {
     const visited = new Set()
     function dfs(nodeId) {
       if (nodeId === n.id) return true
       if (visited.has(nodeId)) return false
       visited.add(nodeId)
-      for (const next of (adj[nodeId] || [])) {
-        if (dfs(next)) return true
+      const outgoing = ast.edges.filter(e => e.source === nodeId)
+      for (const e of outgoing) {
+        if (e.target && dfs(e.target)) return true
       }
       return false
     }
-    for (const next of (adj[n.id] || [])) {
-      if (dfs(next)) return 'Conexao circular detectada'
+    const outgoing = ast.edges.filter(e => e.source === n.id)
+    for (const e of outgoing) {
+      if (e.target && dfs(e.target)) return 'Conexao circular detectada'
     }
   }
   return null
@@ -2724,6 +2803,93 @@ app.post('/api/quizzes/:id/rollback/:version', authMiddleware, async (req, res) 
       [history.ast_snapshot, now, req.params.id, req.user.id])
     res.json({ ok: true })
   } catch { res.status(500).json({ error: 'Erro ao reverter' }) }
+})
+
+// ─── Quiz Media endpoints ──────────────────────────────────────
+app.post('/api/quizzes/:id/media', authMiddleware, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Arquivo nao enviado' })
+    const quiz = await one('SELECT id FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!quiz) return res.status(404).json({ error: 'Quiz nao encontrado' })
+    const id = randomUUID()
+    const now = new Date().toISOString()
+    const ext = extname(req.file.originalname)
+    const mime = req.file.mimetype
+    const assetType = mime.startsWith('video/') ? 'video' : mime.startsWith('image/svg') ? 'svg' : mime.startsWith('image/gif') ? 'gif' : 'image'
+    await run('INSERT INTO quiz_media (id, quiz_id, user_id, filename, storage_key, mime_type, file_size, asset_type, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [id, req.params.id, req.user.id, req.file.originalname, req.file.path, mime, req.file.size, assetType, now])
+    res.json({ id, filename: req.file.originalname, url: `/api/quizzes/${req.params.id}/media/${id}`, asset_type: assetType })
+  } catch { res.status(500).json({ error: 'Erro ao fazer upload' }) }
+})
+
+app.get('/api/quizzes/:id/media', authMiddleware, async (req, res) => {
+  try {
+    const media = await query('SELECT id, filename, mime_type, file_size, width, height, asset_type, created_at FROM quiz_media WHERE quiz_id = $1 AND user_id = $2 ORDER BY created_at DESC', [req.params.id, req.user.id])
+    res.json(media || [])
+  } catch { res.status(500).json({ error: 'Erro ao listar media' }) }
+})
+
+app.delete('/api/quizzes/:id/media/:mediaId', authMiddleware, async (req, res) => {
+  try {
+    await run('DELETE FROM quiz_media WHERE id = $1 AND quiz_id = $2 AND user_id = $3', [req.params.mediaId, req.params.id, req.user.id])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro ao excluir media' }) }
+})
+
+// ─── Quiz Pages endpoints ─────────────────────────────────────
+app.get('/api/quizzes/:id/pages', authMiddleware, async (req, res) => {
+  try {
+    const pages = await query('SELECT id, name, page_settings, page_order, created_at FROM quiz_pages WHERE quiz_id = $1 ORDER BY page_order ASC', [req.params.id])
+    res.json(pages || [])
+  } catch { res.status(500).json({ error: 'Erro ao listar paginas' }) }
+})
+
+app.post('/api/quizzes/:id/pages', authMiddleware, async (req, res) => {
+  try {
+    const quiz = await one('SELECT id FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!quiz) return res.status(404).json({ error: 'Quiz nao encontrado' })
+    const id = randomUUID()
+    const now = new Date().toISOString()
+    const count = await one('SELECT COUNT(*) as count FROM quiz_pages WHERE quiz_id = $1', [req.params.id])
+    const order = (count?.count || 0) + 1
+    await run('INSERT INTO quiz_pages (id, quiz_id, name, page_settings, page_order, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+      [id, req.params.id, req.body.name || `Pagina ${order}`, JSON.stringify(req.body.settings || {}), order, now])
+    res.json({ id, name: req.body.name || `Pagina ${order}`, page_order: order })
+  } catch { res.status(500).json({ error: 'Erro ao criar pagina' }) }
+})
+
+app.delete('/api/quizzes/:id/pages/:pageId', authMiddleware, async (req, res) => {
+  try {
+    await run('DELETE FROM quiz_pages WHERE id = $1 AND quiz_id = $2', [req.params.pageId, req.params.id])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro ao excluir pagina' }) }
+})
+
+// ─── Quiz Export endpoints ─────────────────────────────────────
+app.get('/api/quizzes/:id/export/json', authMiddleware, async (req, res) => {
+  try {
+    const quiz = await one('SELECT * FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!quiz) return res.status(404).json({ error: 'Quiz nao encontrado' })
+    const ast = typeof quiz.ast === 'string' ? JSON.parse(quiz.ast) : quiz.ast
+    res.json({
+      title: quiz.title, description: quiz.description, slug: quiz.slug,
+      nodes: ast.nodes, edges: ast.edges, settings: ast.settings,
+      freehand: ast.freehand || [],
+    })
+  } catch { res.status(500).json({ error: 'Erro ao exportar' }) }
+})
+
+app.get('/api/quizzes/:id/export/csv', authMiddleware, async (req, res) => {
+  try {
+    const sessions = await query('SELECT id, score, status, created_at, completed_at FROM quiz_sessions WHERE quiz_id = $1 ORDER BY created_at DESC', [req.params.id])
+    let csv = 'session_id,score,status,started_at,completed_at\n'
+    for (const s of (sessions || [])) {
+      csv += `${s.id},${s.score || 0},${s.status},${s.created_at},${s.completed_at || ''}\n`
+    }
+    res.setHeader('Content-Type', 'text/csv')
+    res.setHeader('Content-Disposition', `attachment; filename="quiz-${req.params.id}-stats.csv"`)
+    res.send(csv)
+  } catch { res.status(500).json({ error: 'Erro ao exportar CSV' }) }
 })
 
 // ─── Health ───────────────────────────────────────────────────────

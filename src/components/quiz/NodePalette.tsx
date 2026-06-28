@@ -1,14 +1,19 @@
 import { useCallback } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useQuizStore, type NodeType } from '../../stores/quizStore'
+import { Play, HelpCircle, GitBranch, BarChart3, Trophy, ArrowRight, Clock, Webhook, Copy, Settings } from 'lucide-react'
 
-const CARD_TYPES: { type: NodeType; label: string; desc: string; color: string }[] = [
-  { type: 'start', label: 'Inicio', desc: 'Ponto de partida', color: '#a855f7' },
-  { type: 'question', label: 'Pergunta', desc: 'Multipla escolha', color: '#3b82f6' },
-  { type: 'logic', label: 'Condicao', desc: 'Se / Senao', color: '#f59e0b' },
-  { type: 'score', label: 'Pontuacao', desc: 'Adicionar / Subtrair', color: '#10b981' },
-  { type: 'result', label: 'Resultado', desc: 'Tela final', color: '#ec4899' },
-  { type: 'redirect', label: 'Redirecionar', desc: 'URL externa', color: '#6366f1' },
+const CARD_TYPES: { type: NodeType; label: string; desc: string; color: string; icon: React.ReactNode }[] = [
+  { type: 'start', label: 'Inicio', desc: 'Ponto de partida', color: '#a855f7', icon: <Play size={12} /> },
+  { type: 'question', label: 'Pergunta', desc: 'Multipla escolha', color: '#3b82f6', icon: <HelpCircle size={12} /> },
+  { type: 'logic', label: 'Condicao', desc: 'Se / Senao', color: '#f59e0b', icon: <GitBranch size={12} /> },
+  { type: 'score', label: 'Pontuacao', desc: 'Adicionar / Subtrair', color: '#10b981', icon: <BarChart3 size={12} /> },
+  { type: 'result', label: 'Resultado', desc: 'Tela final', color: '#ec4899', icon: <Trophy size={12} /> },
+  { type: 'redirect', label: 'Redirecionar', desc: 'URL externa', color: '#6366f1', icon: <ArrowRight size={12} /> },
+  { type: 'wait', label: 'Aguardar', desc: 'Pausa temporizada', color: '#8b5cf6', icon: <Clock size={12} /> },
+  { type: 'webhook', label: 'Webhook', desc: 'HTTP callback', color: '#06b6d4', icon: <Webhook size={12} /> },
+  { type: 'subflow', label: 'Sub-quiz', desc: 'Quiz aninhado', color: '#f97316', icon: <Copy size={12} /> },
+  { type: 'custom', label: 'Personalizado', desc: 'HTML/CSS livre', color: '#6b7280', icon: <Settings size={12} /> },
 ]
 
 export default function NodePalette() {
@@ -36,7 +41,7 @@ export default function NodePalette() {
               addNode(ct.type, pos)
             }}
           >
-            <div className="quiz-palette-item-dot" style={{ background: ct.color }} />
+            <div className="quiz-palette-item-icon" style={{ background: `${ct.color}15`, color: ct.color }}>{ct.icon}</div>
             <div className="quiz-palette-item-info">
               <span className="quiz-palette-item-label">{ct.label}</span>
               <span className="quiz-palette-item-desc">{ct.desc}</span>

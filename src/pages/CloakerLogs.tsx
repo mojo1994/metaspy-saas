@@ -25,20 +25,50 @@ export default function CloakerLogs() {
 
   useEffect(() => {
     loadLogs()
-    let token = localStorage.getItem('metaspy_access_token')
-    let evtSource: EventSource | null = null
-    try {
-      evtSource = new EventSource(`/api/cloaker/logs/sse?token=${token}`)
-      evtSource.onopen = () => setConnected(true)
-      evtSource.onmessage = (e) => {
-        try {
-          const entry = JSON.parse(e.data)
-          setLogs(prev => [entry, ...prev].slice(0, 200))
-        } catch {}
+    let aborted = false
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+    async function connectSSE() {
+      const token = localStorage.getItem('metaspy_access_token')
+      if (!token) return
+      try {
+        const res = await fetch('/api/cloaker/logs/sse', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok || !res.body) { setConnected(false); return }
+        setConnected(true)
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (!aborted) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const entry = JSON.parse(line.slice(6))
+                if (entry.connected) continue
+                setLogs(prev => [entry, ...prev].slice(0, 200))
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+      if (!aborted) {
+        setConnected(false)
+        reconnectTimer = setTimeout(connectSSE, 3000)
       }
-      evtSource.onerror = () => setConnected(false)
-    } catch {}
-    return () => { evtSource?.close() }
+    }
+
+    connectSSE()
+    return () => {
+      aborted = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+    }
   }, [])
 
   useEffect(() => {

@@ -261,9 +261,36 @@ export async function initSchema() {
       completed_at TEXT
     )
   `).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quiz_media (
+      id TEXT PRIMARY KEY,
+      quiz_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      storage_key TEXT,
+      mime_type TEXT NOT NULL,
+      file_size INT DEFAULT 0,
+      width INT,
+      height INT,
+      asset_type TEXT DEFAULT 'image',
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quiz_pages (
+      id TEXT PRIMARY KEY,
+      quiz_id TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT 'Pagina 1',
+      page_settings JSONB DEFAULT '{}',
+      page_order INT NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_quizzes_user_id ON quizzes(user_id)`).catch(() => {})
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_quizzes_slug ON quizzes(slug)`).catch(() => {})
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_history_quiz_id ON quiz_history(quiz_id)`).catch(() => {})
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_sessions_quiz_id ON quiz_sessions(quiz_id)`).catch(() => {})
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_sessions_token ON quiz_sessions(session_token)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_media_quiz_id ON quiz_media(quiz_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_pages_quiz_id ON quiz_pages(quiz_id)`).catch(() => {})
 }

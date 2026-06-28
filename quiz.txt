@@ -1,0 +1,2396 @@
+================================================================================
+QUIZ BUILDER MODULE - Full Source Code (English)
+================================================================================
+Compiled from the MetaSpy SaaS codebase for easy reference and LLM context.
+================================================================================
+
+TABLE OF CONTENTS:
+  1. App.tsx (Quiz Routes)
+  2. index.css (Quiz CSS)
+  3. stores/quizStore.ts
+  4. pages/QuizzesList.tsx
+  5. pages/QuizBuilder.tsx
+  6. pages/QuizStats.tsx
+  7. pages/PlayQuiz.tsx
+  8. components/quiz/NodePalette.tsx
+  9. components/quiz/PropertyPanel.tsx
+  10. components/quiz/QuizCanvas.tsx
+  11. components/quiz/QuizNodeComponent.tsx
+  12. components/quiz/QuizTopBar.tsx
+  13. components/quiz/PreviewQuiz.tsx
+  14. server/db.js (Quiz Tables)
+  15. server/index.js (Quiz Routes + validateQuizAst)
+
+================================================================================
+SECTION 1: App.tsx (Quiz Routes)
+File: src/App.tsx (lines 26-29 imports, lines 123-128 routes)
+================================================================================
+
+import QuizzesList from './pages/QuizzesList'
+import QuizBuilder from './pages/QuizBuilder'
+import QuizStats from './pages/QuizStats'
+import PlayQuiz from './pages/PlayQuiz'
+
+// Inside Dashboard layout route:
+<Route path="quizzes" element={<QuizzesList />} />
+<Route path="quiz/:id" element={<QuizBuilder />} />
+<Route path="quiz/:id/stats" element={<QuizStats />} />
+
+// Public route:
+<Route path="/quiz/:slug" element={<PlayQuiz />} />
+
+================================================================================
+SECTION 2: index.css (Quiz CSS)
+File: src/index.css (lines 4152-4706)
+================================================================================
+
+.quiz-builder {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px);
+  background: var(--bg-primary);
+  position: relative;
+}
+.quiz-builder-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* Top Bar */
+.quiz-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 12px;
+}
+.quiz-topbar-left { display: flex; align-items: center; gap: 8px; flex: 1; }
+.quiz-topbar-title {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  width: 240px;
+}
+.quiz-topbar-title:focus { outline: none; background: var(--bg-card); }
+.quiz-topbar-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.quiz-dot-saved { background: #22c55e; }
+.quiz-dot-unsaved { background: #eab308; }
+.quiz-topbar-saving { font-size: 11px; color: var(--text-muted); }
+.quiz-topbar-center { display: flex; gap: 4px; }
+.quiz-topbar-right { display: flex; align-items: center; gap: 8px; }
+.quiz-topbar-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.quiz-topbar-btn:disabled { opacity: 0.3; cursor: default; }
+.quiz-topbar-btn:hover:not(:disabled) { background: var(--bg-card); }
+.quiz-topbar-version { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+.quiz-topbar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.quiz-topbar-toggle input { accent-color: var(--purple-500); }
+.quiz-topbar-publish {
+  background: var(--purple-600);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.quiz-topbar-publish:hover { background: var(--purple-500); }
+
+/* Body */
+.quiz-builder-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Node Palette (Left) */
+.quiz-palette {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.quiz-palette-header {
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.quiz-palette-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.quiz-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition);
+  border: 1px solid transparent;
+}
+.quiz-palette-item:hover { background: var(--bg-card); border-color: var(--border); }
+.quiz-palette-item-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.quiz-palette-item-info { display: flex; flex-direction: column; gap: 1px; }
+.quiz-palette-item-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.quiz-palette-item-desc { font-size: 10px; color: var(--text-muted); }
+.quiz-palette-footer {
+  padding: 8px 14px;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
+/* Canvas Area */
+.quiz-canvas-wrapper {
+  flex: 1;
+  position: relative;
+  background: var(--bg-primary);
+}
+.quiz-canvas-error {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(239,68,68,0.9);
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  z-index: 20;
+}
+
+/* Custom Node Cards */
+.quiz-node-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0;
+  width: 200px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.quiz-node-card:hover { border-color: rgba(168,85,247,0.3); }
+.quiz-node-selected {
+  border-color: var(--purple-500) !important;
+  box-shadow: 0 0 0 1px var(--purple-500), 0 4px 16px rgba(168,85,247,0.2);
+}
+.quiz-node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(168,85,247,0.04);
+}
+.quiz-node-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  background: rgba(168,85,247,0.1);
+  color: var(--purple-400);
+  flex-shrink: 0;
+}
+.quiz-node-type-label { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.quiz-node-preview {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.quiz-node-preview-text { font-size: 11px; color: var(--text-secondary); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quiz-node-option-count { font-size: 10px; color: var(--text-muted); }
+
+/* Handles */
+.quiz-handle {
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid var(--border) !important;
+  background: var(--bg-card) !important;
+  transition: all 0.2s;
+}
+.quiz-handle:hover { border-color: var(--purple-500) !important; background: var(--purple-500) !important; }
+.quiz-handle-input { left: -5px !important; }
+.quiz-handle-output { right: -5px !important; }
+.quiz-handle-true { right: -5px !important; top: 45% !important; }
+.quiz-handle-false { left: 50% !important; bottom: -5px !important; }
+
+/* Property Panel (Right) */
+.quiz-panel {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.quiz-panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  text-align: center;
+  gap: 12px;
+}
+.quiz-panel-empty-icon { font-size: 28px; opacity: 0.3; }
+.quiz-panel-empty p { font-size: 13px; color: var(--text-muted); line-height: 1.5; max-width: 200px; }
+.quiz-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.quiz-panel-remove {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.quiz-panel-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.quiz-panel-field { display: flex; flex-direction: column; gap: 4px; }
+.quiz-panel-field label { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+.quiz-panel-field input[type="text"],
+.quiz-panel-field input[type="number"],
+.quiz-panel-field textarea,
+.quiz-panel-field select {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  width: 100%;
+}
+.quiz-panel-field textarea { resize: vertical; font-family: inherit; }
+.quiz-panel-field select { cursor: pointer; }
+.quiz-panel-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.quiz-panel-option-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.quiz-panel-option-row input[type="text"] { flex: 1; }
+.quiz-panel-option-row input[type="checkbox"] { accent-color: var(--purple-500); }
+.quiz-panel-remove-opt {
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+.quiz-panel-add-opt {
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+  margin-top: 2px;
+}
+.quiz-panel-add-opt:hover { border-color: var(--purple-500); color: var(--purple-400); }
+.quiz-panel-field-row {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.quiz-panel-field-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.quiz-panel-field-row input { accent-color: var(--purple-500); }
+
+/* Preview Mode */
+.quiz-preview-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  overflow-y: auto;
+}
+.quiz-preview-empty { text-align: center; color: var(--text-muted); font-size: 14px; }
+.quiz-preview-card {
+  max-width: 500px;
+  width: 100%;
+  padding: 32px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.quiz-preview-card h3 { font-size: 18px; font-weight: 600; line-height: 1.4; }
+.quiz-preview-desc { font-size: 13px; color: var(--text-muted); }
+.quiz-preview-options { display: flex; flex-direction: column; gap: 8px; }
+.quiz-preview-option {
+  padding: 12px 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+.quiz-preview-option:hover { border-color: var(--purple-500); background: rgba(168,85,247,0.05); }
+.quiz-preview-score { font-size: 12px; color: var(--text-muted); text-align: right; }
+.quiz-preview-result {
+  max-width: 500px;
+  width: 100%;
+  padding: 32px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+.quiz-preview-result h2 { font-size: 22px; font-weight: 700; }
+.quiz-preview-result p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+.quiz-preview-result-img { max-width: 100%; border-radius: var(--radius-md); max-height: 200px; object-fit: cover; }
+
+/* Quiz List */
+.quiz-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  text-align: center;
+  gap: 8px;
+}
+.quiz-list-empty-icon { font-size: 40px; opacity: 0.15; }
+.quiz-list-empty p { font-size: 16px; color: var(--text-secondary); }
+.quiz-list-empty-sub { font-size: 13px; color: var(--text-muted) !important; max-width: 320px; }
+.quiz-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.quiz-list-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.quiz-list-card-top { display: flex; align-items: center; justify-content: space-between; }
+.quiz-list-status {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.quiz-status-draft { background: rgba(234,179,8,0.15); color: #eab308; }
+.quiz-status-published { background: rgba(34,197,94,0.15); color: #22c55e; }
+.quiz-status-archived { background: rgba(107,114,128,0.15); color: #6b7280; }
+.quiz-list-version { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+.quiz-list-card-title { font-size: 15px; font-weight: 600; margin: 0; }
+.quiz-list-card-desc { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.4; }
+.quiz-list-card-meta { font-size: 11px; color: var(--text-muted); }
+.quiz-list-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.quiz-list-card-actions .btn { font-size: 11px; padding: 4px 12px; }
+.quiz-btn-danger { color: var(--danger) !important; border-color: rgba(239,68,68,0.3) !important; }
+
+/* Quiz Stats */
+.quiz-stats { display: flex; flex-direction: column; gap: 24px; }
+.quiz-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.quiz-stats-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.quiz-stats-number { font-size: 28px; font-weight: 700; color: var(--purple-400); }
+.quiz-stats-label { font-size: 12px; color: var(--text-muted); }
+.quiz-stats-sessions { display: flex; flex-direction: column; gap: 12px; }
+.quiz-stats-sessions h4 { font-size: 14px; font-weight: 600; margin: 0; }
+.quiz-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.quiz-stats-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.quiz-stats-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+
+/* End-User Play Quiz */
+.play-quiz {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-primary);
+}
+.play-quiz-loading { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--text-muted); }
+.play-quiz-spinner { width: 32px; height: 32px; border: 3px solid rgba(168,85,247,0.2); border-top-color: #a855f7; border-radius: 50%; animation: spin 0.8s linear infinite; }
+.play-quiz-error { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-muted); }
+.play-quiz-error h2 { font-size: 20px; font-weight: 600; }
+.play-quiz-progress { width: 100%; max-width: 500px; height: 4px; background: var(--border); border-radius: 2px; margin-bottom: 24px; }
+.play-quiz-progress-bar { height: 100%; background: var(--purple-500); border-radius: 2px; transition: width 0.3s; }
+.play-quiz-question { font-size: 20px; font-weight: 600; max-width: 500px; text-align: center; line-height: 1.4; margin-bottom: 8px; }
+.play-quiz-desc { font-size: 14px; color: var(--text-muted); max-width: 500px; text-align: center; margin-bottom: 12px; }
+.play-quiz-options { display: flex; flex-direction: column; gap: 8px; max-width: 500px; width: 100%; }
+.play-quiz-option {
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 15px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+.play-quiz-option:hover { border-color: var(--purple-500); background: rgba(168,85,247,0.05); }
+.play-quiz-result { text-align: center; gap: 16px; }
+.play-quiz-result h2 { font-size: 24px; font-weight: 700; }
+.play-quiz-result p { font-size: 15px; color: var(--text-secondary); max-width: 500px; line-height: 1.6; }
+.play-quiz-img { max-width: 100%; border-radius: var(--radius-md); max-height: 250px; object-fit: cover; }
+.play-quiz-cta { text-decoration: none; display: inline-block; }
+.play-quiz-empty { color: var(--text-muted); }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* React Flow overrides */
+.react-flow__background { background: var(--bg-primary) !important; }
+.react-flow__controls { background: var(--bg-card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-md) !important; overflow: hidden; }
+.react-flow__controls-button { background: var(--bg-card) !important; border-bottom: 1px solid var(--border) !important; fill: var(--text-secondary) !important; }
+.react-flow__controls-button:hover { background: var(--bg-secondary) !important; }
+.react-flow__minimap { border-radius: var(--radius-md) !important; overflow: hidden !important; }
+.react-flow__edge-path { stroke: var(--purple-400) !important; stroke-width: 2 !important; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: var(--purple-500) !important; }
+.react-flow__edge-path:hover { stroke: var(--purple-500) !important; }
+.react-flow__edge-text { font-size: 10px !important; fill: var(--text-muted) !important; }
+.react-flow__selection { background: rgba(168,85,247,0.08) !important; border: 1px solid rgba(168,85,247,0.3) !important; }
+
+================================================================================
+SECTION 3: stores/quizStore.ts
+File: src/stores/quizStore.ts (all 430 lines)
+================================================================================
+
+import { create } from 'zustand'
+import { produce } from 'immer'
+import type { Node, Edge, Connection, XYPosition } from '@xyflow/react'
+import slugify from 'slugify'
+
+export type QuestionType = 'multiple' | 'truefalse' | 'text' | 'rating'
+export type NodeType = 'start' | 'question' | 'logic' | 'result' | 'redirect' | 'score' | 'custom'
+
+export interface QuestionConfig {
+  type: QuestionType
+  text: string
+  description: string
+  options: { label: string; value: string; correct: boolean }[]
+  mediaUrl: string
+  required: boolean
+  multiple: boolean
+}
+
+export interface LogicConfig {
+  conditionType: 'score' | 'answer' | 'custom_variable'
+  operator: '>' | '<' | '>=' | '<=' | '==' | '!=' | 'contains'
+  value: string
+  variable: string
+}
+
+export interface ResultConfig {
+  title: string
+  content: string
+  imageUrl: string
+  redirectUrl: string
+}
+
+export interface RedirectConfig {
+  url: string
+  timeout: number
+}
+
+export interface ScoreConfig {
+  action: 'add' | 'subtract' | 'set'
+  value: number
+}
+
+export interface NodeStyles {
+  color?: string
+  icon?: string
+}
+
+export interface QuizNodeData {
+  [key: string]: unknown
+  label: string
+  type: NodeType
+  question?: QuestionConfig
+  logic?: LogicConfig
+  result?: ResultConfig
+  redirect?: RedirectConfig
+  score?: ScoreConfig
+  styles?: NodeStyles
+}
+
+export interface QuizSettings {
+  theme: 'dark' | 'light' | 'system'
+  layout: 'single' | 'multi-step'
+  progressBar: boolean
+  allowBacktracking: boolean
+  randomizeQuestions: boolean
+  timeLimit: number
+  redirectAfterComplete: string
+}
+
+export interface Quiz {
+  id: string
+  userId: string
+  title: string
+  description: string
+  slug: string
+  status: 'draft' | 'published' | 'archived'
+  nodes: Node<QuizNodeData>[]
+  edges: Edge[]
+  settings: QuizSettings
+  version: number
+  createdAt: string
+  updatedAt: string
+}
+
+const DEFAULT_SETTINGS: QuizSettings = {
+  theme: 'dark',
+  layout: 'single',
+  progressBar: true,
+  allowBacktracking: false,
+  randomizeQuestions: false,
+  timeLimit: 0,
+  redirectAfterComplete: '',
+}
+
+function generateQuizSlug(title: string): string {
+  return slugify(title || 'quiz', { lower: true, strict: true }) + '-' + Math.random().toString(36).slice(2, 7)
+}
+
+function createStartNode(position: XYPosition): Node<QuizNodeData> {
+  return {
+    id: crypto.randomUUID(),
+    type: 'quizNode',
+    position,
+    data: { label: 'Start', type: 'start', styles: { color: '#a855f7' } },
+  }
+}
+
+interface QuizState {
+  currentQuiz: Quiz | null
+  isDirty: boolean
+  isSaving: boolean
+  isPreview: boolean
+  selectedNodeId: string | null
+  savedVersion: number
+
+  // History
+  past: Quiz[]
+  future: Quiz[]
+
+  setQuiz: (quiz: Quiz) => void
+  createNewQuiz: (fetchWithAuth: (url: string, opts?: any) => Promise<Response>) => Promise<string | null>
+  loadQuiz: (id: string, fetchWithAuth: (url: string, opts?: any) => Promise<Response>) => Promise<void>
+  saveQuiz: (fetchWithAuth: (url: string, opts?: any) => Promise<Response>) => Promise<boolean>
+  setTitle: (title: string) => void
+  setDescription: (desc: string) => void
+
+  // Nodes
+  addNode: (type: NodeType, position: XYPosition) => void
+  updateNodeData: (nodeId: string, data: Partial<QuizNodeData>) => void
+  removeNode: (nodeId: string) => void
+  updateNodePosition: (nodeId: string, position: XYPosition) => void
+  setNodes: (nodes: Node<QuizNodeData>[]) => void
+
+  // Edges
+  addEdge: (connection: Connection) => boolean
+  removeEdge: (edgeId: string) => void
+  setEdges: (edges: Edge[]) => void
+
+  // Selection
+  selectNode: (nodeId: string | null) => void
+
+  // Preview
+  togglePreview: () => void
+
+  // Undo/Redo
+  undo: () => void
+  redo: () => void
+  pushHistory: () => void
+
+  // Settings
+  updateSettings: (settings: Partial<QuizSettings>) => void
+
+  // Publish
+  publishQuiz: (fetchWithAuth: (url: string, opts?: any) => Promise<Response>) => Promise<boolean>
+}
+
+function cloneQuiz(q: Quiz): Quiz {
+  return JSON.parse(JSON.stringify(q))
+}
+
+export const useQuizStore = create<QuizState>((set, get) => ({
+  currentQuiz: null,
+  isDirty: false,
+  isSaving: false,
+  isPreview: false,
+  selectedNodeId: null,
+  savedVersion: 0,
+  past: [],
+  future: [],
+
+  setQuiz: (quiz) => set({ currentQuiz: quiz, savedVersion: quiz.version, isDirty: false }),
+
+  createNewQuiz: async (fetchWithAuth) => {
+    try {
+      const res = await fetchWithAuth('/api/quizzes', { method: 'POST' })
+      if (!res.ok) return null
+      const data = await res.json()
+      set({
+        currentQuiz: data,
+        savedVersion: data.version,
+        isDirty: false,
+        past: [],
+        future: [],
+        selectedNodeId: null,
+        isPreview: false,
+      })
+      return data.id
+    } catch { return null }
+  },
+
+  loadQuiz: async (id, fetchWithAuth) => {
+    try {
+      const res = await fetchWithAuth(`/api/quizzes/${id}`)
+      if (!res.ok) return
+      const quiz = await res.json()
+      set({
+        currentQuiz: quiz,
+        savedVersion: quiz.version,
+        isDirty: false,
+        past: [],
+        future: [],
+        selectedNodeId: null,
+        isPreview: false,
+      })
+    } catch {}
+  },
+
+  saveQuiz: async (fetchWithAuth) => {
+    const { currentQuiz, savedVersion } = get()
+    if (!currentQuiz) return false
+    set({ isSaving: true })
+    try {
+      const res = await fetchWithAuth(`/api/quizzes/${currentQuiz.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ...currentQuiz, version: savedVersion }),
+      })
+      if (res.status === 409) {
+        const serverQuiz = await res.json()
+        set({ currentQuiz: serverQuiz, savedVersion: serverQuiz.version, isDirty: false, isSaving: false })
+        return false
+      }
+      if (!res.ok) { set({ isSaving: false }); return false }
+      const updated = await res.json()
+      set({ currentQuiz: updated, savedVersion: updated.version, isDirty: false, isSaving: false })
+      return true
+    } catch { set({ isSaving: false }); return false }
+  },
+
+  setTitle: (title) => {
+    set(produce((s: QuizState) => {
+      if (s.currentQuiz) {
+        s.currentQuiz.title = title
+        s.isDirty = true
+      }
+    }))
+  },
+
+  setDescription: (desc) => {
+    set(produce((s: QuizState) => {
+      if (s.currentQuiz) { s.currentQuiz.description = desc; s.isDirty = true }
+    }))
+  },
+
+  addNode: (type, position) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.future = []
+      const id = crypto.randomUUID()
+      const node: Node<QuizNodeData> = {
+        id,
+        type: 'quizNode',
+        position,
+        data: { label: getDefaultLabel(type), type, styles: {} },
+      }
+      if (type === 'question') {
+        node.data.question = { type: 'multiple', text: '', description: '', options: [{ label: 'Option 1', value: '1', correct: false }], mediaUrl: '', required: false, multiple: false }
+      } else if (type === 'logic') {
+        node.data.logic = { conditionType: 'score', operator: '>=', value: '70', variable: '' }
+      } else if (type === 'result') {
+        node.data.result = { title: '', content: '', imageUrl: '', redirectUrl: '' }
+      } else if (type === 'redirect') {
+        node.data.redirect = { url: '', timeout: 5 }
+      } else if (type === 'score') {
+        node.data.score = { action: 'add', value: 10 }
+      }
+      s.currentQuiz.nodes.push(node)
+      s.isDirty = true
+    }))
+  },
+
+  updateNodeData: (nodeId, data) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.future = []
+      const node = s.currentQuiz.nodes.find(n => n.id === nodeId)
+      if (node) { Object.assign(node.data, data); s.isDirty = true }
+    }))
+  },
+
+  removeNode: (nodeId) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.future = []
+      s.currentQuiz.nodes = s.currentQuiz.nodes.filter(n => n.id !== nodeId)
+      s.currentQuiz.edges = s.currentQuiz.edges.filter(e => e.source !== nodeId && e.target !== nodeId)
+      s.isDirty = true
+      if (s.selectedNodeId === nodeId) s.selectedNodeId = null
+    }))
+  },
+
+  updateNodePosition: (nodeId, position) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      const node = s.currentQuiz.nodes.find(n => n.id === nodeId)
+      if (node) { node.position = position; s.isDirty = true }
+    }))
+  },
+
+  setNodes: (nodes) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      s.currentQuiz.nodes = nodes as Node<QuizNodeData>[]
+      s.isDirty = true
+    }))
+  },
+
+  addEdge: (connection) => {
+    let valid = true
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) { valid = false; return }
+      // Self-connection check
+      if (connection.source === connection.target) { valid = false; return }
+      // Circular dependency check
+      const visited = new Set<string>()
+      function dfs(nodeId: string): boolean {
+        if (nodeId === connection.source) return true
+        if (visited.has(nodeId)) return false
+        visited.add(nodeId)
+        const outgoing = s.currentQuiz!.edges.filter(e => e.source === nodeId)
+        for (const e of outgoing) {
+          if (e.target && dfs(e.target)) return true
+        }
+        const node = s.currentQuiz!.nodes.find(n => n.id === nodeId)
+        return false
+      }
+      if (connection.target && dfs(connection.target)) { valid = false; return }
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.future = []
+      const edge: Edge = {
+        id: crypto.randomUUID(),
+        source: connection.source!,
+        target: connection.target!,
+        sourceHandle: connection.sourceHandle || undefined,
+        targetHandle: connection.targetHandle || undefined,
+        type: 'smoothstep',
+        animated: true,
+      }
+      if (connection.sourceHandle === 'true') edge.label = 'Sim'
+      if (connection.sourceHandle === 'false') edge.label = 'Nao'
+      s.currentQuiz.edges.push(edge)
+      s.isDirty = true
+    }))
+    return valid
+  },
+
+  removeEdge: (edgeId) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.future = []
+      s.currentQuiz.edges = s.currentQuiz.edges.filter(e => e.id !== edgeId)
+      s.isDirty = true
+    }))
+  },
+
+  setEdges: (edges) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      s.currentQuiz.edges = edges
+      s.isDirty = true
+    }))
+  },
+
+  selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
+
+  togglePreview: () => set(produce((s: QuizState) => { s.isPreview = !s.isPreview })),
+
+  undo: () => {
+    set(produce((s: QuizState) => {
+      if (s.past.length === 0 || !s.currentQuiz) return
+      s.future.push(cloneQuiz(s.currentQuiz))
+      s.currentQuiz = s.past.pop()!
+      s.isDirty = true
+    }))
+  },
+
+  redo: () => {
+    set(produce((s: QuizState) => {
+      if (s.future.length === 0 || !s.currentQuiz) return
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.currentQuiz = s.future.pop()!
+      s.isDirty = true
+    }))
+  },
+
+  pushHistory: () => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.future = []
+    }))
+  },
+
+  updateSettings: (settings) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      Object.assign(s.currentQuiz.settings, settings)
+      s.isDirty = true
+    }))
+  },
+
+  publishQuiz: async (fetchWithAuth) => {
+    const { currentQuiz } = get()
+    if (!currentQuiz) return false
+    try {
+      const res = await fetchWithAuth(`/api/quizzes/${currentQuiz.id}/publish`, { method: 'POST' })
+      if (!res.ok) return false
+      const updated = await res.json()
+      set({ currentQuiz: updated, savedVersion: updated.version, isDirty: false })
+      return true
+    } catch { return false }
+  },
+}))
+
+function getDefaultLabel(type: NodeType): string {
+  const map: Record<NodeType, string> = {
+    start: 'Start',
+    question: 'Question',
+    logic: 'Condition',
+    result: 'Result',
+    redirect: 'Redirect',
+    score: 'Score',
+    custom: 'Custom',
+  }
+  return map[type] || 'Card'
+}
+
+================================================================================
+SECTION 4: pages/QuizzesList.tsx
+File: src/pages/QuizzesList.tsx (all 92 lines)
+================================================================================
+
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+
+interface QuizListItem {
+  id: string; title: string; description: string; slug: string; status: string; version: number; created_at: string; updated_at: string
+}
+
+export default function QuizzesList() {
+  const { fetchWithAuth } = useAuth()
+  const navigate = useNavigate()
+  const [quizzes, setQuizzes] = useState<QuizListItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    try {
+      const res = await fetchWithAuth('/api/quizzes')
+      if (res.ok) setQuizzes(await res.json())
+    } catch {}
+    setLoading(false)
+  }
+
+  async function create() {
+    setCreating(true)
+    try {
+      const res = await fetchWithAuth('/api/quizzes', { method: 'POST' })
+      if (!res.ok) return
+      const data = await res.json()
+      navigate(`/dashboard/quiz/${data.id}`)
+    } catch {}
+    setCreating(false)
+  }
+
+  async function duplicate(id: string) {
+    try {
+      const res = await fetchWithAuth(`/api/quizzes/${id}/duplicate`, { method: 'POST' })
+      if (res.ok) load()
+    } catch {}
+  }
+
+  async function deleteQuiz(id: string) {
+    try {
+      await fetchWithAuth(`/api/quizzes/${id}/delete`, { method: 'DELETE' })
+      load()
+    } catch {}
+  }
+
+  return (
+    <div>
+      <div className="tool-header">
+        <h3>My Quizzes</h3>
+        <button className="btn btn-gradient" onClick={create} disabled={creating}>{creating ? 'Creating...' : '+ New Quiz'}</button>
+      </div>
+      {loading ? <div className="quiz-list-empty">Loading...</div> : quizzes.length === 0 ? (
+        <div className="quiz-list-empty">
+          <div className="quiz-list-empty-icon">[ ]</div>
+          <p>No quizzes created yet.</p>
+          <p className="quiz-list-empty-sub">Create your first interactive quiz to capture leads and engage your audience.</p>
+          <button className="btn btn-gradient" onClick={create}>Create First Quiz</button>
+        </div>
+      ) : (
+        <div className="quiz-list-grid">
+          {quizzes.map(q => (
+            <div key={q.id} className="quiz-list-card">
+              <div className="quiz-list-card-top">
+                <span className={`quiz-list-status quiz-status-${q.status}`}>{q.status}</span>
+                <span className="quiz-list-version">v{q.version}</span>
+              </div>
+              <h4 className="quiz-list-card-title">{q.title}</h4>
+              <p className="quiz-list-card-desc">{q.description || 'No description'}</p>
+              <div className="quiz-list-card-meta">
+                <span>{new Date(q.updated_at).toLocaleString()}</span>
+              </div>
+              <div className="quiz-list-card-actions">
+                <button className="btn btn-primary" onClick={() => navigate(`/dashboard/quiz/${q.id}`)}>Edit</button>
+                {q.status === 'published' && (
+                  <button className="btn btn-secondary" onClick={() => window.open(`/quiz/${q.slug}`, '_blank')}>View</button>
+                )}
+                <button className="btn btn-secondary" onClick={() => duplicate(q.id)}>Duplicate</button>
+                <button className="btn btn-secondary quiz-btn-danger" onClick={() => { if (confirm('Archive this quiz?')) deleteQuiz(q.id) }}>Archive</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+================================================================================
+SECTION 5: pages/QuizBuilder.tsx
+File: src/pages/QuizBuilder.tsx (all 53 lines)
+================================================================================
+
+import { useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { ReactFlowProvider } from '@xyflow/react'
+import { useAuth } from '../contexts/AuthContext'
+import { useQuizStore } from '../stores/quizStore'
+import QuizCanvas from '../components/quiz/QuizCanvas'
+import NodePalette from '../components/quiz/NodePalette'
+import PropertyPanel from '../components/quiz/PropertyPanel'
+import QuizTopBar from '../components/quiz/QuizTopBar'
+import PreviewQuiz from '../components/quiz/PreviewQuiz'
+
+export default function QuizBuilder() {
+  const { id } = useParams<{ id: string }>()
+  const { fetchWithAuth } = useAuth()
+  const navigate = useNavigate()
+  const loadQuiz = useQuizStore(s => s.loadQuiz)
+  const currentQuiz = useQuizStore(s => s.currentQuiz)
+  const isPreview = useQuizStore(s => s.isPreview)
+
+  useEffect(() => {
+    if (!id) return
+    loadQuiz(id, fetchWithAuth)
+  }, [id])
+
+  if (!currentQuiz) {
+    return (
+      <div className="quiz-builder-loading">
+        <p>Loading quiz...</p>
+      </div>
+    )
+  }
+
+  return (
+    <ReactFlowProvider>
+      <div className="quiz-builder">
+        <QuizTopBar quizId={id!} />
+        <div className="quiz-builder-body">
+          {isPreview ? (
+            <div className="quiz-preview-container">
+              <PreviewQuiz />
+            </div>
+          ) : (
+            <>
+              <NodePalette />
+              <QuizCanvas />
+              <PropertyPanel />
+            </>
+          )}
+        </div>
+      </div>
+    </ReactFlowProvider>
+  )
+}
+
+================================================================================
+SECTION 6: pages/QuizStats.tsx
+File: src/pages/QuizStats.tsx (all 92 lines)
+================================================================================
+
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+
+interface SessionStats {
+  total: number
+  completed: number
+  inProgress: number
+  avgScore: number
+  sessions: { id: string; score: number; status: string; created_at: string; completed_at: string }[]
+}
+
+export default function QuizStats() {
+  const { id } = useParams<{ id: string }>()
+  const { fetchWithAuth } = useAuth()
+  const navigate = useNavigate()
+  const [stats, setStats] = useState<SessionStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!id) return
+    setLoading(true)
+    fetchWithAuth(`/api/quizzes/${id}/stats`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setStats(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [id])
+
+  return (
+    <div>
+      <div className="tool-header">
+        <h3>Quiz Statistics</h3>
+        <button className="btn btn-secondary" onClick={() => navigate(`/dashboard/quiz/${id}`)}>Back to Editor</button>
+      </div>
+      {loading ? <p>Loading...</p> : !stats ? (
+        <div className="quiz-list-empty">
+          <p>No sessions found.</p>
+          <p className="quiz-list-empty-sub">Share your quiz to start receiving responses.</p>
+        </div>
+      ) : (
+        <div className="quiz-stats">
+          <div className="quiz-stats-grid">
+            <div className="quiz-stats-card">
+              <span className="quiz-stats-number">{stats.total}</span>
+              <span className="quiz-stats-label">Total sessions</span>
+            </div>
+            <div className="quiz-stats-card">
+              <span className="quiz-stats-number">{stats.completed}</span>
+              <span className="quiz-stats-label">Completed</span>
+            </div>
+            <div className="quiz-stats-card">
+              <span className="quiz-stats-number">{stats.inProgress}</span>
+              <span className="quiz-stats-label">In progress</span>
+            </div>
+            <div className="quiz-stats-card">
+              <span className="quiz-stats-number">{stats.avgScore.toFixed(1)}</span>
+              <span className="quiz-stats-label">Average score</span>
+            </div>
+          </div>
+          <div className="quiz-stats-sessions">
+            <h4>Recent sessions</h4>
+            {stats.sessions.length === 0 ? <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No sessions recorded.</p> : (
+              <table className="quiz-stats-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Status</th>
+                    <th>Score</th>
+                    <th>Start</th>
+                    <th>End</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.sessions.map(s => (
+                    <tr key={s.id}>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{s.id.slice(0, 8)}...</td>
+                      <td><span className={`badge ${s.status === 'completed' ? 'active' : 'warning'}`}>{s.status}</span></td>
+                      <td>{s.score}</td>
+                      <td style={{ fontSize: 12 }}>{new Date(s.created_at).toLocaleString()}</td>
+                      <td style={{ fontSize: 12 }}>{s.completed_at ? new Date(s.completed_at).toLocaleString() : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+================================================================================
+SECTION 7: pages/PlayQuiz.tsx
+File: src/pages/PlayQuiz.tsx (all 153 lines)
+================================================================================
+
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
+
+export default function PlayQuiz() {
+  const { slug } = useParams<{ slug: string }>()
+  const [quiz, setQuiz] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [currentNodeId, setCurrentNodeId] = useState<string | null>(null)
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({})
+  const [score, setScore] = useState(0)
+  const [finished, setFinished] = useState(false)
+  const [sessionToken, setSessionToken] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!slug) return
+    setLoading(true)
+    fetch(`/api/quizzes/slug/${slug}`)
+      .then(r => r.json())
+      .then(data => {
+        setQuiz(data)
+        const start = data.nodes?.find((n: any) => n.data?.type === 'start')
+        if (start) {
+          const edge = data.edges?.find((e: any) => e.source === start.id)
+          setCurrentNodeId(edge?.target || null)
+        }
+        // Start session
+        fetch(`/api/quizzes/${data.id}/run`, { method: 'POST' })
+          .then(r => r.json())
+          .then(s => setSessionToken(s.session_token || ''))
+          .catch(() => {})
+      })
+      .catch(() => setError('Quiz not found'))
+      .finally(() => setLoading(false))
+  }, [slug])
+
+  const currentNode = useMemo(() => {
+    if (!currentNodeId || !quiz) return null
+    return quiz.nodes.find((n: any) => n.id === currentNodeId)
+  }, [currentNodeId, quiz])
+
+  const getNextNode = useCallback((nodeId: string) => {
+    if (!quiz) return null
+    const outgoing = quiz.edges.filter((e: any) => e.source === nodeId)
+    if (outgoing.length === 0) return null
+    if (outgoing.length === 1) return outgoing[0].target
+    const sourceNode = quiz.nodes.find((n: any) => n.id === nodeId)
+    if (sourceNode?.data?.type === 'logic' && sourceNode.data.logic) {
+      const logic = sourceNode.data.logic
+      let conditionMet = false
+      if (logic.conditionType === 'score') {
+        const val = parseInt(logic.value) || 0
+        if (logic.operator === '>=') conditionMet = score >= val
+        else if (logic.operator === '>') conditionMet = score > val
+        else if (logic.operator === '<=') conditionMet = score <= val
+        else if (logic.operator === '<') conditionMet = score < val
+        else if (logic.operator === '==') conditionMet = score === val
+        else if (logic.operator === '!=') conditionMet = score !== val
+      }
+      if (conditionMet) {
+        const trueEdge = outgoing.find((e: any) => e.sourceHandle === 'true')
+        return trueEdge?.target || outgoing[0].target
+      } else {
+        const falseEdge = outgoing.find((e: any) => e.sourceHandle === 'false')
+        return falseEdge?.target || outgoing[outgoing.length - 1].target
+      }
+    }
+    return outgoing[0].target
+  }, [quiz, score])
+
+  function handleAnswer(value: string | string[]) {
+    if (!currentNodeId) return
+    setAnswers(prev => ({ ...prev, [currentNodeId]: value }))
+    if (sessionToken) {
+      fetch(`/api/sessions/${sessionToken}/answer`, {
+        method: 'POST',
+        body: JSON.stringify({ nodeId: currentNodeId, answer: value }),
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {})
+    }
+    const next = getNextNode(currentNodeId)
+    if (!next) { finish(); return }
+    const nextNode = quiz?.nodes.find((n: any) => n.id === next)
+    if (nextNode?.data?.type === 'score' && nextNode.data.score) {
+      const sc = nextNode.data.score
+      if (sc.action === 'add') setScore(s => s + sc.value)
+      else if (sc.action === 'subtract') setScore(s => s - sc.value)
+      else if (sc.action === 'set') setScore(sc.value)
+      const after = getNextNode(next)
+      if (!after) { finish(); return }
+      setCurrentNodeId(after)
+      return
+    }
+    if (nextNode?.data?.type === 'result' || nextNode?.data?.type === 'redirect') {
+      setCurrentNodeId(next)
+      finish()
+      return
+    }
+    setCurrentNodeId(next)
+  }
+
+  function finish() {
+    setFinished(true)
+    if (sessionToken) {
+      fetch(`/api/sessions/${sessionToken}/complete`, { method: 'POST', body: JSON.stringify({ score }), headers: { 'Content-Type': 'application/json' } }).catch(() => {})
+    }
+  }
+
+  if (loading) return <div className="play-quiz-loading"><div className="play-quiz-spinner" /><p>Loading quiz...</p></div>
+  if (error) return <div className="play-quiz-error"><h2>Quiz not found</h2><p>Check the link and try again.</p></div>
+  if (!quiz) return null
+
+  const settings = quiz.settings || {}
+
+  if (finished) {
+    const node = currentNode ? quiz.nodes.find((n: any) => n.id === currentNode) : null
+    const resultData = node?.data?.result
+    const redirectData = node?.data?.redirect
+    return (
+      <div className="play-quiz play-quiz-result">
+        {resultData?.imageUrl && <img src={resultData.imageUrl} alt="" className="play-quiz-img" />}
+        <h2>{resultData?.title || 'Quiz completed'}</h2>
+        <p>{resultData?.content || `Your score: ${score}`}</p>
+        {resultData?.redirectUrl && <a href={resultData.redirectUrl} className="btn btn-gradient play-quiz-cta">Continue</a>}
+        {redirectData?.url && (
+          <>
+            <p>Redirecting in {redirectData.timeout || 5}s...</p>
+            <a href={redirectData.url} className="btn btn-gradient play-quiz-cta">Go now</a>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  const nodeData = currentNode?.data
+  if (nodeData?.type === 'question' && nodeData.question) {
+    const q = nodeData.question
+    return (
+      <div className="play-quiz">
+        {settings.progressBar && <div className="play-quiz-progress"><div className="play-quiz-progress-bar" style={{ width: '30%' }} /></div>}
+        <h3 className="play-quiz-question">{q.text || '...'}</h3>
+        {q.description && <p className="play-quiz-desc">{q.description}</p>}
+        <div className="play-quiz-options">
+          {q.options.map((opt: any, i: number) => (
+            <button key={i} className="play-quiz-option" onClick={() => handleAnswer(opt.value)}>{opt.label}</button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return <div className="play-quiz play-quiz-empty"><p>Blank quiz</p></div>
+}
+
+================================================================================
+SECTION 8: components/quiz/NodePalette.tsx
+File: src/components/quiz/NodePalette.tsx (all 50 lines)
+================================================================================
+
+import { useCallback } from 'react'
+import { useReactFlow } from '@xyflow/react'
+import { useQuizStore, type NodeType } from '../../stores/quizStore'
+
+const CARD_TYPES: { type: NodeType; label: string; desc: string; color: string }[] = [
+  { type: 'start', label: 'Start', desc: 'Starting point', color: '#a855f7' },
+  { type: 'question', label: 'Question', desc: 'Multiple choice', color: '#3b82f6' },
+  { type: 'logic', label: 'Condition', desc: 'If / Else', color: '#f59e0b' },
+  { type: 'score', label: 'Score', desc: 'Add / Subtract', color: '#10b981' },
+  { type: 'result', label: 'Result', desc: 'Final screen', color: '#ec4899' },
+  { type: 'redirect', label: 'Redirect', desc: 'External URL', color: '#6366f1' },
+]
+
+export default function NodePalette() {
+  const addNode = useQuizStore(s => s.addNode)
+  const reactFlow = useReactFlow()
+
+  const onDragStart = useCallback((e: React.DragEvent, type: NodeType) => {
+    e.dataTransfer.setData('application/quiz-node-type', type)
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
+
+  return (
+    <div className="quiz-palette">
+      <div className="quiz-palette-header">Cards</div>
+      <div className="quiz-palette-list">
+        {CARD_TYPES.map(ct => (
+          <div
+            key={ct.type}
+            className="quiz-palette-item"
+            draggable={ct.type !== 'start'}
+            onDragStart={e => onDragStart(e, ct.type)}
+            onClick={() => {
+              const viewport = reactFlow.getViewport()
+              const pos = reactFlow.screenToFlowPosition({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 })
+              addNode(ct.type, pos)
+            }}
+          >
+            <div className="quiz-palette-item-dot" style={{ background: ct.color }} />
+            <div className="quiz-palette-item-info">
+              <span className="quiz-palette-item-label">{ct.label}</span>
+              <span className="quiz-palette-item-desc">{ct.desc}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="quiz-palette-footer">Drag to canvas or click to add</div>
+    </div>
+  )
+}
+
+================================================================================
+SECTION 9: components/quiz/PropertyPanel.tsx
+File: src/components/quiz/PropertyPanel.tsx (all 194 lines)
+================================================================================
+
+import { useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+import { useQuizStore } from '../../stores/quizStore'
+
+export default function PropertyPanel() {
+  const selectedNodeId = useQuizStore(s => s.selectedNodeId)
+  const currentQuiz = useQuizStore(s => s.currentQuiz)
+  const updateNodeData = useQuizStore(s => s.updateNodeData)
+  const removeNode = useQuizStore(s => s.removeNode)
+
+  const node = currentQuiz?.nodes.find(n => n.id === selectedNodeId)
+
+  if (!node) {
+    return (
+      <div className="quiz-panel quiz-panel-empty">
+        <div className="quiz-panel-empty-icon">[ ]</div>
+        <p>Select a card to edit its properties</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="quiz-panel">
+      <div className="quiz-panel-header">
+        <span>Configure Card</span>
+        <button className="quiz-panel-remove" onClick={() => removeNode(node.id)} title="Remove card">X</button>
+      </div>
+      <div className="quiz-panel-body">
+        <div className="quiz-panel-field">
+          <label>Label</label>
+          <input type="text" value={node.data.label} onChange={e => updateNodeData(node.id, { label: e.target.value })} />
+        </div>
+        <div className="quiz-panel-divider" />
+        {node.type === 'question' && <QuestionFields nodeId={node.id} />}
+        {node.type === 'logic' && <LogicFields nodeId={node.id} />}
+        {node.type === 'result' && <ResultFields nodeId={node.id} />}
+        {node.type === 'redirect' && <RedirectFields nodeId={node.id} />}
+        {node.type === 'score' && <ScoreFields nodeId={node.id} />}
+      </div>
+    </div>
+  )
+}
+
+function QuestionFields({ nodeId }: { nodeId: string }) {
+  const updateNodeData = useQuizStore(s => s.updateNodeData)
+  const node = useQuizStore(s => s.currentQuiz?.nodes.find(n => n.id === nodeId))
+  const q = node?.data?.question
+  if (!q) return null
+
+  return (
+    <>
+      <div className="quiz-panel-field">
+        <label>Question text</label>
+        <textarea value={q.text} onChange={e => updateNodeData(nodeId, { question: { ...q, text: e.target.value } })} rows={3} />
+      </div>
+      <div className="quiz-panel-field">
+        <label>Description (optional)</label>
+        <textarea value={q.description} onChange={e => updateNodeData(nodeId, { question: { ...q, description: e.target.value } })} rows={2} />
+      </div>
+      <div className="quiz-panel-field">
+        <label>Options</label>
+        {q.options.map((opt, i) => (
+          <div key={i} className="quiz-panel-option-row">
+            <input type="text" value={opt.label} onChange={e => {
+              const opts = [...q.options]; opts[i] = { ...opts[i], label: e.target.value }; updateNodeData(nodeId, { question: { ...q, options: opts } })
+            }} placeholder="Label" />
+            <input type="checkbox" checked={opt.correct} onChange={e => {
+              const opts = [...q.options]; opts[i] = { ...opts[i], correct: e.target.checked }; updateNodeData(nodeId, { question: { ...q, options: opts } })
+            }} title="Correct" />
+            <button className="quiz-panel-remove-opt" onClick={() => {
+              const opts = q.options.filter((_, idx) => idx !== i); updateNodeData(nodeId, { question: { ...q, options: opts } })
+            }}>X</button>
+          </div>
+        ))}
+        <button className="quiz-panel-add-opt" onClick={() => {
+          const opts = [...q.options, { label: `Option ${q.options.length + 1}`, value: String(q.options.length + 1), correct: false }]
+          updateNodeData(nodeId, { question: { ...q, options: opts } })
+        }}>+ Add option</button>
+      </div>
+      <div className="quiz-panel-field">
+        <label>Media URL (optional)</label>
+        <input type="text" value={q.mediaUrl} onChange={e => updateNodeData(nodeId, { question: { ...q, mediaUrl: e.target.value } })} placeholder="https://..." />
+      </div>
+      <div className="quiz-panel-field-row">
+        <label><input type="checkbox" checked={q.required} onChange={e => updateNodeData(nodeId, { question: { ...q, required: e.target.checked } })} /> Required</label>
+        <label><input type="checkbox" checked={q.multiple} onChange={e => updateNodeData(nodeId, { question: { ...q, multiple: e.target.checked } })} /> Multiple answers</label>
+      </div>
+    </>
+  )
+}
+
+function LogicFields({ nodeId }: { nodeId: string }) {
+  const updateNodeData = useQuizStore(s => s.updateNodeData)
+  const node = useQuizStore(s => s.currentQuiz?.nodes.find(n => n.id === nodeId))
+  const l = node?.data?.logic
+  if (!l) return null
+  return (
+    <>
+      <div className="quiz-panel-field">
+        <label>Condition type</label>
+        <select value={l.conditionType} onChange={e => updateNodeData(nodeId, { logic: { ...l, conditionType: e.target.value as any } })}>
+          <option value="score">Score</option>
+          <option value="answer">Answer</option>
+          <option value="custom_variable">Custom variable</option>
+        </select>
+      </div>
+      <div className="quiz-panel-field">
+        <label>Operator</label>
+        <select value={l.operator} onChange={e => updateNodeData(nodeId, { logic: { ...l, operator: e.target.value as any } })}>
+          <option value=">">Greater than (>)</option>
+          <option value="<">Less than (<)</option>
+          <option value=">=">Greater or equal (>=)</option>
+          <option value="<=">Less or equal (<=)</option>
+          <option value="==">Equal (==)</option>
+          <option value="!=">Different (!=)</option>
+          <option value="contains">Contains</option>
+        </select>
+      </div>
+      <div className="quiz-panel-field">
+        <label>Value</label>
+        <input type="text" value={l.value} onChange={e => updateNodeData(nodeId, { logic: { ...l, value: e.target.value } })} />
+      </div>
+    </>
+  )
+}
+
+function ResultFields({ nodeId }: { nodeId: string }) {
+  const updateNodeData = useQuizStore(s => s.updateNodeData)
+  const node = useQuizStore(s => s.currentQuiz?.nodes.find(n => n.id === nodeId))
+  const r = node?.data?.result
+  if (!r) return null
+  return (
+    <>
+      <div className="quiz-panel-field">
+        <label>Title</label>
+        <input type="text" value={r.title} onChange={e => updateNodeData(nodeId, { result: { ...r, title: e.target.value } })} />
+      </div>
+      <div className="quiz-panel-field">
+        <label>Content</label>
+        <textarea value={r.content} onChange={e => updateNodeData(nodeId, { result: { ...r, content: e.target.value } })} rows={4} />
+      </div>
+      <div className="quiz-panel-field">
+        <label>Image URL (optional)</label>
+        <input type="text" value={r.imageUrl} onChange={e => updateNodeData(nodeId, { result: { ...r, imageUrl: e.target.value } })} />
+      </div>
+      <div className="quiz-panel-field">
+        <label>Redirect URL (optional)</label>
+        <input type="text" value={r.redirectUrl} onChange={e => updateNodeData(nodeId, { result: { ...r, redirectUrl: e.target.value } })} />
+      </div>
+    </>
+  )
+}
+
+function RedirectFields({ nodeId }: { nodeId: string }) {
+  const updateNodeData = useQuizStore(s => s.updateNodeData)
+  const node = useQuizStore(s => s.currentQuiz?.nodes.find(n => n.id === nodeId))
+  const r = node?.data?.redirect
+  if (!r) return null
+  return (
+    <>
+      <div className="quiz-panel-field">
+        <label>Destination URL</label>
+        <input type="text" value={r.url} onChange={e => updateNodeData(nodeId, { redirect: { ...r, url: e.target.value } })} placeholder="https://..." />
+      </div>
+      <div className="quiz-panel-field">
+        <label>Timeout (seconds)</label>
+        <input type="number" value={r.timeout} onChange={e => updateNodeData(nodeId, { redirect: { ...r, timeout: parseInt(e.target.value) || 5 } })} />
+      </div>
+    </>
+  )
+}
+
+function ScoreFields({ nodeId }: { nodeId: string }) {
+  const updateNodeData = useQuizStore(s => s.updateNodeData)
+  const node = useQuizStore(s => s.currentQuiz?.nodes.find(n => n.id === nodeId))
+  const s = node?.data?.score
+  if (!s) return null
+  return (
+    <>
+      <div className="quiz-panel-field">
+        <label>Action</label>
+        <select value={s.action} onChange={e => updateNodeData(nodeId, { score: { ...s, action: e.target.value as any } })}>
+          <option value="add">Add</option>
+          <option value="subtract">Subtract</option>
+          <option value="set">Set</option>
+        </select>
+      </div>
+      <div className="quiz-panel-field">
+        <label>Value</label>
+        <input type="number" value={s.value} onChange={e => updateNodeData(nodeId, { score: { ...s, value: parseInt(e.target.value) || 0 } })} />
+      </div>
+    </>
+  )
+}
+
+================================================================================
+SECTION 10: components/quiz/QuizCanvas.tsx
+File: src/components/quiz/QuizCanvas.tsx (all 159 lines)
+================================================================================
+
+import { useCallback, useRef, useEffect, useState } from 'react'
+import {
+  ReactFlow,
+  Background,
+  BackgroundVariant,
+  MiniMap,
+  Controls,
+  type Node,
+  type Edge,
+  type Connection,
+  type NodeTypes,
+  useNodesState,
+  useEdgesState,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
+import { useQuizStore, type QuizNodeData } from '../../stores/quizStore'
+import QuizNodeComponent from './QuizNodeComponent'
+
+const nodeTypes: NodeTypes = { quizNode: QuizNodeComponent }
+
+function CanvasInner() {
+  const currentQuiz = useQuizStore(s => s.currentQuiz)
+  const setNodes = useQuizStore(s => s.setNodes)
+  const setEdges = useQuizStore(s => s.setEdges)
+  const addEdge = useQuizStore(s => s.addEdge)
+  const removeEdge = useQuizStore(s => s.removeEdge)
+  const selectNode = useQuizStore(s => s.selectNode)
+  const updateNodePosition = useQuizStore(s => s.updateNodePosition)
+  const isPreview = useQuizStore(s => s.isPreview)
+  const pushHistory = useQuizStore(s => s.pushHistory)
+  const [nodes, setLocalNodes, onNodesChange] = useNodesState(currentQuiz?.nodes || [])
+  const [edges, setLocalEdges, onEdgesChange] = useEdgesState(currentQuiz?.edges || [])
+  const [error, setError] = useState('')
+
+  const reactFlowWrapper = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (currentQuiz) {
+      setLocalNodes(currentQuiz.nodes)
+      setLocalEdges(currentQuiz.edges)
+    }
+  }, [currentQuiz?.id])
+
+  const onConnect = useCallback((connection: Connection) => {
+    setError('')
+    const valid = addEdge(connection)
+    if (!valid) {
+      setError('Invalid connection: cycle detected')
+      return
+    }
+    const state = useQuizStore.getState()
+    setLocalEdges([...state.currentQuiz!.edges])
+  }, [addEdge])
+
+  const onNodeDragStop = useCallback((_: any, node: Node) => {
+    updateNodePosition(node.id, node.position)
+  }, [updateNodePosition])
+
+  const onNodesChangeHandler = useCallback((changes: any) => {
+    if (isPreview) return
+    onNodesChange(changes)
+  }, [isPreview, onNodesChange])
+
+  const onEdgesChangeHandler = useCallback((changes: any) => {
+    if (isPreview) return
+    onEdgesChange(changes)
+    // If edge was deleted by user click
+    for (const c of changes) {
+      if (c.type === 'remove') {
+        removeEdge(c.id)
+      }
+    }
+  }, [isPreview, onEdgesChange, removeEdge])
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    const type = event.dataTransfer.getData('application/quiz-node-type') as any
+    if (!type) return
+    const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect()
+    if (!reactFlowBounds) return
+    const position = {
+      x: event.clientX - reactFlowBounds.left - 100,
+      y: event.clientY - reactFlowBounds.top - 30,
+    }
+    useQuizStore.getState().addNode(type, position)
+    pushHistory()
+    const state = useQuizStore.getState()
+    setLocalNodes([...state.currentQuiz!.nodes])
+  }, [pushHistory])
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) useQuizStore.getState().redo()
+        else useQuizStore.getState().undo()
+        const state = useQuizStore.getState()
+        if (state.currentQuiz) {
+          setLocalNodes([...state.currentQuiz.nodes])
+          setLocalEdges([...state.currentQuiz.edges])
+        }
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const sel = useQuizStore.getState().selectedNodeId
+        if (sel) {
+          useQuizStore.getState().removeNode(sel)
+          const state = useQuizStore.getState()
+          setLocalNodes([...state.currentQuiz!.nodes])
+          setLocalEdges([...state.currentQuiz!.edges])
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  return (
+    <div className="quiz-canvas-wrapper" ref={reactFlowWrapper}>
+      {error && <div className="quiz-canvas-error">{error}</div>}
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChangeHandler}
+        onEdgesChange={onEdgesChangeHandler}
+        onConnect={onConnect}
+        onNodeDragStop={onNodeDragStop}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onNodeClick={(_, node) => selectNode(node.id)}
+        onPaneClick={() => selectNode(null)}
+        nodeTypes={nodeTypes}
+        fitView
+        minZoom={0.1}
+        maxZoom={2}
+        nodesDraggable={!isPreview}
+        nodesConnectable={!isPreview}
+        elementsSelectable={!isPreview}
+        colorMode="dark"
+      >
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(168,85,247,0.08)" />
+        <Controls showInteractive={false} />
+        <MiniMap
+          nodeColor={() => '#a855f7'}
+          maskColor="rgba(0,0,0,0.6)"
+          style={{ background: '#1a1a2e', border: '1px solid rgba(168,85,247,0.15)', borderRadius: 6 }}
+        />
+      </ReactFlow>
+    </div>
+  )
+}
+
+export default function QuizCanvas() {
+  return <CanvasInner />
+}
+
+================================================================================
+SECTION 11: components/quiz/QuizNodeComponent.tsx
+File: src/components/quiz/QuizNodeComponent.tsx (all 58 lines)
+================================================================================
+
+import { memo } from 'react'
+import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
+import type { QuizNodeData } from '../../stores/quizStore'
+
+const NODE_ICONS: Record<string, string> = {
+  start: '>',
+  question: '?',
+  logic: '<>',
+  result: '*',
+  redirect: '^',
+  score: '+/-',
+  custom: 'gear',
+}
+
+function QuizNodeComponent({ data, selected }: NodeProps<Node<QuizNodeData>>) {
+  const icon = NODE_ICONS[data.type] || '[ ]'
+  return (
+    <div className={`quiz-node-card quiz-node-${data.type}${selected ? ' quiz-node-selected' : ''}`}>
+      {data.type !== 'start' && <Handle type="target" position={Position.Left} className="quiz-handle quiz-handle-input" />}
+      <div className="quiz-node-header">
+        <span className="quiz-node-icon">{icon}</span>
+        <span className="quiz-node-type-label">{data.label}</span>
+      </div>
+      <div className="quiz-node-preview">
+        {data.type === 'question' && data.question && (
+          <span className="quiz-node-preview-text">{data.question.text || 'No question'}</span>
+        )}
+        {data.type === 'question' && data.question && (
+          <span className="quiz-node-option-count">{data.question.options.length} option{data.question.options.length !== 1 ? 's' : ''}</span>
+        )}
+        {data.type === 'result' && data.result && (
+          <span className="quiz-node-preview-text">{data.result.title || 'No title'}</span>
+        )}
+        {data.type === 'logic' && data.logic && (
+          <span className="quiz-node-preview-text">{data.logic.conditionType} {data.logic.operator} {data.logic.value}</span>
+        )}
+        {data.type === 'redirect' && data.redirect && (
+          <span className="quiz-node-preview-text">{data.redirect.url || 'No URL'}</span>
+        )}
+        {data.type === 'score' && data.score && (
+          <span className="quiz-node-preview-text">{data.score.action === 'add' ? '+' : data.score.action === 'subtract' ? '-' : '='}{data.score.value}</span>
+        )}
+        {data.type === 'start' && <span className="quiz-node-preview-text">Quiz starting point</span>}
+      </div>
+      {(data.type === 'logic') && (
+        <>
+          <Handle type="source" position={Position.Right} id="true" className="quiz-handle quiz-handle-output quiz-handle-true" title="Yes" />
+          <Handle type="source" position={Position.Bottom} id="false" className="quiz-handle quiz-handle-output quiz-handle-false" title="No" />
+        </>
+      )}
+      {(data.type !== 'logic' && data.type !== 'result' && data.type !== 'redirect') && (
+        <Handle type="source" position={Position.Right} className="quiz-handle quiz-handle-output" />
+      )}
+    </div>
+  )
+}
+
+export default memo(QuizNodeComponent)
+
+================================================================================
+SECTION 12: components/quiz/QuizTopBar.tsx
+File: src/components/quiz/QuizTopBar.tsx (all 62 lines)
+================================================================================
+
+import { useCallback, useEffect, useRef } from 'react'
+import { useQuizStore } from '../../stores/quizStore'
+import { useAuth } from '../../contexts/AuthContext'
+
+export default function QuizTopBar({ quizId }: { quizId: string }) {
+  const { fetchWithAuth } = useAuth()
+  const title = useQuizStore(s => s.currentQuiz?.title || '')
+  const setTitle = useQuizStore(s => s.setTitle)
+  const isDirty = useQuizStore(s => s.isDirty)
+  const isSaving = useQuizStore(s => s.isSaving)
+  const isPreview = useQuizStore(s => s.isPreview)
+  const togglePreview = useQuizStore(s => s.togglePreview)
+  const saveQuiz = useQuizStore(s => s.saveQuiz)
+  const undo = useQuizStore(s => s.undo)
+  const redo = useQuizStore(s => s.redo)
+  const past = useQuizStore(s => s.past)
+  const future = useQuizStore(s => s.future)
+  const publishQuiz = useQuizStore(s => s.publishQuiz)
+  const autoSaveRef = useRef<ReturnType<typeof setTimeout>>()
+
+  useEffect(() => {
+    if (!isDirty) return
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current)
+    autoSaveRef.current = setTimeout(() => saveQuiz(fetchWithAuth), 30000)
+    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current) }
+  }, [isDirty, saveQuiz, fetchWithAuth])
+
+  return (
+    <div className="quiz-topbar">
+      <div className="quiz-topbar-left">
+        <input
+          type="text"
+          className="quiz-topbar-title"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Quiz Name"
+        />
+        <span className={`quiz-topbar-dot ${isDirty ? 'quiz-dot-unsaved' : 'quiz-dot-saved'}`} title={isDirty ? 'Unsaved' : 'Saved'} />
+        {isSaving && <span className="quiz-topbar-saving">Saving...</span>}
+      </div>
+      <div className="quiz-topbar-center">
+        <button className="quiz-topbar-btn" onClick={undo} disabled={past.length === 0} title="Undo (Ctrl+Z)">Undo</button>
+        <button className="quiz-topbar-btn" onClick={redo} disabled={future.length === 0} title="Redo (Ctrl+Shift+Z)">Redo</button>
+      </div>
+      <div className="quiz-topbar-right">
+        <span className="quiz-topbar-version">v{useQuizStore(s => s.savedVersion)}</span>
+        <button className="quiz-topbar-btn" onClick={() => saveQuiz(fetchWithAuth)} title="Save">Save</button>
+        <label className="quiz-topbar-toggle">
+          <input type="checkbox" checked={isPreview} onChange={togglePreview} />
+          <span>{isPreview ? 'Edit' : 'Preview'}</span>
+        </label>
+        {!isPreview && (
+          <button className="quiz-topbar-publish" onClick={async () => {
+            const ok = await publishQuiz(fetchWithAuth)
+            if (ok) alert('Quiz published successfully!')
+            else alert('Error publishing quiz')
+          }}>Publish</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+================================================================================
+SECTION 13: components/quiz/PreviewQuiz.tsx
+File: src/components/quiz/PreviewQuiz.tsx (all 164 lines)
+================================================================================
+
+import { useState, useCallback, useMemo } from 'react'
+import { useQuizStore, type QuizNodeData } from '../../stores/quizStore'
+
+export default function PreviewQuiz() {
+  const currentQuiz = useQuizStore(s => s.currentQuiz)
+  const [currentNodeId, setCurrentNodeId] = useState<string | null>(() => {
+    const start = currentQuiz?.nodes.find(n => n.data.type === 'start')
+    if (!start) return null
+    const startEdge = currentQuiz?.edges.find(e => e.source === start.id)
+    return startEdge?.target || null
+  })
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({})
+  const [score, setScore] = useState(0)
+  const [finished, setFinished] = useState(false)
+
+  const currentNode = useMemo(() => {
+    if (!currentNodeId || !currentQuiz) return null
+    return currentQuiz.nodes.find(n => n.id === currentNodeId) || null
+  }, [currentNodeId, currentQuiz])
+
+  const getNextNode = useCallback((nodeId: string, answer?: string) => {
+    if (!currentQuiz) return null
+    const outgoing = currentQuiz.edges.filter(e => e.source === nodeId)
+    if (outgoing.length === 0) return null
+    if (outgoing.length === 1) return outgoing[0].target
+    // Logic branch: find the right edge
+    const sourceNode = currentQuiz.nodes.find(n => n.id === nodeId)
+    if (sourceNode?.data.type === 'logic' && sourceNode.data.logic) {
+      const logic = sourceNode.data.logic
+      let conditionMet = false
+      if (logic.conditionType === 'score') {
+        const val = parseInt(logic.value) || 0
+        if (logic.operator === '>=') conditionMet = score >= val
+        else if (logic.operator === '>') conditionMet = score > val
+        else if (logic.operator === '<=') conditionMet = score <= val
+        else if (logic.operator === '<') conditionMet = score < val
+        else if (logic.operator === '==') conditionMet = score === val
+        else if (logic.operator === '!=') conditionMet = score !== val
+      }
+      if (conditionMet) {
+        const trueEdge = outgoing.find(e => e.sourceHandle === 'true')
+        return trueEdge?.target || outgoing[0].target
+      } else {
+        const falseEdge = outgoing.find(e => e.sourceHandle === 'false')
+        return falseEdge?.target || (outgoing.length > 1 ? outgoing[1].target : outgoing[0].target)
+      }
+    }
+    return outgoing[0].target
+  }, [currentQuiz, score])
+
+  function handleAnswer(answer: string | string[]) {
+    if (!currentNodeId) return
+    setAnswers(prev => ({ ...prev, [currentNodeId]: answer }))
+
+    // Check for score nodes connected
+    const next = getNextNode(currentNodeId)
+    if (!next) { setFinished(true); return }
+
+    // Check if next node is a Score node and auto-process it
+    const nextNode = currentQuiz?.nodes.find(n => n.id === next)
+    if (nextNode?.data.type === 'score' && nextNode.data.score) {
+      const sc = nextNode.data.score
+      if (sc.action === 'add') setScore(s => s + sc.value)
+      else if (sc.action === 'subtract') setScore(s => s - sc.value)
+      else if (sc.action === 'set') setScore(sc.value)
+      const afterScore = getNextNode(next)
+      if (!afterScore) { setFinished(true); return }
+      setCurrentNodeId(afterScore)
+      return
+    }
+
+    // Check if next node is a Result/Redirect
+    if (nextNode?.data.type === 'result' || nextNode?.data.type === 'redirect') {
+      setCurrentNodeId(next)
+      setFinished(true)
+      return
+    }
+
+    setCurrentNodeId(next)
+  }
+
+  function restart() {
+    const start = currentQuiz?.nodes.find(n => n.data.type === 'start')
+    if (!start) return
+    const startEdge = currentQuiz?.edges.find(e => e.source === start.id)
+    setCurrentNodeId(startEdge?.target || null)
+    setAnswers({})
+    setScore(0)
+    setFinished(false)
+  }
+
+  if (!currentQuiz) return null
+  if (!currentNode && !finished) {
+    return (
+      <div className="quiz-preview-empty">
+        <p>Configure the quiz by connecting cards to see the preview.</p>
+      </div>
+    )
+  }
+
+  if (finished) {
+    const node = currentNode
+    const resultData = node?.data?.result
+    const redirectData = node?.data?.redirect
+    return (
+      <div className="quiz-preview-result">
+        {resultData && (
+          <>
+            {resultData.imageUrl && <img src={resultData.imageUrl} alt="" className="quiz-preview-result-img" />}
+            <h2>{resultData.title || 'Quiz completed'}</h2>
+            <p>{resultData.content}</p>
+          </>
+        )}
+        {redirectData && (
+          <>
+            <p>Redirecting to: {redirectData.url}</p>
+            {redirectData.url && <a href={redirectData.url} className="btn btn-gradient">Go to destination</a>}
+          </>
+        )}
+        {!resultData && !redirectData && <p>Quiz completed! Score: {score}</p>}
+        <button className="btn btn-secondary" onClick={restart} style={{ marginTop: 16 }}>Restart quiz</button>
+      </div>
+    )
+  }
+
+  const nodeData = currentNode?.data
+  if (nodeData?.type === 'question' && nodeData.question) {
+    const q = nodeData.question
+    return (
+      <div className="quiz-preview-card">
+        <h3>{q.text || 'No question'}</h3>
+        {q.description && <p className="quiz-preview-desc">{q.description}</p>}
+        <div className="quiz-preview-options">
+          {q.options.map((opt, i) => (
+            <button key={i} className="quiz-preview-option" onClick={() => handleAnswer(opt.value)}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="quiz-preview-score">Score: {score}</div>
+      </div>
+    )
+  }
+
+  if (nodeData?.type === 'result' && nodeData.result) {
+    const r = nodeData.result
+    return (
+      <div className="quiz-preview-result">
+        {r.imageUrl && <img src={r.imageUrl} alt="" className="quiz-preview-result-img" />}
+        <h2>{r.title || 'Result'}</h2>
+        <p>{r.content}</p>
+        {r.redirectUrl && <a href={r.redirectUrl} className="btn btn-gradient">Continue</a>}
+        <button className="btn btn-secondary" onClick={restart} style={{ marginTop: 16 }}>Restart quiz</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="quiz-preview-empty">
+      <p>Card not supported in preview: {nodeData?.type}</p>
+      <button className="btn btn-secondary" onClick={restart}>Restart</button>
+    </div>
+  )
+}
+
+================================================================================
+SECTION 14: server/db.js (Quiz Tables)
+File: server/db.js (lines 225-268)
+================================================================================
+
+  // Quiz Builder
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quizzes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT 'Novo Quiz',
+      description TEXT DEFAULT '',
+      slug TEXT UNIQUE NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      ast JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[],"settings":{"theme":"dark","layout":"single","progressBar":true,"allowBacktracking":false,"randomizeQuestions":false}}',
+      version INT NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      published_at TEXT
+    )
+  `).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quiz_history (
+      id TEXT PRIMARY KEY,
+      quiz_id TEXT NOT NULL,
+      ast_snapshot JSONB NOT NULL,
+      version INT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quiz_sessions (
+      id TEXT PRIMARY KEY,
+      quiz_id TEXT NOT NULL,
+      user_id TEXT,
+      session_token TEXT UNIQUE NOT NULL,
+      current_node_id TEXT,
+      answers JSONB DEFAULT '[]',
+      score INT DEFAULT 0,
+      status TEXT DEFAULT 'in_progress',
+      created_at TEXT NOT NULL,
+      completed_at TEXT
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quizzes_user_id ON quizzes(user_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quizzes_slug ON quizzes(slug)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_history_quiz_id ON quiz_history(quiz_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_sessions_quiz_id ON quiz_sessions(quiz_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quiz_sessions_token ON quiz_sessions(session_token)`).catch(() => {})
+
+================================================================================
+SECTION 15: server/index.js (Quiz Routes + validateQuizAst)
+File: server/index.js (lines 2511-2727)
+================================================================================
+
+function validateQuizAst(ast) {
+  if (!ast || typeof ast !== 'object') return 'Invalid AST'
+  if (!Array.isArray(ast.nodes)) return 'nodes must be an array'
+  if (!Array.isArray(ast.edges)) return 'edges must be an array'
+  for (const n of ast.nodes) {
+    if (!n.id || !n.type || !n.position) return `Invalid node: ${n.id || 'no id'}`
+    if (!['start', 'question', 'logic', 'result', 'redirect', 'score', 'custom'].includes(n.type)) return `Unknown node type: ${n.type}`
+  }
+  // Check circular dependencies
+  const adj = {}
+  for (const e of ast.edges) {
+    if (!adj[e.source]) adj[e.source] = []
+    adj[e.source].push(e.target)
+  }
+  for (const n of ast.nodes) {
+    const visited = new Set()
+    function dfs(nodeId) {
+      if (nodeId === n.id) return true
+      if (visited.has(nodeId)) return false
+      visited.add(nodeId)
+      for (const next of (adj[nodeId] || [])) {
+        if (dfs(next)) return true
+      }
+      return false
+    }
+    for (const next of (adj[n.id] || [])) {
+      if (dfs(next)) return 'Circular connection detected'
+    }
+  }
+  return null
+}
+
+// ─── Quiz Builder ──────────────────────────────────────────────────
+
+// List quizzes
+app.get('/api/quizzes', authMiddleware, async (req, res) => {
+  try {
+    const quizzes = await query('SELECT id, title, description, slug, status, version, created_at, updated_at FROM quizzes WHERE user_id = $1 ORDER BY updated_at DESC', [req.user.id])
+    res.json(quizzes || [])
+  } catch { res.status(500).json({ error: 'Error listing quizzes' }) }
+})
+
+// Create quiz
+app.post('/api/quizzes', authMiddleware, async (req, res) => {
+  try {
+    const id = randomUUID()
+    const slug = 'quiz-' + Math.random().toString(36).slice(2, 7)
+    const now = new Date().toISOString()
+    const ast = {
+      nodes: [{ id: randomUUID(), type: 'start', position: { x: 250, y: 200 }, data: { label: 'Start', type: 'start', styles: { color: '#a855f7' } } }],
+      edges: [],
+      settings: { theme: 'dark', layout: 'single', progressBar: true, allowBacktracking: false, randomizeQuestions: false, timeLimit: 0, redirectAfterComplete: '' }
+    }
+    await run('INSERT INTO quizzes (id, user_id, title, slug, status, ast, version, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [id, req.user.id, 'New Quiz', slug, 'draft', JSON.stringify(ast), 1, now, now])
+    res.json({ id, userId: req.user.id, title: 'New Quiz', description: '', slug, status: 'draft', nodes: ast.nodes, edges: ast.edges, settings: ast.settings, version: 1, createdAt: now, updatedAt: now })
+  } catch (err) { res.status(500).json({ error: 'Error creating quiz' }) }
+})
+
+// Get quiz by ID
+app.get('/api/quizzes/:id', authMiddleware, async (req, res) => {
+  try {
+    const quiz = await one('SELECT * FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!quiz) return res.status(404).json({ error: 'Quiz not found' })
+    const ast = typeof quiz.ast === 'string' ? JSON.parse(quiz.ast) : quiz.ast
+    res.json({
+      id: quiz.id, userId: quiz.user_id, title: quiz.title, description: quiz.description || '',
+      slug: quiz.slug, status: quiz.status, nodes: ast.nodes, edges: ast.edges, settings: ast.settings,
+      version: quiz.version, createdAt: quiz.created_at, updatedAt: quiz.updated_at
+    })
+  } catch { res.status(500).json({ error: 'Error loading quiz' }) }
+})
+
+// Update quiz (with version check)
+app.put('/api/quizzes/:id', authMiddleware, async (req, res) => {
+  try {
+    const existing = await one('SELECT version, ast FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!existing) return res.status(404).json({ error: 'Quiz not found' })
+    const clientVersion = req.body.version || 0
+    if (clientVersion !== existing.version) {
+      const ast = typeof existing.ast === 'string' ? JSON.parse(existing.ast) : existing.ast
+      return res.status(409).json({
+        error: 'Outdated version',
+        id: req.params.id, userId: req.user.id, title: req.body.title, description: req.body.description,
+        slug: req.body.slug, status: existing.status, nodes: ast.nodes, edges: ast.edges, settings: ast.settings,
+        version: existing.version, updatedAt: new Date().toISOString()
+      })
+    }
+    const { title, description, nodes, edges, settings } = req.body
+    const ast = { nodes: nodes || [], edges: edges || [], settings: settings || {} }
+    const err = validateQuizAst(ast)
+    if (err) return res.status(400).json({ error: err })
+    const now = new Date().toISOString()
+    const newVersion = existing.version + 1
+    // Save history
+    const historyId = randomUUID()
+    await run('INSERT INTO quiz_history (id, quiz_id, ast_snapshot, version, created_at) VALUES ($1,$2,$3,$4,$5)',
+      [historyId, req.params.id, JSON.stringify(ast), existing.version, now])
+    await run('UPDATE quizzes SET title=$1, description=$2, ast=$3, version=$4, updated_at=$5 WHERE id=$6',
+      [title || 'New Quiz', description || '', JSON.stringify(ast), newVersion, now, req.params.id])
+    res.json({ id: req.params.id, userId: req.user.id, title: title || 'New Quiz', description: description || '',
+      slug: req.body.slug, status: existing.status, nodes: ast.nodes, edges: ast.edges, settings: ast.settings,
+      version: newVersion, createdAt: existing.created_at, updatedAt: now })
+  } catch (err) { res.status(500).json({ error: 'Error saving quiz' }) }
+})
+
+// Publish quiz
+app.post('/api/quizzes/:id/publish', authMiddleware, async (req, res) => {
+  try {
+    const quiz = await one('SELECT * FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!quiz) return res.status(404).json({ error: 'Quiz not found' })
+    const ast = typeof quiz.ast === 'string' ? JSON.parse(quiz.ast) : quiz.ast
+    const slug = req.body.slug || quiz.slug
+    const now = new Date().toISOString()
+    await run('UPDATE quizzes SET status=$1, slug=$2, published_at=$3, updated_at=$4 WHERE id=$5',
+      ['published', slug, now, now, req.params.id])
+    res.json({ id: quiz.id, userId: quiz.user_id, title: quiz.title, description: quiz.description,
+      slug, status: 'published', nodes: ast.nodes, edges: ast.edges, settings: ast.settings,
+      version: quiz.version, createdAt: quiz.created_at, updatedAt: now })
+  } catch { res.status(500).json({ error: 'Error publishing quiz' }) }
+})
+
+// Duplicate quiz
+app.post('/api/quizzes/:id/duplicate', authMiddleware, async (req, res) => {
+  try {
+    const quiz = await one('SELECT * FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
+    if (!quiz) return res.status(404).json({ error: 'Quiz not found' })
+    const id = randomUUID()
+    const slug = 'quiz-' + Math.random().toString(36).slice(2, 7)
+    const now = new Date().toISOString()
+    await run('INSERT INTO quizzes (id, user_id, title, description, slug, status, ast, version, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [id, req.user.id, quiz.title + ' (copy)', quiz.description || '', slug, 'draft', quiz.ast, 1, now, now])
+    res.json({ id })
+  } catch { res.status(500).json({ error: 'Error duplicating quiz' }) }
+})
+
+// Archive (soft delete) quiz
+app.delete('/api/quizzes/:id/delete', authMiddleware, async (req, res) => {
+  try {
+    await run('UPDATE quizzes SET status=$1, updated_at=$2 WHERE id=$3 AND user_id=$4',
+      ['archived', new Date().toISOString(), req.params.id, req.user.id])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Error archiving quiz' }) }
+})
+
+// Get quiz by slug (public)
+app.get('/api/quizzes/slug/:slug', async (req, res) => {
+  try {
+    const quiz = await one('SELECT * FROM quizzes WHERE slug = $1 AND status = $2', [req.params.slug, 'published'])
+    if (!quiz) return res.status(404).json({ error: 'Quiz not found' })
+    const ast = typeof quiz.ast === 'string' ? JSON.parse(quiz.ast) : quiz.ast
+    res.json({ id: quiz.id, title: quiz.title, nodes: ast.nodes, edges: ast.edges, settings: ast.settings })
+  } catch { res.status(500).json({ error: 'Error' }) }
+})
+
+// Start quiz session (public)
+app.post('/api/quizzes/:id/run', async (req, res) => {
+  try {
+    const quiz = await one('SELECT id FROM quizzes WHERE id = $1 AND status = $2', [req.params.id, 'published'])
+    if (!quiz) return res.status(404).json({ error: 'Quiz not found' })
+    const id = randomUUID()
+    const sessionToken = randomUUID().replace(/-/g, '')
+    const now = new Date().toISOString()
+    await run('INSERT INTO quiz_sessions (id, quiz_id, session_token, current_node_id, answers, score, status, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [id, req.params.id, sessionToken, '', '[]', 0, 'in_progress', now])
+    res.json({ session_id: id, session_token: sessionToken })
+  } catch { res.status(500).json({ error: 'Error starting session' }) }
+})
+
+// Submit answer
+app.post('/api/sessions/:token/answer', async (req, res) => {
+  try {
+    const session = await one('SELECT * FROM quiz_sessions WHERE session_token = $1', [req.params.token])
+    if (!session) return res.status(404).json({ error: 'Session not found' })
+    const answers = typeof session.answers === 'string' ? JSON.parse(session.answers) : (session.answers || [])
+    if (req.body.answer !== undefined) {
+      answers.push({ nodeId: req.body.nodeId, answer: req.body.answer, timestamp: new Date().toISOString() })
+    }
+    await run('UPDATE quiz_sessions SET answers=$1, current_node_id=$2 WHERE session_token=$3',
+      [JSON.stringify(answers), req.body.nodeId || session.current_node_id, req.params.token])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Error' }) }
+})
+
+// Complete session
+app.post('/api/sessions/:token/complete', async (req, res) => {
+  try {
+    const now = new Date().toISOString()
+    await run('UPDATE quiz_sessions SET status=$1, completed_at=$2, score=$3 WHERE session_token=$4',
+      ['completed', now, req.body.score || 0, req.params.token])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Error' }) }
+})
+
+// Quiz stats
+app.get('/api/quizzes/:id/stats', authMiddleware, async (req, res) => {
+  try {
+    const sessions = await query('SELECT id, score, status, created_at, completed_at FROM quiz_sessions WHERE quiz_id = $1 ORDER BY created_at DESC', [req.params.id])
+    const total = sessions.length
+    const completed = sessions.filter(s => s.status === 'completed').length
+    const inProgress = sessions.filter(s => s.status === 'in_progress').length
+    const scores = sessions.filter(s => s.status === 'completed').map(s => s.score || 0)
+    const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
+    res.json({ total, completed, inProgress, avgScore, sessions })
+  } catch { res.status(500).json({ error: 'Error' }) }
+})
+
+// Rollback to history version
+app.post('/api/quizzes/:id/rollback/:version', authMiddleware, async (req, res) => {
+  try {
+    const history = await one('SELECT * FROM quiz_history WHERE quiz_id = $1 AND version = $2 ORDER BY created_at DESC LIMIT 1',
+      [req.params.id, parseInt(req.params.version)])
+    if (!history) return res.status(404).json({ error: 'Version not found' })
+    const now = new Date().toISOString()
+    await run('UPDATE quizzes SET ast=$1, updated_at=$2 WHERE id=$3 AND user_id=$4',
+      [history.ast_snapshot, now, req.params.id, req.user.id])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Error rolling back' }) }
+})
+
+================================================================================
+END OF QUIZ.TXT
+================================================================================

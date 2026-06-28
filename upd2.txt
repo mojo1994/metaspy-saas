@@ -1,0 +1,262 @@
+# MASTER PROMPT — METASPY QUIZ BUILDER: FIGMA-CANVAS + N8N-FLOW OVERHAUL
+
+## ROLE
+
+You are a Principal UX/UI Engineer and Frontend Architect with deep, hands-on expertise building visual node-based editors comparable to Figma, Webflow, n8n, and Framer. You are working directly inside the existing MetaSpy SaaS codebase (React + Vite frontend, Zustand + Immer state, `@xyflow/react` canvas, Express/Node backend, Postgres with JSONB AST storage). You already have full access to the current Quiz Builder source: `stores/quizStore.ts`, `pages/QuizBuilder.tsx`, `pages/QuizzesList.tsx`, `pages/QuizStats.tsx`, `pages/PlayQuiz.tsx`, `components/quiz/NodePalette.tsx`, `components/quiz/PropertyPanel.tsx`, `components/quiz/QuizCanvas.tsx`, `components/quiz/QuizNodeComponent.tsx`, `components/quiz/QuizTopBar.tsx`, `components/quiz/PreviewQuiz.tsx`, `server/db.js` (quiz tables), and `server/index.js` (quiz routes + `validateQuizAst`).
+
+Do not rewrite this codebase from scratch. Extend, refactor, and upgrade the existing files in place, preserving the existing routing (`/dashboard/quiz/:id`, `/quiz/:slug`), the existing Zustand store pattern (`produce` from Immer, optimistic-locking `version` field, `past`/`future` undo stacks), and the existing API contract shape (`GET/POST/PUT /api/quizzes`, `/publish`, `/duplicate`, `/delete`, `/stats`, public `/api/quizzes/slug/:slug`, `/api/quizzes/:id/run`, `/api/sessions/:token/answer`, `/api/sessions/:token/complete`). New functionality must plug into this architecture, not replace it.
+
+**Stack constraints — do not deviate from these:**
+- Canvas engine: `@xyflow/react` (the community/open-source package already in use). Do not introduce "React Flow Pro" or any paid fork — everything required below is achievable with the open-source package plus custom node/edge types, custom hooks, and manual viewport math.
+- Icons: Lucide React only (`lucide-react`), matching the icon system already standardized elsewhere in MetaSpy. Do not introduce Phosphor, Feather, or any other icon set. Every icon referenced anywhere in this prompt as a "Phosphor icon" or generic "SVG icon" must be sourced from Lucide's existing icon set, picking the closest semantic match.
+- State: Zustand + Immer `produce`, following the existing `useQuizStore` conventions (push to `past`, clear `future`, mark `isDirty`, on every mutating action).
+- Styling: plain CSS using the existing CSS variable system (`var(--bg-primary)`, `var(--purple-500)`, `var(--border)`, etc.) already defined in `index.css`. Do not introduce Tailwind or CSS-in-JS unless it already exists elsewhere in the codebase.
+- Database: Postgres with JSONB AST columns, following the existing `quizzes.ast` pattern. Extend the JSONB schema; do not introduce new normalized tables for data that is naturally part of the AST (styles, freehand widgets, button configs, etc. all live inside `ast`). Only introduce new physical tables for genuinely relational data: media assets, custom question type definitions, and quiz pages — exactly as scoped below.
+
+**Absolute prohibitions (failure conditions — the agent's output is rejected if any of these are present):**
+- No emojis anywhere in the UI, including as fallback icons. Every icon is an SVG Lucide component.
+- No placeholder content, no "Lorem Ipsum," no fake/mock data anywhere in the canvas, panels, or preview.
+- No hardcoded style values inside components where the spec below says a value must be user-configurable. If a property is listed as configurable in Section 4 (Data Contract), it must read from the AST, not from a constant.
+- No visual-only customization that fails to persist. Every property changed in the Property Panel must update the Zustand store, flow into the AST, survive a page refresh, and render identically in Preview mode and in the public Play page.
+- No new disconnected preview renderer. Preview mode and the public `/quiz/:slug` page must share a single rendering component (see Section 7).
+- No jank: every drag, resize, rotate, zoom, and pan interaction must run at 60fps with GPU-accelerated transforms.
+
+---
+
+## 1. EXECUTIVE VISION
+
+The current Quiz Builder is a functional but visually basic flowchart tool: six fixed node types, a simple property panel, fixed left-to-right single-output edges (except the Logic node's true/false branch), and a preview that duplicates rendering logic already present in the public `PlayQuiz` page. The objective of this overhaul is to elevate it into a professional-grade visual editor that combines two reference experiences:
+
+1. **The Figma canvas experience** — infinite pan/zoom, pixel-precise absolute positioning, a real Layers panel, a tabbed Property panel with full box-model and typography control, smart alignment guides, multi-select, grouping, and freehand floating elements that can overlap the node-based flow.
+2. **The n8n flow experience** — nodes are not limited to a single linear chain. Any node can connect to any other node. Decision nodes can fan out to many outputs with custom conditions and labels. The graph supports branching, skipping, looping back, and weighted/random routing, all visually represented with distinct edge styles.
+
+These two paradigms must coexist on the same canvas: the quiz logic graph (nodes + edges, n8n-style) is the backbone, while freehand widgets (text, image, shape, button, divider, etc.) are absolutely-positioned decorative/interactive layers that float independently on top of or alongside the graph (Figma-style). Both systems share the same canvas, the same Layers panel, the same multi-select, and the same Property panel architecture (different tabs/fields depending on what's selected).
+
+Quality bar: this must look and feel like it belongs next to Linear, Vercel, Raycast, and Framer. No part of the interface should look like a generic admin-panel form.
+
+---
+
+## 2. CANVAS ENGINE — INFINITE, FLUID, GPU-ACCELERATED
+
+### 2.1 Viewport & Navigation
+- Extend the existing `@xyflow/react` canvas configuration (already present in `QuizCanvas.tsx` with `minZoom={0.1}`, `maxZoom={2}`) to formalize zoom range 10%–400%, with smooth eased zoom transitions rather than instant jumps.
+- Zoom via mouse wheel must zoom centered on the cursor position, not the canvas center. Support pinch-to-zoom for touch/trackpad gestures.
+- Add a persistent bottom-right zoom control cluster: zoom-out button, live zoom percentage (click to type an exact value), zoom-in button, and a "Reset to 100%" / "Fit to Screen" button. Fit to Screen must compute a bounding box of all nodes plus freehand widgets and adjust pan+zoom to fit them with reasonable padding.
+- Pan via click-drag on empty canvas background, via Space+drag, and via middle-mouse-button drag. Support touch drag on mobile/tablet.
+- Add a MiniMap in the bottom-left (the existing `MiniMap` component from `@xyflow/react` is already imported in `QuizCanvas.tsx` — restyle it to match the glass-panel aesthetic described in Section 2.4, and make sure it reflects both nodes and freehand widgets, not just flow nodes).
+- All node and freehand-widget positions are stored as floating-point X/Y, precise to one decimal place, not rounded integers, so smart-guide alignment calculations don't drift.
+
+### 2.2 Performance & Virtualization
+- Only render nodes and freehand widgets whose bounding box intersects the current viewport (extend slightly beyond the visible area to avoid pop-in). Use `@xyflow/react`'s built-in viewport-aware rendering where possible; for freehand widgets layered outside React Flow's own node system, implement manual culling based on the current viewport transform.
+- Batch and throttle position updates during drag (do not write to the Zustand store on every mousemove frame — update local visual state every frame, and commit to the store on drag-end plus on a throttle interval no tighter than ~100ms for live collaborators/autosave purposes).
+- Target and verify: 60fps drag performance with at least 500 nodes/widgets on canvas. Use `will-change: transform` and `transform: translate3d(...)` (not `top`/`left`) for all actively-dragged elements to force GPU compositing.
+- All interactive transitions (hover elevation, selection ring, drag lift, rotate) use `cubic-bezier(0.4, 0, 0.2, 1)` easing at 120–180ms duration. Avoid layout-triggering CSS properties (`width`, `height`, `top`, `left` animations) — animate `transform` and `opacity` only.
+
+### 2.3 Grid, Snapping & Smart Guides
+- Add a toggleable visible background grid (dot or line pattern) with selectable spacing: 8px, 16px, 32px, 64px. Default to the existing dot pattern already styled in `index.css` (`BackgroundVariant.Dots`), just make the spacing user-configurable and exposed as a top-bar/toolbar control.
+- Add a "Snap to Grid" toggle. When enabled, dragged nodes/widgets snap their X/Y to the nearest multiple of the selected grid size, computed as a simple rounding-to-nearest-multiple operation applied during drag, not only on drop.
+- Implement Smart Guides: while dragging any node or freehand widget, continuously compute alignment against the bounding boxes of all other currently-visible nodes/widgets (left edge, right edge, top edge, bottom edge, horizontal center, vertical center) and against the canvas/page center. When the dragged element's corresponding edge/center comes within an 8px threshold of another element's matching edge/center, render a thin dashed red guide line spanning between them and snap the dragged element exactly onto that alignment value. Multiple simultaneous guides (vertical + horizontal) must be supported.
+- Implement explicit alignment commands operable on the current multi-selection: align left, align horizontal-center, align right, align top, align vertical-middle, align bottom, distribute horizontally with equal spacing, distribute vertically with equal spacing. Surface these as a small floating toolbar that appears above the selection bounding box whenever 2+ elements are selected (Figma-style contextual toolbar), and also as keyboard shortcuts.
+
+### 2.4 Visual Aesthetic of the Canvas Chrome
+- Canvas background must support a configurable pattern: dots, lines, or crosshatch, with a user-selectable accent color via color picker; default remains dark dots on the existing dark background variable.
+- All floating chrome (Property Panel, Layers Panel, the contextual alignment toolbar, the zoom control cluster) uses a frosted-glass treatment: semi-transparent dark background plus `backdrop-filter: blur(12px)` plus a 1px soft border, so the canvas is visible faintly through panel edges when panels float over canvas content (where applicable — the main Layers/Property side panels can remain solid per the existing layout, but any floating contextual UI, like the multi-select toolbar or a quick-style popover, should use the glass treatment).
+- Node elevation states must be implemented as distinct, named CSS states, all using `box-shadow` + `transform`, never layout-affecting properties:
+  - Default: subtle 1–2px shadow.
+  - Hover: stronger shadow plus a small upward `translateY` lift.
+  - Selected: a colored ring (2px solid accent color) plus a soft glow shadow in the accent color, replacing the current `.quiz-node-selected` border-only treatment.
+  - Dragging: scale up slightly (~1.03–1.05), add a slight rotation (~0.5deg) for a tactile feel, and use a stronger, larger, accent-tinted shadow.
+  - Error/invalid state (e.g., a node failing AST validation): red border plus a faint red background tint.
+
+---
+
+## 3. NODE SYSTEM — VISUAL UPGRADE + EXPANDED TYPES
+
+### 3.1 Existing Node Types — Visual Refresh
+Keep the existing six node types (`start`, `question`, `logic`, `result`, `redirect`, `score`) as the core set, and restyle them per this spec, replacing the current plain-card look in `QuizNodeComponent.tsx`:
+- Each node type gets a distinct accent color (reuse existing palette where sensible): Start = purple, Question = blue, Logic = amber, Score = emerald, Result = pink, Redirect = indigo.
+- Replace the current text-character icons (`>`, `?`, `<>`, `*`, `^`, `+/-`) with real Lucide icon components, color-matched to each node's accent: Start→Play, Question→CircleHelp (or similar), Logic→GitBranch, Score→BarChart3, Result→Trophy, Redirect→ArrowRight, plus a generic Settings/gear icon for the new Custom type.
+- Node card minimum dimensions: 200px width, 80px height, with the existing 8px border radius preserved; cards must grow vertically to fit their content (long question text, many options) rather than clipping or overflowing — replace any `text-overflow: ellipsis` truncation in the preview row with natural wrapping up to a reasonable max line count, after which a "..." truncation with full text visible in the Property Panel is acceptable.
+- Each node card supports independent customization of background color, border (width/style/color), border radius (all-corners or individually per corner), box shadow, opacity, rotation, and scale — see Section 4 for how these are stored and synced.
+
+### 3.2 New Logic-Routing Capability — "Any Node, Any Number of Outputs"
+This is the single most important upgrade and replaces the current hardcoded behavior where only the Logic node has two fixed handles (`true`/`false`) and every other node has exactly one output handle.
+
+- Generalize the node-to-edge model so that **any node type can have one or more named output handles**, not just Logic nodes. The Logic node becomes the canonical example of a "Decision" node with a configurable list of output branches (not hardcoded to exactly two), but Question nodes should also be able to optionally route differently per selected answer if the author wants that (e.g., Option A goes to one path, Option B to another), and a new "Random/Weighted" decision mode should be available wherever multiple outputs exist.
+- Each output handle on a node has: a stable identifier, a display label shown near the handle and reflected on connected edges, and (for Decision-type nodes) an associated condition definition (condition type, operator, comparison value, optional variable name — extending the existing `LogicConfig` shape with support for more condition types: score-based, specific-answer-based, custom-variable-based, and URL-parameter-based, plus operators `>`, `<`, `>=`, `<=`, `==`, `!=`, `contains`, `starts_with`, `ends_with`).
+- Add a "Random/Weighted" routing mode on Decision nodes: instead of evaluating conditions, the node randomly selects among its outgoing edges according to per-edge weight values (must sum to a sensible total, normalize if they don't).
+- Add a "Switch" mode on Decision nodes supporting N labeled branches (more than two), evaluated in order, with an optional default/fallback branch if none match.
+- Edges are no longer restricted to a strictly linear forward chain. Any node's output handle can connect to any other node's input handle, including nodes positioned earlier in the visual layout (enabling loop-back/repeat-question patterns) and including skipping several nodes ahead. The only structural rule that must still be enforced is cycle prevention at the level the existing `addEdge` action and `validateQuizAst` server function already enforce — but this cycle check must now correctly support the expanded graph (multiple named output handles per node) rather than assuming single-output traversal. Extend the existing depth-first cycle-detection logic in both `quizStore.ts`'s `addEdge` and `server/index.js`'s `validateQuizAst` to traverse by edge list rather than assuming one outgoing edge per node, and keep it as a hard block (reject the connection, surface the existing inline canvas error banner) rather than a soft warning, preserving current behavior.
+- Visually distinguish edge types by stroke style and color, replacing the single purple animated-dashed style currently applied uniformly: default/sequential flow = solid purple; true/success branch = solid green; false/failure branch = dashed red; weighted/random = dotted amber; time-based auto-advance = dash-dot blue; score-threshold branch = double-line teal. Every edge supports an optional text label rendered at its midpoint (e.g., "Score > 70", "Option B"), with its own font-size/color/background-pill styling, editable via double-click on the edge opening a small inline connection-configuration popover (condition type, operator, value, label text, color override).
+- Required structural validations, enforced both client-side (before allowing the connection) and server-side (in `validateQuizAst`): exactly one Start node with zero input connections; Result and Redirect node types must have at least one input connection and are terminal (no required outputs, though Redirect may optionally chain forward for advanced flows); a Decision/Logic node in Switch or basic If/Else mode must have at least two configured output branches before it's considered valid (surface a visible warning state on the node itself, per the error-state styling in Section 2.4, if it has fewer).
+
+### 3.3 New Node Types To Add
+In addition to the existing six, add these node types to the palette, each with its own icon/color and its own Property Panel "Content" tab fields:
+- **Wait/Delay** — pauses the flow for a configurable number of seconds before auto-advancing to its single output.
+- **Webhook** — fires an outbound HTTP POST (configurable URL, headers, JSON body template supporting variable interpolation) when the flow passes through it, then continues to its output; failures should not block the user's flow (fire-and-forget with logged errors server-side).
+- **Subflow** — embeds another one of the user's own quizzes as a nested flow, continuing afterward to its own output. Out of scope for full implementation in this pass beyond storing the reference and a clear "not yet runnable" indicator if the referenced quiz is incompatible — see Section 11 for phased scope.
+- **Custom** — a free-form node whose content is author-defined raw HTML/CSS/JS (see Section 6.4, Custom Question Types, for the underlying mechanism), useful for one-off interactive cards that don't fit the standard Question/Result shape.
+
+---
+
+## 4. THE DATA CONTRACT — EVERY CUSTOMIZATION MUST BE REAL AND PERSISTENT
+
+This is the most important section. Every visual control described anywhere in this prompt is worthless unless it follows this exact data flow and storage contract. Do not implement any property as "visual only."
+
+### 4.1 Required Propagation Pipeline
+For every single property exposed in the Property Panel (color, font size, padding, border radius, button label, background image, anything), the implementation must follow this exact sequence on every change:
+1. The input control (slider, color picker, text field, dropdown) fires an `onChange`.
+2. The UI updates optimistically and immediately — the canvas, the node, or the widget must visually reflect the new value before any network request begins, ideally within the same render frame (sub-50ms perceived latency).
+3. The change is written into the Zustand store via an Immer `produce` mutation, following the existing pattern used by `updateNodeData` — i.e., push the current quiz state onto the `past` undo stack first, clear the `future` redo stack, then apply the mutation, then mark `isDirty = true`.
+4. The mutated quiz object (including the new style/property data) becomes the new authoritative in-memory AST.
+5. The existing 30-second autosave timer (already implemented in `QuizTopBar.tsx` via `autoSaveRef`) picks up the dirty state and calls `saveQuiz`, which `PUT`s the full quiz object including `version` to `/api/quizzes/:id`.
+6. The server performs the existing optimistic-locking check (`clientVersion !== existing.version` → 409 with the server's current AST), validates the AST via an extended `validateQuizAst` that also validates the new style/property fields (see Section 4.3), persists it, writes a history snapshot row (existing `quiz_history` table/pattern), increments `version`, and returns the updated quiz.
+7. On success the store clears `isDirty`. On a 409 conflict, the existing behavior of overwriting local state with the server's authoritative version and clearing `isDirty` is preserved (no custom merge UI is required for this pass — see Section 11 for deferred multi-user merge UX).
+
+Do not implement any shortcut that skips steps 2–4 for "simple" properties. A font-size slider and a node's X/Y position must go through the identical pipeline.
+
+### 4.2 Extended AST Schema — What Must Be Added
+Extend the existing `QuizNodeData` shape (currently: `label`, `type`, optional `question`/`logic`/`result`/`redirect`/`score`, optional `styles: { color?, icon? }`) into a comprehensive per-node styling object covering, at minimum, every property in this list. Treat this as the literal field checklist the implementation must satisfy — each item must be: editable in the Property Panel, written to the AST, persisted to the database, reflected live on the canvas, reflected in Preview mode, and reflected on the public Play page.
+
+**Typography** (applies to any node/widget containing text — question text, result title/content, button labels, freehand text boxes): font family (selectable from an integrated Google Fonts picker with live preview and async/non-blocking font loading plus a system-font fallback while loading), font size (8–120px, both slider and numeric input), font weight (100–900), line height (0.8–2.5), letter spacing (-2px to 10px), text color (full color picker — hex/RGB/HSL input plus an eyedropper/screen color-pick tool plus a small palette of the user's recently-used and saved colors), text alignment (left/center/right/justify), text decoration (none/underline/overline/line-through), text transform (none/uppercase/lowercase/capitalize), optional text shadow (X offset, Y offset, blur, color).
+
+**Background**: background color (same full color picker as above), optional background image (upload or paste external URL), optional gradient (linear/radial/conic, multiple color stops, angle control, live gradient preview).
+
+**Box model**: padding (top/right/bottom/left independently, with a link/unlink toggle to edit all four together), margin (same independent four-side control), border (width, style [solid/dashed/dotted], color, and radius — radius editable as one unified value or as four independent corner values), box shadow (X, Y, blur, spread, color, with the ability to add multiple stacked shadows if feasible, otherwise one is the minimum bar). Implement a visual nested box-model diagram in the Property Panel (margin box containing border box containing padding box containing content box) where each region is clickable/hoverable to focus the corresponding input — mirroring the visual mental model of Figma/Chrome DevTools, not necessarily pixel-identical to either.
+
+**Size & position**: width, height, min-width, min-height, max-width, max-height (each accepting px, %, or `auto`), CSS position mode (static/relative/absolute/fixed) — used specifically by the freehand widget system in Section 5 — plus top/right/bottom/left offset values when position is not static.
+
+**Layout** (primarily relevant to container-like nodes or grouped elements): display mode (block/flex/grid/inline/inline-block), flex-direction, justify-content, align-items, and a numeric gap value between children.
+
+**Visual transform**: opacity (0–1), rotation (-360 to 360 degrees), scale (0.5–2.0), z-index (-999 to 999, used for freehand layering — see Section 5).
+
+**Media** (for nodes/widgets carrying an image, video, or SVG): media type, URL, alt text, explicit width/height, an optional crop region, and an optional filter set (brightness/contrast/saturation/blur).
+
+**Freehand metadata** (only relevant to elements placed via the freehand system): a boolean flag marking the element as freehand-positioned vs. part of the structured flow, its z-index, a locked flag (prevents accidental drag/selection), and a visible flag (toggleable from the Layers panel without deleting the element).
+
+Each existing per-type config object (`question`, `logic`, `result`, `redirect`, `score`) must also be extended per Section 3 and Section 6 to support the new fields described there (extra question types, richer logic/decision config, button/action configs, etc.) without breaking the shape of existing saved quizzes — any new fields must have safe defaults so older AST documents continue to load correctly.
+
+### 4.3 Validation & Sanitization
+Before any style/property value is persisted (both client-side, before writing into the store, and server-side, inside an extended `validateQuizAst`), validate and auto-correct: colors must resolve to a valid hex, `rgba(...)`, or recognized CSS color keyword (reject/replace anything else with a safe default rather than crashing); numeric size fields must be non-negative finite numbers; opacity must clamp to the 0–1 range; font size must clamp to the 8–120 range; line height must clamp to 0.8–2.5; rotation must clamp to -360–360. Invalid input should be silently corrected to the nearest valid boundary value rather than blocking the user's typing experience or throwing a visible error for minor out-of-range input.
+
+### 4.4 Multi-Select "Mixed Value" State
+When two or more nodes/widgets with differing values for the same property are selected together, the Property Panel must display that field as a visually distinct "Mixed" state (e.g., greyed placeholder text instead of a concrete value) rather than silently showing only the first selected element's value. If the user edits that field while in the Mixed state, apply the new value uniformly to all currently-selected elements in a single batched store mutation (one undo step, not one per element).
+
+### 4.5 Performance Pattern for Live Style Updates
+To avoid re-rendering the entire canvas tree on every keystroke/slider-drag in the Property Panel: memoize node components so they only re-render when their own data changes (not on sibling changes), use Zustand's shallow-selector pattern already partially present in the codebase (`useShallow`) consistently across all node/widget subscriptions, and prefer driving frequently-changing visual properties (background color, font size, etc.) through CSS custom properties set on the node's root element rather than recalculating inline style objects on every render where avoidable.
+
+---
+
+## 5. FREEHAND WIDGET SYSTEM — FIGMA-STYLE ABSOLUTE LAYER
+
+Independent from the node/edge flow graph, add a second layer of freely-positioned elements that can be placed anywhere on the canvas, including overlapping flow nodes.
+
+### 5.1 Widget Types
+Text box, image, video embed (file upload or pasted YouTube/Vimeo URL, auto-converted to embed), shape (rectangle with independently configurable per-corner radius, circle/ellipse with aspect-lock, triangle, line/divider with configurable thickness/dash pattern, directional arrow with configurable head size, freeform polygon built by sequential point clicks), icon (any Lucide icon, recolorable independent of surrounding text color), divider, full-canvas or per-page background layer, dynamic counter (e.g., "Question X of Y" bound to the live quiz progress), countdown/timer widget, and progress bar widget (visual style configurable independent of the built-in question-flow progress bar).
+
+### 5.2 Widget Interaction Model
+- Click-drag to move freely; resize via 8 corner/edge handles with correct directional resize cursors; rotate via a handle above the selection's top-center; multi-select via Shift+Click or a drag-marquee selection box, after which dragging any one selected element moves the whole group together and the Property Panel shows the Mixed-state behavior from Section 4.4.
+- Copy/paste (Ctrl/Cmd+C, Ctrl/Cmd+V) and delete (Delete/Backspace) must work on freehand widgets exactly as they already work (or are being added to work, per Section 8) on flow nodes.
+- Z-index controls: bring to front, send to back, bring forward one step, send backward one step — available both in a right-click context menu and as explicit Property Panel buttons.
+- Grouping: selected widgets can be grouped into a single movable/resizable unit and ungrouped later, without losing each child's individual style data.
+
+### 5.3 Layering With the Flow Graph
+Freehand widgets and flow nodes coexist in the same coordinate space and the same Layers panel tree (Section 8), but are visually and structurally distinct: flow nodes always participate in the n8n-style connection graph; freehand widgets never have input/output handles and never participate in flow logic (a freehand Button widget can, however, trigger flow actions — see Section 6.2 — without being a graph node itself).
+
+---
+
+## 6. INTERACTIVITY — BUTTONS, LINKS, ACTIONS, AND CUSTOM QUESTION TYPES
+
+### 6.1 Button Element
+Add "Button" as both a freehand widget type and an embeddable element inside node content (e.g., inside a Result node's footer, or inside a Custom node). Support four visual variants: solid, outline/ghost, text-only/link-style, and icon-only — with an optional icon position (left/right/top/bottom relative to the label) and configurable icon size. Every visual property listed in Section 4.2 (typography, background, border, shadow, box model, size) applies fully to buttons, plus button-specific states: hover effect (configurable scale and/or color/shadow change), click/active animation (none, pulse, bounce, shrink, ripple — pick whichever subset is feasible with CSS/transform-based animation, avoiding heavy JS animation libraries unless one is already a project dependency), a loading state (spinner overlay, used when its action is asynchronous, e.g., a webhook call), and a disabled state.
+
+### 6.2 Button & Click Actions
+Every button (freehand or embedded) and, where sensible, every clickable question option, must support selecting one action from: redirect to an external or internal URL (configurable to open in the same tab, a new tab, or an in-app modal overlay, with optional automatic UTM parameter appending); jump to a specific other node in the flow graph (selected from a dropdown of existing nodes, functionally equivalent to firing a flow edge programmatically); update the running score (add/subtract/set, reusing the existing `ScoreConfig` shape); set or update a named custom variable; submit the current question's answer (for in-question confirm buttons); show or hide another named element; trigger an animation on another named element; fire a webhook (reusing the Webhook node's config shape so the logic isn't duplicated); open a modal containing rich content; or display an email-capture form (minimal: one or more input fields plus a submit action that itself can chain into any of the other action types).
+
+Support these URL schemes wherever a URL field is used for a redirect action: standard absolute and relative URLs, `mailto:`, `tel:`, `sms:`, WhatsApp deep links (`https://wa.me/...`), and variable interpolation inside the URL string (e.g., a session or user-provided value substituted via `{{variable_name}}` syntax) — reuse a single variable-interpolation utility function across every place variables can appear (button labels, redirect URLs, result content, webhook bodies) rather than reimplementing string interpolation in multiple components.
+
+### 6.3 Background & Wallpaper System
+Add global, per-quiz background configuration (color, image upload or external URL, gradient, image repeat/position/sizing behavior, optional video background with autoplay/loop/muted constraints, optional subtle parallax-on-scroll effect, and an optional semi-transparent color overlay on top of the background) exposed in the "Global Panel" that the Property Panel shows when nothing is selected (extending the existing empty-state Property Panel, which currently just shows a "select a card" message, into a real Quiz Settings + Global Styles + Export panel). Allow any individual node to override the global background with its own background configuration using the same control set, falling back to the global value when not overridden.
+
+### 6.4 Custom Question Types
+Extend the existing fixed `QuestionType` union (`multiple`, `truefalse`, `text`, `rating`) with additional built-in types: text-area (long-form), number input (min/max/step/unit suffix), date picker, time picker, file upload (configurable accepted types and max size), signature pad (canvas-based capture), consent checkbox (configurable consent text), range slider (min/max/step/labels), ranking (drag-to-reorder a list of items), and a matrix/grid rating type (rows × columns with labels). Beyond these built-ins, support a genuinely custom question type authored as raw HTML/CSS/JS, stored per-quiz (not per-node) in a new `custom_question_defs` JSONB column on the `quizzes` table, referenced by node data, and reusable across multiple nodes within the same quiz. Treat custom-type script execution with the same caution as any other user-supplied script running in the preview/public page context — sandbox it (e.g., via a scoped iframe or constrained execution context) rather than evaluating it with unrestricted access to the host page, and clearly document this constraint in code comments for future maintainers.
+
+---
+
+## 7. PREVIEW & PUBLIC PLAY — ONE RENDERER, NOT TWO
+
+The current codebase has two separate implementations of "play through the quiz" logic: `PlayQuiz.tsx` (public, fetches by slug, posts session/answer/complete events) and `PreviewQuiz.tsx` (in-editor, reads directly from the Zustand store, no session tracking). These two components currently duplicate the next-node-resolution logic (`getNextNode`) almost line-for-line, and neither one applies any of the new per-node styling from Section 4.
+
+Required refactor: extract a single shared `QuizRenderer` component that takes the quiz AST (nodes, edges, settings, freehand widgets) as a prop and is otherwise purely presentational — it must not directly know about authentication, session tokens, or the Zustand editor store. It must read and apply every styling property from Section 4.2 when rendering each node/widget (font, color, spacing, shadows, borders, background, button configs, custom question type rendering, etc.), and resolve next-node traversal using the new generalized any-to-any, multi-output-handle graph logic from Section 3.2 (not the old single-output assumption).
+
+`PreviewQuiz.tsx` becomes a thin wrapper: it reads the live in-editor AST from the store and feeds it into `QuizRenderer`, with restart-the-quiz controls layered around it exactly as today. `PlayQuiz.tsx` becomes a thin wrapper: it fetches the published AST by slug, manages the session-token lifecycle and answer/complete network calls exactly as today, and feeds the fetched AST into the same `QuizRenderer`. The acceptance bar: changing a node's font size to 32px in the editor must show 32px text in Preview immediately, and after Publish, the public quiz at its slug URL must also show 32px text, including after a hard refresh and in an incognito window.
+
+Add a device-preview toggle (Desktop / Tablet / Mobile) usable both in editor Preview mode and conceptually understood to apply to the public page's natural responsive behavior. Implement it via a scaled, framed container: Desktop renders at full width; Tablet and Mobile render the same `QuizRenderer` output inside a fixed-width framed container (roughly tablet portrait and modern-phone dimensions) using a CSS `transform: scale(...)` on the content so the underlying layout doesn't have to be recalculated per device, with the frame providing a simple rounded-bezel visual treatment. Switching device modes must never lose or reposition any element — it is purely a viewport simulation, not a different layout engine.
+
+---
+
+## 8. LAYERS PANEL (LEFT SIDEBAR) — REPLACING THE SIMPLE NODE PALETTE
+
+Replace today's flat `NodePalette.tsx` (a static list of six draggable card types) with two coexisting pieces: keep a compact "Add" palette/menu for inserting new flow nodes and freehand widgets (drag-to-canvas or click-to-add, as today), and add a genuine Layers panel showing the live tree of everything currently on the canvas.
+
+Layers panel requirements: a search input to filter by name or type; per-type visibility filter toggles; a tree view where flow nodes and freehand widgets both appear as rows, each row showing a visibility toggle (eye icon), a type-colored icon, an editable label (double-click to rename inline), and a lock toggle (prevents drag/selection on canvas while still allowing edits through the panel); drag-to-reorder rows to change z-index/stacking order; drag one row onto another to create a parent-child grouping relationship (primarily meaningful for freehand widgets, per Section 5.2's grouping feature); a right-click context menu offering delete, duplicate, copy, paste, and lock/unlock; click selects the corresponding element on canvas and scrolls/pans it into view if necessary; shift-click and ctrl/cmd-click extend the selection for multi-select and batch editing exactly as canvas-based selection does.
+
+---
+
+## 9. PROPERTY PANEL (RIGHT SIDEBAR) — TABBED ARCHITECTURE
+
+Replace the current single-flat-list `PropertyPanel.tsx` with a tabbed interface. When one or more elements are selected, show: **Content** (the existing per-type fields — question text/options/media, logic/decision conditions and branches, result title/content/image, redirect URL/timeout, score action/value — extended per Sections 3 and 6), **Style** (the full typography/background/box-model/border/shadow/transform control set from Section 4.2, with the nested box-model diagram), **Layout** (size, position mode, and the flex/grid layout fields from Section 4.2, relevant mainly to container-like nodes and grouped freehand widgets), **Interactions** (animation configuration — appear/hover/click/exit presets with duration/delay/easing parameters — plus the event-trigger-to-action bindings from Section 6.2), and **Advanced** (a raw custom-CSS text field with basic validation, optional custom HTML before/after the element, custom `data-*` attributes, and analytics event-tracking toggles including a Facebook Pixel and Google Analytics event-name field).
+
+When nothing is selected, show the Global Panel: Quiz Settings (title, description, theme selection, layout mode, progress bar toggle, backtracking toggle, randomization toggle, time limit), Global Styles (default font, default colors, default button style, default card style — i.e., the fallback values that individual nodes inherit unless overridden), and an Export section (Publish button — reusing the existing publish flow — plus Export HTML, Export JSON, and Copy Embed Code actions, implemented against the new backend endpoints in Section 10).
+
+---
+
+## 10. BACKEND — EXTENDED ENDPOINTS & SCHEMA
+
+### 10.1 Schema Changes
+Extend the existing `quizzes` table's `ast` JSONB column structurally per Section 4.2 (no new physical columns needed for style data — it lives inside the AST's per-node and per-widget objects, plus a new top-level `freehand` array alongside the existing `nodes`/`edges`/`settings`). Add exactly these new physical tables/columns, following the existing table-creation pattern in `server/db.js` (raw SQL `CREATE TABLE IF NOT EXISTS`, wrapped in a `.catch(() => {})`, with matching indexes):
+- A `quiz_media` table for uploaded media assets (id, quiz_id FK, user_id FK, filename, storage key, mime type, size, width/height, asset type [image/video/gif/svg], created_at), so media isn't bloating the AST with base64 blobs.
+- A `quiz_pages` table if/when multi-page quizzes are implemented (id, quiz_id FK, name, page-level settings JSONB, order index, created_at) — see Section 11 for phasing; implement this table now even if the multi-page UI ships later, so the data model doesn't need a breaking migration.
+- A `custom_question_defs` JSONB column on `quizzes` (per Section 6.4), or a dedicated table if you anticipate sharing custom question types across multiple quizzes for the same user — prefer the per-quiz JSONB column for this pass unless cross-quiz reuse is explicitly requested later.
+
+### 10.2 New Routes
+Add, following the existing route patterns (auth middleware where the action is owner-only, public where it mirrors the existing public quiz-taking routes): media upload and delete under a quiz; list/add/delete quiz pages; export the published quiz as static HTML; export the full AST as JSON; generate or rotate a shareable link/embed code; and an analytics export endpoint that returns the existing `quiz_sessions` data (already powering `QuizStats.tsx`) in CSV form for external analysis, reusing the existing stats-aggregation query in `server/index.js` rather than duplicating it.
+
+### 10.3 Extended Validation
+Extend `validateQuizAst` to validate the new graph shape (multi-output handles, see Section 3.2's cycle-detection update), to validate the new per-node style object against the sanitization rules in Section 4.3, and to validate the new top-level `freehand` array (each widget has a valid type, valid position/size, and valid style payload). Keep returning a descriptive error string on the first validation failure, exactly as the current implementation does, so the existing client-side error-banner display in `QuizCanvas.tsx` continues to work without modification to its error-handling UI.
+
+---
+
+## 11. PHASING — WHAT TO BUILD NOW VS. LATER
+
+Build the following now, in this implementation pass, as the complete and required scope:
+- Canvas fluidity, zoom/pan/grid/smart-guides/alignment tools (Section 2).
+- Visual node refresh plus the generalized any-to-any multi-output connection graph with the new edge types and validation (Section 3).
+- The full extended AST data contract with real persistence, sanitization, and the mixed-state multi-select behavior (Section 4).
+- The freehand widget layer with its own interaction model (Section 5).
+- Buttons, click actions, background/wallpaper system, and the built-in extended question types (Section 6, items other than fully sandboxed custom-script question types, which may ship as a basic/unsandboxed version now with a follow-up hardening pass noted in code comments).
+- The unified `QuizRenderer` refactor eliminating duplicate preview/public-play logic, plus the device-preview scaling toggle (Section 7).
+- The Layers panel and tabbed Property Panel (Sections 8–9).
+- The backend schema and endpoint extensions in Section 10, excluding multi-page UI (build the `quiz_pages` table now, defer the page-management UI).
+
+Defer to a later pass, and do not attempt in this implementation: real-time multiplayer collaborative editing (shared cursors, live co-editing sessions, presence indicators); comment threads on nodes; a visual side-by-side version-diff/compare UI (keep the existing version-history/rollback data model and endpoint, just don't build a diff viewer yet); the Subflow node's actual cross-quiz execution (store the reference now, execute later); and any animation-keyframe timeline editor beyond simple preset-based enter/hover/click/exit animations.
+
+---
+
+## 12. ACCEPTANCE CRITERIA — VERIFY BEFORE CONSIDERING THIS DONE
+
+Canvas: pans and zooms smoothly from 10% to 400%; maintains 60fps dragging a node or widget with 500+ elements present; grid and snap-to-grid both work and are togglable; smart guides appear and snap correctly when aligning two or more elements; multi-select via shift-click and via marquee drag both work; the contextual alignment toolbar appears on 2+ selection and its align/distribute commands work correctly.
+
+Graph/flow: any node's output handle can connect to any other node's input handle; a Decision node can have more than two outputs with independent conditions and labels; cycle detection still blocks invalid loops while allowing legitimate forward/branching/loop-back patterns the old single-output model couldn't express; edge visual style correctly reflects its type (solid/dashed/dotted/color per Section 3.2); double-clicking an edge opens a working inline configuration popover.
+
+Styling/persistence: changing any single property listed in Section 4.2 on any node or widget updates the canvas within one frame, persists through the existing autosave-to-database pipeline, survives a hard refresh, and renders identically in both Preview mode and the public Play page after publishing; multi-select editing with mixed initial values displays the "Mixed" indicator and applies a uniform change correctly to all selected elements in one undo step; out-of-range numeric input is clamped rather than rejected or crashing.
+
+Freehand layer: widgets can be added, dragged anywhere (including overlapping flow nodes), resized via handles, rotated, copy/pasted, deleted, and reordered in z-index both via the Layers panel and via right-click context menu; grouping and ungrouping preserves each child element's individual style data.
+
+Interactivity: a button can be configured with every action type in Section 6.2 and each action correctly fires at runtime in both Preview and public Play; URL-scheme redirects (`mailto:`, `tel:`, `sms:`, WhatsApp links, variable-interpolated URLs) all resolve correctly; the background/wallpaper system correctly cascades from global to per-node overrides.
+
+Rendering unification: there is exactly one shared rendering component powering both Preview and public Play (verified by inspecting that `PreviewQuiz.tsx` and `PlayQuiz.tsx` both delegate to the same `QuizRenderer`, not by visual inspection alone); the device-preview toggle correctly scales the same underlying layout for Desktop/Tablet/Mobile without losing or repositioning any element.
+
+Backend: all new endpoints in Section 10.2 function correctly with proper auth boundaries (owner-only vs. public); `validateQuizAst` correctly rejects malformed graphs, malformed style payloads, and malformed freehand arrays with a clear error string; existing endpoints and their response shapes remain backward-compatible with quizzes saved before this upgrade (old ASTs missing the new style/freehand fields must load with sensible defaults, not crash).
+
+General: zero emoji usage anywhere in the implemented UI; zero placeholder/mock content anywhere in canvas, panels, or preview; zero console errors during normal use of every feature listed above; the visual result is judged against Linear/Vercel/Raycast/Framer-level polish, not against a generic admin-dashboard baseline.

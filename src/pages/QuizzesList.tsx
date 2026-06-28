@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { PenSquare } from 'lucide-react'
 
 interface QuizListItem {
   id: string; title: string; description: string; slug: string; status: string; version: number; created_at: string; updated_at: string
@@ -57,7 +58,7 @@ export default function QuizzesList() {
       </div>
       {loading ? <div className="quiz-list-empty">Carregando...</div> : quizzes.length === 0 ? (
         <div className="quiz-list-empty">
-          <div className="quiz-list-empty-icon">◻</div>
+          <div className="quiz-list-empty-icon"><PenSquare size={32} /></div>
           <p>Nenhum quiz criado ainda.</p>
           <p className="quiz-list-empty-sub">Crie seu primeiro quiz interativo para capturar leads e engajar sua audiencia.</p>
           <button className="btn btn-gradient" onClick={create}>Criar Primeiro Quiz</button>

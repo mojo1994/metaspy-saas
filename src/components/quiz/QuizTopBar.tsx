@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
+import { Undo2, Redo2, Save, Eye, EyeOff } from 'lucide-react'
 import { useQuizStore } from '../../stores/quizStore'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -39,14 +40,15 @@ export default function QuizTopBar({ quizId }: { quizId: string }) {
         {isSaving && <span className="quiz-topbar-saving">Salvando...</span>}
       </div>
       <div className="quiz-topbar-center">
-        <button className="quiz-topbar-btn" onClick={undo} disabled={past.length === 0} title="Desfazer (Ctrl+Z)">↩</button>
-        <button className="quiz-topbar-btn" onClick={redo} disabled={future.length === 0} title="Refazer (Ctrl+Shift+Z)">↪</button>
+        <button className="quiz-topbar-btn" onClick={undo} disabled={past.length === 0} title="Desfazer (Ctrl+Z)"><Undo2 size={14} /></button>
+        <button className="quiz-topbar-btn" onClick={redo} disabled={future.length === 0} title="Refazer (Ctrl+Shift+Z)"><Redo2 size={14} /></button>
       </div>
       <div className="quiz-topbar-right">
         <span className="quiz-topbar-version">v{useQuizStore(s => s.savedVersion)}</span>
-        <button className="quiz-topbar-btn" onClick={() => saveQuiz(fetchWithAuth)} title="Salvar">💾</button>
+        <button className="quiz-topbar-btn" onClick={() => saveQuiz(fetchWithAuth)} title="Salvar"><Save size={14} /></button>
         <label className="quiz-topbar-toggle">
           <input type="checkbox" checked={isPreview} onChange={togglePreview} />
+          {isPreview ? <EyeOff size={14} /> : <Eye size={14} />}
           <span>{isPreview ? 'Editar' : 'Preview'}</span>
         </label>
         {!isPreview && (
