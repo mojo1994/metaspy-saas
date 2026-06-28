@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useQuizStore } from '../stores/quizStore'
-import { PenSquare } from 'lucide-react'
+import { PenSquare, Trash2 } from 'lucide-react'
 
 interface QuizListItem {
   id: string; title: string; description: string; slug: string; status: string; version: number; created_at: string; updated_at: string
@@ -43,9 +43,16 @@ export default function QuizzesList() {
     } catch {}
   }
 
-  async function deleteQuiz(id: string) {
+  async function archiveQuiz(id: string) {
     try {
       await fetchWithAuth(`/api/quizzes/${id}/delete`, { method: 'DELETE' })
+      load()
+    } catch {}
+  }
+
+  async function deleteQuiz(id: string) {
+    try {
+      await fetchWithAuth(`/api/quizzes/${id}`, { method: 'DELETE' })
       load()
     } catch {}
   }
@@ -82,7 +89,8 @@ export default function QuizzesList() {
                   <button className="btn btn-secondary" onClick={() => window.open(`/quiz/${q.slug}`, '_blank')}>Visualizar</button>
                 )}
                 <button className="btn btn-secondary" onClick={() => duplicate(q.id)}>Duplicar</button>
-                <button className="btn btn-secondary quiz-btn-danger" onClick={() => { if (confirm('Arquivar este quiz?')) deleteQuiz(q.id) }}>Arquivar</button>
+                <button className="btn btn-secondary" onClick={() => { if (confirm('Arquivar este quiz?')) archiveQuiz(q.id) }}>Arquivar</button>
+                <button className="btn btn-danger" onClick={() => { if (confirm('Excluir permanentemente este quiz? Esta acao nao pode ser desfeita.')) deleteQuiz(q.id) }}><Trash2 size={12} /> Excluir</button>
               </div>
             </div>
           ))}

@@ -2730,6 +2730,15 @@ app.delete('/api/quizzes/:id/delete', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Erro ao arquivar quiz' }) }
 })
 
+// Permanently delete quiz
+app.delete('/api/quizzes/:id', authMiddleware, async (req, res) => {
+  try {
+    await run('DELETE FROM quiz_history WHERE quiz_id=$1', [req.params.id])
+    await run('DELETE FROM quizzes WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro ao excluir quiz' }) }
+})
+
 // Get quiz by slug (public)
 app.get('/api/quizzes/slug/:slug', async (req, res) => {
   try {
