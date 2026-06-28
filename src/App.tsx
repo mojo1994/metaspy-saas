@@ -23,10 +23,6 @@ import MetadataCleaner from './pages/MetadataCleaner'
 import Profile from './pages/Profile'
 import Settings from './pages/Settings'
 import Admin from './pages/Admin'
-import QuizzesList from './pages/QuizzesList'
-import QuizBuilder from './pages/QuizBuilder'
-import QuizStats from './pages/QuizStats'
-import PlayQuiz from './pages/PlayQuiz'
 import { useAuth } from './contexts/AuthContext'
 import LoadingScreen from './components/LoadingScreen'
 
@@ -126,11 +122,7 @@ export default function App() {
         <Route path="perfil" element={<Profile />} />
         <Route path="configuracoes" element={<Settings />} />
         <Route path="admin" element={<Admin />} />
-        <Route path="quizzes" element={<QuizzesList />} />
-        <Route path="quiz/:id" element={<QuizBuilder />} />
-        <Route path="quiz/:id/stats" element={<QuizStats />} />
       </Route>
-      <Route path="/quiz/:slug" element={<PlayQuiz />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </>
