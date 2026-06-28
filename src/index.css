@@ -4637,6 +4637,62 @@ select:-webkit-autofill {
   to { transform: rotate(360deg); }
 }
 
+/* Loading Screen */
+@keyframes loadingGearSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes loadingTextFade {
+  0% { opacity: 0; transform: translateY(10px); }
+  30% { opacity: 1; transform: translateY(0); }
+  70% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+
+.loading-screen-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.loading-screen-gear-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+}
+
+.loading-screen-gear {
+  animation: loadingGearSpin 1s linear infinite;
+  color: var(--purple-400);
+  width: 64px;
+  height: 64px;
+}
+
+.loading-screen-text {
+  font-size: 16px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  animation: loadingTextFade 2s ease-in-out forwards;
+  min-height: 24px;
+  text-align: center;
+}
+
 /* React Flow overrides */
 .react-flow__background { background: var(--bg-primary) !important; }
 .react-flow__controls { background: var(--bg-card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-md) !important; overflow: hidden; }

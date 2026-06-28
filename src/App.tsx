@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -27,6 +28,7 @@ import QuizBuilder from './pages/QuizBuilder'
 import QuizStats from './pages/QuizStats'
 import PlayQuiz from './pages/PlayQuiz'
 import { useAuth } from './contexts/AuthContext'
+import LoadingScreen from './components/LoadingScreen'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
@@ -35,8 +37,17 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const [showLoading, setShowLoading] = useState(true)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowLoading(false), 30000)
+    return () => clearTimeout(timer)
+  }, [])
+
   return (
-    <Routes>
+    <>
+      {showLoading && <LoadingScreen />}
+      <Routes>
       <Route path="/" element={<Navigate to="/planos" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
@@ -68,5 +79,6 @@ export default function App() {
       <Route path="/quiz/:slug" element={<PlayQuiz />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }
