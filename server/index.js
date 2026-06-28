@@ -1798,7 +1798,7 @@ app.get('/api/cloaker/camouflage-download/:id', authMiddleware, async (req, res)
     if (mediaFile) archive.file(join(dir, mediaFile), { name: mediaFile })
     await archive.finalize()
     setTimeout(() => {
-      try { for (const f of files) unlinkSync(join(dir, f)); unlinkSync(dir) } catch {}
+      try { rmSync(dir, { recursive: true, force: true }) } catch {}
     }, 60000)
   } catch {
     res.status(500).json({ erro: 'Erro ao gerar download.' })
@@ -1882,10 +1882,13 @@ const CAMO_MEDIA_OUTPUTS = new Map()
 
 const camoMediaStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = join('/tmp', 'metaspy-camo-media', randomUUID())
-    mkdirSync(dir, { recursive: true })
-    req.camoMediaDir = dir
-    cb(null, dir)
+    if (!req._camoDirCreated) {
+      const dir = join('/tmp', 'metaspy-camo-media', randomUUID())
+      mkdirSync(dir, { recursive: true })
+      req.camoMediaDir = dir
+      req._camoDirCreated = true
+    }
+    cb(null, req.camoMediaDir)
   },
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 })
@@ -2023,8 +2026,15 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
 ]), async (req, res) => {
   const timer = setTimeout(() => {
     if (!res.headersSent) res.status(504).json({ erro: 'Tempo limite excedido. Tente com arquivos menores.' })
-  }, 20000)
+  }, 60000)
+
   function done(data, status = 200) { clearTimeout(timer); return res.status(status).json(data) }
+
+  function cleanupDirs() {
+    try { if (req.camoMediaDir) rmSync(req.camoMediaDir, { recursive: true, force: true }) } catch {}
+    try { if (req._camoOutputDir) rmSync(req._camoOutputDir, { recursive: true, force: true }) } catch {}
+  }
+
   try {
     const features = PLAN_FEATURES[req.user.plan]
     if (!features?.cloaker) return done({ erro: 'Disponivel apenas no plano Premium.' }, 403)
@@ -2048,7 +2058,7 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
       const cleanPath = await cleanFileMeta(realPath, realFile.mimetype)
       const ext = realFile.mimetype.startsWith('video/') ? 'mp4' : 'jpg'
       CAMO_MEDIA_OUTPUTS.set(id, cleanPath)
-      setTimeout(() => CAMO_MEDIA_OUTPUTS.delete(id), 300000)
+      setTimeout(() => { CAMO_MEDIA_OUTPUTS.delete(id); try { unlinkSync(cleanPath) } catch {} }, 300000)
       return done({ id, strategy, downloadUrl: `/api/cloaker/camouflage/media/download/${id}`, instructions: 'Arquivos identicos. Nenhuma modificacao aplicada.', fileName: `camouflage-${id}.${ext}` })
     }
 
@@ -2057,7 +2067,6 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
       return done({ erro: 'Arquivos muito grandes. Limite: 100MB por arquivo.' }, 400)
     }
 
-    let outputPath
     let downloadExt = 'zip'
     let effectiveStrategy = 'click_to_reveal'
 
@@ -2065,20 +2074,31 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
     const html = generateClickToRevealHTML(dir, realPath, disguisePath, realFile.mimetype, disguiseFile.mimetype, safeUrl)
     const htmlPath = join(dir, 'index.html')
     writeFileSync(htmlPath, html, 'utf-8')
-    const zipPath = join(dir, `output-${id}.zip`)
+
+    // zip em diretório separado para evitar recursão (não zipar o próprio zip)
+    const outputBase = join('/tmp', 'metaspy-camo-output')
+    if (!existsSync(outputBase)) mkdirSync(outputBase, { recursive: true })
+    const outputDir = join(outputBase, id)
+    mkdirSync(outputDir, { recursive: true })
+    req._camoOutputDir = outputDir
+    const zipPath = join(outputDir, `output-${id}.zip`)
+
     const archive = new Archiver('zip', { zlib: { level: 6 } })
     const ws = createWriteStream(zipPath)
     await new Promise((resolve, reject) => {
       ws.on('finish', resolve)
       ws.on('error', reject)
+      archive.on('error', reject)
       archive.pipe(ws)
       archive.directory(dir, false)
       archive.finalize()
     })
-    outputPath = zipPath
 
-    CAMO_MEDIA_OUTPUTS.set(id, outputPath)
-    setTimeout(() => { try { unlinkSync(outputPath) } catch {}; CAMO_MEDIA_OUTPUTS.delete(id) }, 300000)
+    CAMO_MEDIA_OUTPUTS.set(id, zipPath)
+    setTimeout(() => {
+      CAMO_MEDIA_OUTPUTS.delete(id)
+      cleanupDirs()
+    }, 300000)
 
     done({
       id, strategy: effectiveStrategy,
@@ -2088,6 +2108,7 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
     })
   } catch (erro) {
     clearTimeout(timer)
+    cleanupDirs()
     logger.error({ err: erro }, 'Erro no camouflage media')
     res.status(500).json({ erro: 'Erro ao processar camuflagem de midia.' })
   }
@@ -2099,10 +2120,12 @@ app.get('/api/cloaker/camouflage/media/download/:id', authMiddleware, async (req
   const filePath = CAMO_MEDIA_OUTPUTS.get(req.params.id)
   if (!filePath || !existsSync(filePath)) return res.status(404).json({ erro: 'Arquivo nao encontrado ou expirado.' })
   const ext = extname(filePath)
-  const mime = ext === '.zip' ? 'application/zip' : 'video/mp4'
+  const mime = ext === '.zip' ? 'application/zip' : mime.lookup(ext) || 'application/octet-stream'
   res.setHeader('Content-Type', mime)
   res.setHeader('Content-Disposition', `attachment; filename="camouflage-${req.params.id}${ext}"`)
-  createReadStream(filePath).pipe(res)
+  const stream = createReadStream(filePath)
+  stream.on('error', () => { try { res.status(500).end() } catch {} })
+  stream.pipe(res)
 })
 
 // ─── LSB Steganography Routes ───────────────────────────────────
