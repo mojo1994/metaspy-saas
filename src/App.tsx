@@ -36,17 +36,65 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+type LoadingState = 'checking' | 'loading' | 'ready'
+
 export default function App() {
-  const [showLoading, setShowLoading] = useState(true)
+  const [loadingState, setLoadingState] = useState<LoadingState>('checking')
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowLoading(false), 30000)
-    return () => clearTimeout(timer)
+    let cancelled = false
+    let retryTimer: ReturnType<typeof setInterval> | null = null
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null
+
+    async function quickCheck(): Promise<boolean> {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 2000)
+        const res = await fetch('/api/health', { signal: controller.signal })
+        clearTimeout(timeoutId)
+        if (res.ok && !cancelled) return true
+      } catch {}
+      return false
+    }
+
+    quickCheck().then(ok => {
+      if (cancelled) return
+      if (ok) {
+        setLoadingState('ready')
+        return
+      }
+
+      setLoadingState('loading')
+
+      retryTimer = setInterval(async () => {
+        try {
+          const res = await fetch('/api/health')
+          if (res.ok && !cancelled) {
+            setLoadingState('ready')
+            if (retryTimer) clearInterval(retryTimer)
+            if (safetyTimer) clearTimeout(safetyTimer)
+          }
+        } catch {}
+      }, 3000)
+
+      safetyTimer = setTimeout(() => {
+        if (!cancelled) {
+          setLoadingState('ready')
+          if (retryTimer) clearInterval(retryTimer)
+        }
+      }, 30000)
+    })
+
+    return () => {
+      cancelled = true
+      if (retryTimer) clearInterval(retryTimer)
+      if (safetyTimer) clearTimeout(safetyTimer)
+    }
   }, [])
 
   return (
     <>
-      {showLoading && <LoadingScreen />}
+      {loadingState === 'loading' && <LoadingScreen />}
       <Routes>
       <Route path="/" element={<Navigate to="/planos" replace />} />
       <Route path="/login" element={<Login />} />
