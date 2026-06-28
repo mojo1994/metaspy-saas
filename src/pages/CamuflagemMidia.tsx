@@ -8,7 +8,7 @@ export default function CamuflagemMidia() {
   // Dual-layer
   const [realMedia, setRealMedia] = useState<File | null>(null)
   const [disguiseMedia, setDisguiseMedia] = useState<File | null>(null)
-  const [strategy, setStrategy] = useState<'thumbnail_spoofing' | 'click_to_reveal'>('click_to_reveal')
+  const [strategy] = useState<'click_to_reveal'>('click_to_reveal')
   const [camoSafeUrl, setCamoSafeUrl] = useState('')
   const [camoLoading, setCamoLoading] = useState(false)
   const [camoResult, setCamoResult] = useState<any>(null)
@@ -66,6 +66,8 @@ export default function CamuflagemMidia() {
   async function handleDualUpload() {
     if (!realMedia || !disguiseMedia) return
     setCamoLoading(true); setCamoError(''); setCamoResult(null)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 55000)
     try {
       const fd = new FormData()
       fd.append('real_media', realMedia)
@@ -75,11 +77,15 @@ export default function CamuflagemMidia() {
       const res = await fetchWithAuth('/api/cloaker/camouflage/media', {
         method: 'POST',
         body: fd,
+        signal: controller.signal,
       })
+      clearTimeout(timeoutId)
       const data = await tryParseResponse(res)
       if (!res.ok) throw new Error(data?.erro || `Erro ${res.status}`)
       setCamoResult(data)
     } catch (err: any) {
+      clearTimeout(timeoutId)
+      if (err.name === 'AbortError') { setCamoError('Tempo limite excedido.'); return }
       setCamoError(err.message)
     } finally {
       setCamoLoading(false)
@@ -239,10 +245,8 @@ export default function CamuflagemMidia() {
 
           <div className="filter-group">
             <label>Estrategia</label>
-            <select value={strategy} onChange={e => setStrategy(e.target.value as any)} style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-              <option value="thumbnail_spoofing">Thumbnail Spoofing (Video) — Plataforma ve o thumbnail seguro</option>
-              <option value="click_to_reveal">Click-to-Reveal (Interativo) — Conteudo real apos clique</option>
-            </select>
+            <input type="text" value="Click-to-Reveal (Interativo)" disabled style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-muted)', opacity: 0.8 }} />
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>O arquivo seguro carrega primeiro; o conteudo real aparece apos interacao do usuario.</span>
           </div>
 
           <div className="filter-group">
