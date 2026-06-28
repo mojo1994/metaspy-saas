@@ -1,8 +1,8 @@
 import { memo, useMemo } from 'react'
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
-import { Play, HelpCircle, GitBranch, BarChart3, Trophy, ArrowRight, Clock, Webhook, Copy, Settings, GripHorizontal } from 'lucide-react'
+import { Play, HelpCircle, GitBranch, BarChart3, Trophy, ArrowRight, Clock, Webhook, Copy, Settings, GripHorizontal, Edit3 } from 'lucide-react'
 import type { QuizNodeData, HandleConfig } from '../../stores/quizStore'
-import { getHandlesForNode } from '../../stores/quizStore'
+import { getHandlesForNode, useQuizStore } from '../../stores/quizStore'
 
 const NODE_ICONS: Record<string, React.ReactNode> = {
   start: <Play size={14} />,
@@ -60,10 +60,11 @@ function HandleRow({ handle, isInput }: HandleRowProps) {
   )
 }
 
-function QuizNodeComponent({ data, selected }: NodeProps<Node<QuizNodeData>>) {
+function QuizNodeComponent({ id, data, selected }: NodeProps<Node<QuizNodeData>>) {
   const icon = NODE_ICONS[data.type] || <Settings size={14} />
   const color = data.styles?.color || NODE_COLORS[data.type] || '#6b7280'
   const handles = useMemo(() => getHandlesForNode(data), [data])
+  const openCardEditor = useQuizStore(s => s.openCardEditor)
 
   const previewText = useMemo(() => {
     if (data.type === 'question' && data.question) {
@@ -116,6 +117,13 @@ function QuizNodeComponent({ data, selected }: NodeProps<Node<QuizNodeData>>) {
       <div className="quiz-node-header" style={{ background: `${color}0a` }}>
         <span className="quiz-node-icon" style={{ background: `${color}15`, color }}>{icon}</span>
         <span className="quiz-node-type-label">{data.label}</span>
+        <button
+          className="quiz-node-edit-btn"
+          onClick={e => { e.stopPropagation(); openCardEditor(id) }}
+          title="Editar conteudo"
+        >
+          <Edit3 size={12} />
+        </button>
       </div>
 
       <div className="quiz-node-preview">

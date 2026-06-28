@@ -163,6 +163,27 @@ export interface FreehandWidgetData {
   iconName?: string
 }
 
+export interface CardElement {
+  id: string
+  type: 'text' | 'image' | 'button' | 'icon' | 'divider' | 'shape'
+  content?: string
+  styles?: NodeStyles
+  action?: ActionConfig
+  shapeType?: 'rect' | 'circle'
+  iconName?: string
+  imageUrl?: string
+}
+
+export interface CardSection {
+  elements: CardElement[]
+}
+
+export interface CardContent {
+  header: CardSection
+  contentSection: CardSection
+  button: CardSection
+}
+
 export interface ActionConfig {
   type: 'redirect' | 'jump' | 'update_score' | 'set_variable' | 'submit' | 'show_hide' | 'webhook' | 'modal' | 'email_capture'
   url?: string
@@ -194,6 +215,7 @@ export interface QuizNodeData {
   actions?: ActionConfig[]
   styles?: NodeStyles
   freehand?: boolean
+  cardContent?: CardContent
 }
 
 export interface QuizSettings {
@@ -298,6 +320,7 @@ interface QuizState {
   selectedNodeId: string | null
   selectedEdgeId: string | null
   selectedFreehandId: string | null
+  editingCardNodeId: string | null
   savedVersion: number
   nodeVersion: number
 
@@ -325,6 +348,8 @@ interface QuizState {
 
   selectNode: (nodeId: string | null) => void
   selectFreehandWidget: (id: string | null) => void
+  openCardEditor: (nodeId: string) => void
+  closeCardEditor: () => void
 
   togglePreview: () => void
 
@@ -339,6 +364,11 @@ interface QuizState {
   addFreehandWidget: (widget: FreehandWidgetData) => void
   updateFreehandWidget: (id: string, data: Partial<FreehandWidgetData>) => void
   removeFreehandWidget: (id: string) => void
+
+  addCardElement: (nodeId: string, section: 'header' | 'contentSection' | 'button', type: CardElement['type']) => void
+  updateCardElement: (nodeId: string, section: 'header' | 'contentSection' | 'button', elementId: string, data: Partial<CardElement>) => void
+  removeCardElement: (nodeId: string, section: 'header' | 'contentSection' | 'button', elementId: string) => void
+  reorderCardElements: (nodeId: string, section: 'header' | 'contentSection' | 'button', fromIndex: number, toIndex: number) => void
 }
 
 function cloneQuiz(q: Quiz): Quiz {
@@ -353,6 +383,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
   selectedNodeId: null,
   selectedEdgeId: null,
   selectedFreehandId: null,
+  editingCardNodeId: null,
   savedVersion: 0,
   nodeVersion: 0,
   past: [] as Quiz[],
@@ -501,6 +532,63 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     }))
   },
 
+  addCardElement: (nodeId, section, type) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.future = []
+      const node = s.currentQuiz.nodes.find(n => n.id === nodeId)
+      if (!node) return
+      if (!node.data.cardContent) node.data.cardContent = { header: { elements: [] }, contentSection: { elements: [] }, button: { elements: [] } }
+      const el: CardElement = { id: crypto.randomUUID(), type, styles: {} }
+      if (type === 'text') el.content = 'Texto'
+      else if (type === 'image') el.imageUrl = ''
+      else if (type === 'button') el.content = 'Botao'
+      else if (type === 'icon') el.iconName = 'star'
+      else if (type === 'shape') el.shapeType = 'rect'
+      node.data.cardContent[section].elements.push(el)
+      s.isDirty = true
+      s.nodeVersion++
+    }))
+  },
+
+  updateCardElement: (nodeId, section, elementId, data) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      const node = s.currentQuiz.nodes.find(n => n.id === nodeId)
+      if (!node?.data.cardContent) return
+      const el = node.data.cardContent[section].elements.find(e => e.id === elementId)
+      if (el) { Object.assign(el, data); s.isDirty = true; s.nodeVersion++ }
+    }))
+  },
+
+  removeCardElement: (nodeId, section, elementId) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      s.past.push(cloneQuiz(s.currentQuiz))
+      s.future = []
+      const node = s.currentQuiz.nodes.find(n => n.id === nodeId)
+      if (!node?.data.cardContent) return
+      node.data.cardContent[section].elements = node.data.cardContent[section].elements.filter(e => e.id !== elementId)
+      s.isDirty = true
+      s.nodeVersion++
+    }))
+  },
+
+  reorderCardElements: (nodeId, section, fromIndex, toIndex) => {
+    set(produce((s: QuizState) => {
+      if (!s.currentQuiz) return
+      const node = s.currentQuiz.nodes.find(n => n.id === nodeId)
+      if (!node?.data.cardContent) return
+      const els = node.data.cardContent[section].elements
+      if (fromIndex < 0 || fromIndex >= els.length || toIndex < 0 || toIndex >= els.length) return
+      const [moved] = els.splice(fromIndex, 1)
+      els.splice(toIndex, 0, moved)
+      s.isDirty = true
+      s.nodeVersion++
+    }))
+  },
+
   removeNode: (nodeId) => {
     set(produce((s: QuizState) => {
       if (!s.currentQuiz) return
@@ -613,6 +701,8 @@ export const useQuizStore = create<QuizState>((set, get) => ({
 
   selectNode: (nodeId) => set({ selectedNodeId: nodeId, selectedEdgeId: null, selectedFreehandId: null }),
   selectFreehandWidget: (id) => set({ selectedFreehandId: id, selectedNodeId: null, selectedEdgeId: null }),
+  openCardEditor: (nodeId) => set({ editingCardNodeId: nodeId }),
+  closeCardEditor: () => set({ editingCardNodeId: null }),
 
   togglePreview: () => set(produce((s: QuizState) => { s.isPreview = !s.isPreview })),
 

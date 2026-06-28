@@ -20,6 +20,7 @@ import '@xyflow/react/dist/style.css'
 import { useQuizStore, type QuizNodeData } from '../../stores/quizStore'
 import QuizNodeComponent from './QuizNodeComponent'
 import FreehandWidgetRenderer from './FreehandWidgetRenderer'
+import CardEditorModal from './CardEditorModal'
 
 const nodeTypes: NodeTypes = { quizNode: QuizNodeComponent }
 
@@ -210,6 +211,7 @@ function CanvasInner() {
         />
       </ReactFlow>
       <FreehandWidgetRenderer />
+      <CardEditorModal />
     </div>
   )
 }

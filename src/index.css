@@ -4482,7 +4482,17 @@ select:-webkit-autofill {
   color: var(--purple-400);
   flex-shrink: 0;
 }
-.quiz-node-type-label { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.quiz-node-type-label { font-size: 12px; font-weight: 600; color: var(--text-primary); flex: 1; }
+.quiz-node-edit-btn {
+  width: 22px; height: 22px; padding: 0; border-radius: 4px;
+  display: grid; place-items: center;
+  border: none; background: transparent;
+  color: var(--text-muted); cursor: pointer;
+  opacity: 0; transition: all var(--transition);
+  flex-shrink: 0;
+}
+.quiz-node-card:hover .quiz-node-edit-btn { opacity: 1; }
+.quiz-node-edit-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
 .quiz-node-preview {
   padding: 8px 12px;
   display: flex;
@@ -5032,3 +5042,179 @@ input[type="range"] {
 .react-flow__selection { background: rgba(168,85,247,0.08) !important; border: 1px solid rgba(168,85,247,0.3) !important; }
 .react-flow__edge { cursor: pointer; }
 .react-flow__edge.selected { cursor: default; }
+
+/* ─── CARD EDITOR MODAL ─── */
+.card-editor-modal {
+  width: min(900px, 92vw);
+  max-height: 90vh;
+  display: flex; flex-direction: column;
+  border-radius: var(--radius-xl);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-elevated);
+  overflow: hidden;
+}
+.card-editor-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.card-editor-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.card-editor-type-badge {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 4px;
+  background: rgba(168,85,247,0.15); color: var(--purple-400);
+}
+.card-editor-body {
+  flex: 1; overflow-y: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* Sections */
+.card-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.card-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(168,85,247,0.06);
+  border-bottom: 1px solid var(--border);
+}
+.card-section-label { font-size: 12px; font-weight: 600; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.5px; }
+.card-section-count { font-size: 11px; color: var(--text-muted); }
+.card-section-body { padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 40px; }
+.card-section-empty {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 20px; border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--text-muted); cursor: pointer;
+  transition: all var(--transition);
+}
+.card-section-empty:hover { border-color: var(--purple-400); color: var(--purple-400); }
+.card-section-add-btn {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 6px; width: 100%;
+  border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer;
+  transition: all var(--transition);
+}
+.card-section-add-btn:hover { border-color: var(--purple-400); color: var(--purple-400); }
+
+/* Element wrapper */
+.card-el-wrapper {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 4px;
+  padding: 4px; border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: all var(--transition);
+  min-height: 28px;
+}
+.card-el-wrapper:hover { background: rgba(168,85,247,0.05); border-color: rgba(168,85,247,0.15); }
+.card-el-dragging { opacity: 0.4; }
+.card-el-drag-handle {
+  display: flex; align-items: center; padding: 4px 2px;
+  cursor: grab; color: var(--text-muted); opacity: 0;
+  transition: opacity var(--transition); flex-shrink: 0;
+}
+.card-el-wrapper:hover .card-el-drag-handle { opacity: 1; }
+.card-el-drag-handle:active { cursor: grabbing; }
+.card-el-wrapper > *:not(.card-el-drag-handle):not(.card-context-menu) { flex: 1; }
+
+/* Inline editors */
+.card-el-inline-textarea { font-family: inherit; line-height: 1.5; }
+.card-el-inline-input { font-family: inherit; }
+
+/* Image element */
+.card-el-image { min-height: 40px; display: flex; align-items: center; justify-content: center; }
+.card-el-image img { max-width: 100%; max-height: 200px; object-fit: contain; }
+
+/* Button element */
+.card-el-button { cursor: pointer; border: none; }
+
+/* Element type picker */
+.card-el-picker {
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 8px;
+  background: rgba(168,85,247,0.06);
+  border: 1px dashed var(--purple-400);
+  border-radius: var(--radius-sm);
+  position: relative;
+}
+.card-el-picker-item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text-primary); font-size: 11px; cursor: pointer;
+  transition: all var(--transition);
+}
+.card-el-picker-item:hover { border-color: var(--purple-400); background: rgba(168,85,247,0.1); }
+.card-el-picker-close {
+  position: absolute; top: 4px; right: 4px;
+  width: 20px; height: 20px; padding: 0;
+  display: grid; place-items: center;
+  border-radius: 50%; border: none;
+  background: var(--bg-card-hover); color: var(--text-muted); cursor: pointer;
+}
+
+/* Context menu */
+.card-context-menu {
+  position: fixed; z-index: 1100;
+  width: 240px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  overflow: hidden;
+}
+.card-context-tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+}
+.card-context-tab {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 6px; font-size: 11px; font-weight: 600;
+  border: none; background: transparent; color: var(--text-muted); cursor: pointer;
+  transition: all var(--transition);
+}
+.card-context-tab.active { background: rgba(168,85,247,0.1); color: var(--purple-400); }
+.card-context-tab:hover { color: var(--text-primary); }
+.card-context-body { padding: 8px; display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }
+.card-context-section { display: flex; flex-direction: column; gap: 4px; }
+.card-context-section label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.card-context-section select,
+.card-context-section input[type="text"],
+.card-context-section input[type="number"] {
+  width: 100%; padding: 4px 8px; font-size: 12px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--bg-secondary); color: var(--text-primary);
+}
+.card-context-section-row { display: flex; gap: 8px; }
+.card-context-section-row .card-context-section { flex: 1; }
+.card-context-color-row { display: flex; gap: 6px; align-items: center; }
+.card-context-color-row input[type="color"] { width: 28px; height: 28px; padding: 1px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; background: none; }
+.card-context-color-row input[type="text"] { flex: 1; }
+.card-context-color-row input[type="number"] { width: 60px; }
+.card-context-align-row { display: flex; gap: 4px; }
+.card-context-align-btn {
+  width: 28px; height: 28px; padding: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.card-context-align-btn.active { background: rgba(168,85,247,0.15); border-color: var(--purple-400); color: var(--purple-400); }
+.card-context-divider { height: 1px; background: var(--border); }
+.card-context-actions { display: flex; gap: 4px; }
+.card-context-action-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 6px; font-size: 11px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-muted); cursor: pointer;
+  transition: all var(--transition);
+}
+.card-context-action-btn:hover { background: rgba(239,68,68,0.1); border-color: #ef4444; color: #ef4444; }
+.card-context-checkbox {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-secondary); cursor: pointer;
+}
