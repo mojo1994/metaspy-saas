@@ -11,6 +11,7 @@ import {
   type NodeTypes,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type EdgeChange,
   type NodeChange,
   SelectionMode,
@@ -34,12 +35,21 @@ function CanvasInner() {
   const pushHistory = useQuizStore(s => s.pushHistory)
   const duplicateNode = useQuizStore(s => s.duplicateNode)
   const removeNode = useQuizStore(s => s.removeNode)
+  const reactFlow = useReactFlow()
 
   const [nodes, setLocalNodes, onNodesChange] = useNodesState((currentQuiz?.nodes || []) as Node<QuizNodeData>[])
   const [edges, setLocalEdges, onEdgesChange] = useEdgesState(currentQuiz?.edges || [])
   const [error, setError] = useState('')
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
+
+  const syncFromStore = useCallback(() => {
+    const state = useQuizStore.getState()
+    if (state.currentQuiz) {
+      setLocalNodes([...state.currentQuiz.nodes])
+      setLocalEdges([...state.currentQuiz.edges])
+    }
+  }, [setLocalNodes, setLocalEdges])
 
   useEffect(() => {
     if (currentQuiz) {
@@ -99,46 +109,54 @@ function CanvasInner() {
     event.dataTransfer.dropEffect = 'move'
   }, [])
 
+  const deleteSelected = useCallback(() => {
+    const state = useQuizStore.getState()
+    if (state.selectedEdgeId) {
+      removeEdge(state.selectedEdgeId)
+      syncFromStore()
+      return
+    }
+    const selectedNodes = reactFlow.getNodes().filter(n => n.selected)
+    if (selectedNodes.length > 0) {
+      pushHistory()
+      selectedNodes.forEach(n => removeNode(n.id))
+      syncFromStore()
+      return
+    }
+    if (state.selectedNodeId) {
+      pushHistory()
+      removeNode(state.selectedNodeId)
+      syncFromStore()
+    }
+  }, [reactFlow, removeNode, removeEdge, pushHistory, syncFromStore])
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault()
         if (e.shiftKey) useQuizStore.getState().redo()
         else useQuizStore.getState().undo()
-        const state = useQuizStore.getState()
-        if (state.currentQuiz) {
-          setLocalNodes([...state.currentQuiz.nodes])
-          setLocalEdges([...state.currentQuiz.edges])
-        }
+        syncFromStore()
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
         e.preventDefault()
         const sel = useQuizStore.getState().selectedNodeId
         if (sel) {
+          pushHistory()
           duplicateNode(sel)
-          const state = useQuizStore.getState()
-          setLocalNodes([...state.currentQuiz!.nodes])
-          setLocalEdges([...state.currentQuiz!.edges])
+          syncFromStore()
         }
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const state = useQuizStore.getState()
-        if (state.selectedEdgeId) {
-          removeEdge(state.selectedEdgeId)
-          setLocalEdges([...state.currentQuiz!.edges])
-          return
-        }
-        const sel = state.selectedNodeId
-        if (sel) {
-          removeNode(sel)
-          setLocalNodes([...state.currentQuiz!.nodes])
-          setLocalEdges([...state.currentQuiz!.edges])
-        }
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+        e.preventDefault()
+        deleteSelected()
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [deleteSelected, pushHistory, duplicateNode, syncFromStore])
 
   const defaultEdgeOptions = {
     type: 'smoothstep',
