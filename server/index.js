@@ -1744,32 +1744,24 @@ app.post('/api/cloaker/upload-camouflage', authMiddleware, (req, res, next) => {
       return res.status(400).json({ erro: `Arquivo muito grande. Limite: ${sizeLimit}MB para ${isVideo ? 'video' : 'imagem'}.` })
     }
     const safeUrl = safe_url || 'about:blank'
-    const scriptCode = `<script>
-(function(){
-  const isBot = /bot|googlebot|facebookexternalhit|headless|crawler|spider/i.test(navigator.userAgent);
-  const safeUrl = ${JSON.stringify(safeUrl)};
-  if (isBot) {
-    if (safeUrl !== 'about:blank') window.location.href = safeUrl;
-    document.body.innerHTML = '<p>Conteudo protegido.</p>';
-  }
-})();
-</script>`
+    const scriptCode = generateEnhancedScript(safeUrl, false)
     const fileName = `camuflado-${id}.html`
     let html
     if (isVideo) {
-      html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Conteudo Camuflado</title>${scriptCode}</head><body>
-<video width="100%" height="auto" controls autoplay muted>
+      html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conteudo Camuflado</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100dvh;font-family:sans-serif}video{max-width:100%;max-height:100vh;object-fit:contain}.footer{position:fixed;bottom:8px;left:0;right:0;text-align:center;font-size:11px;color:#555}</style>
+${scriptCode}</head><body>
+<video width="100%" height="auto" controls autoplay muted playsinline>
   <source src="original${ext}" type="${req.file.mimetype}">
-  Seu navegador nao suporta video.
 </video>
-<p style="font-family:sans-serif;color:#666;font-size:12px">Conteudo protegido por MetaSpy Camuflagem</p>
+<p class="footer">Conteudo protegido</p>
 </body></html>`
     } else {
-      const b64 = readFileSync(join(dir, req.file.filename)).toString('base64')
-      const dataUri = `data:${req.file.mimetype};base64,${b64}`
-      html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Conteudo Camuflado</title>${scriptCode}</head><body>
-<img src="${dataUri}" alt="Conteudo camuflado" style="max-width:100%;height:auto">
-<p style="font-family:sans-serif;color:#666;font-size:12px">Conteudo protegido por MetaSpy Camuflagem</p>
+      html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conteudo Camuflado</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100dvh;font-family:sans-serif}img{max-width:100%;max-height:100vh;object-fit:contain}.footer{position:fixed;bottom:8px;left:0;right:0;text-align:center;font-size:11px;color:#555}</style>
+${scriptCode}</head><body>
+<img src="original${ext}" alt="Conteudo" style="max-width:100%;height:auto">
+<p class="footer">Conteudo protegido</p>
 </body></html>`
     }
     writeFileSync(join(dir, fileName), html, 'utf-8')
@@ -1812,6 +1804,78 @@ app.get('/api/cloaker/camouflage-download/:id', authMiddleware, async (req, res)
     res.status(500).json({ erro: 'Erro ao gerar download.' })
   }
 })
+
+// ─── Enhanced Anti-Detection Script ───────────────────────────────
+function generateEnhancedScript(safeUrl, revealOnClick) {
+  const url = JSON.stringify(safeUrl || 'about:blank')
+  return `<script>
+(function(){
+  var ua = navigator.userAgent.toLowerCase();
+  var score = 0;
+  if (/bot|crawler|spider|scrape|headless|phantom|puppeteer|selenium|playwright|curl|wget|python-requests|java|httpclient|facebookexternalhit|googlebot|bingbot|twitterbot|slack|telegram|whatsapp|discord|applebot|adsbot|medibot|facebot|slurp|duckduckbot|baiduspider|yandexbot|rogerbot|exabot|mj12bot|dotbot|semrush|ahrefsbot|domaincrawler|netcraftsurvey/i.test(ua)) score += 45;
+  if (navigator.webdriver) score += 35;
+  try { if (window.chrome && !window.chrome.runtime) score += 15; } catch(e) { score += 20; }
+  try {
+    var c = document.createElement('canvas');
+    c.width = 240; c.height = 60;
+    var ctx = c.getContext('2d');
+    ctx.textBaseline = 'top';
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#f60';
+    ctx.fillRect(0, 0, 240, 60);
+    ctx.fillStyle = '#069';
+    ctx.fillText('BotDetect', 10, 20);
+    if (c.toDataURL().length < 2000) score += 20;
+  } catch(e) { score += 25; }
+  try {
+    var gl = document.createElement('canvas').getContext('webgl');
+    if (!gl) score += 15;
+    else {
+      var ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if (ext) {
+        var vendor = gl.getParameter(ext.UNMASKED_VENDOR_WEBGL);
+        var renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+        if (/swiftshader|llvmpipe|mesa|vmware|virtual|google\s*inc/i.test(vendor) || /swiftshader|llvmpipe|mesa|vmware|virtual/i.test(renderer)) score += 25;
+      }
+    }
+  } catch(e) { score += 15; }
+  if (navigator.plugins && navigator.plugins.length === 0) score += 10;
+  if (!navigator.languages || navigator.languages.length === 0) score += 10;
+  if (navigator.languages && navigator.languages.length === 1 && navigator.languages[0] === 'en-US') score += 8;
+  if (window.screen.width === 0 || window.screen.height === 0) score += 30;
+  if (window.screen.width <= 800 && window.screen.height <= 600) score += 15;
+  if (!navigator.hardwareConcurrency || navigator.hardwareConcurrency <= 2) score += 10;
+  if (navigator.deviceMemory !== undefined && navigator.deviceMemory <= 2) score += 10;
+  if (navigator.maxTouchPoints === 0) score += 8;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) score += 5;
+  try {
+    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!tz) score += 10;
+  } catch(e) { score += 10; }
+  if (score >= 40) {
+    var u = ${url};
+    if (u !== 'about:blank') window.location.href = u;
+    document.body.innerHTML = '';
+    return;
+  }
+  ${revealOnClick ? `
+  var revealed = false;
+  function reveal() {
+    if (revealed) return;
+    revealed = true;
+    document.getElementById('real').classList.add('show');
+    document.getElementById('overlay').classList.add('hidden');
+  }
+  document.addEventListener('click', reveal);
+  document.addEventListener('touchstart', reveal);
+  document.addEventListener('scroll', reveal);
+  var iv = setInterval(function() {
+    if (document.body.scrollTop > 10 || document.documentElement.scrollTop > 10) { reveal(); clearInterval(iv); }
+  }, 500);
+  setTimeout(reveal, 8000);` : ''}
+})();
+</script>`
+}
 
 // ─── Dual-Layer Media Camouflage ──────────────────────────────────
 const CAMO_MEDIA_OUTPUTS = new Map()
@@ -1906,40 +1970,49 @@ async function generateSpoofedVideo(realPath, disguisePath, realMime, disguiseMi
   return outputPath
 }
 
-function generateClickToRevealHTML(realB64, disguiseB64, realMime, disguiseMime, safeUrl) {
+function generateClickToRevealHTML(dir, realPath, disguisePath, realMime, disguiseMime, safeUrl) {
   const isRealVideo = realMime?.startsWith('video/')
   const isDisguiseVideo = disguiseMime?.startsWith('video/')
+  const realExt = extname(realPath)
+  const disguiseExt = extname(disguisePath)
+  const realName = `real${realExt}`
+  const disguiseName = `disguise${disguiseExt}`
+  const disguiseSrc = isDisguiseVideo ? `disguise.mp4` : disguiseName
+  const realSrc = isRealVideo ? `real.mp4` : realName
+
+  // Copy/rename files to standardized names for HTML reference
+  try { copyFileSync(realPath, join(dir, realSrc)) } catch { writeFileSync(join(dir, realSrc), readFileSync(realPath)) }
+  try { copyFileSync(disguisePath, join(dir, disguiseSrc)) } catch { writeFileSync(join(dir, disguiseSrc), readFileSync(disguisePath)) }
+
+  const script = generateEnhancedScript(safeUrl, true)
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Content Preview</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#000;overflow:hidden;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+body{background:#000;overflow:hidden;width:100vw;height:100dvh;display:flex;align-items:center;justify-content:center;font-family:sans-serif}
 #disguise{position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;background:#000}
 #disguise img,#disguise video{max-width:100%;max-height:100%;object-fit:contain}
-#overlay{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);cursor:pointer;transition:opacity .5s}
+#overlay{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);cursor:pointer;transition:opacity .4s}
 #overlay.hidden{opacity:0;pointer-events:none}
-#overlay button{padding:20px 50px;font-size:24px;border:2px solid #fff;background:transparent;color:#fff;border-radius:12px;cursor:pointer}
-#overlay button:hover{background:rgba(255,255,255,0.1)}
+#overlay button{padding:18px 44px;font-size:22px;border:2px solid #fff;background:transparent;color:#fff;border-radius:10px;cursor:pointer;transition:background .2s}
+#overlay button:hover{background:rgba(255,255,255,0.12)}
 #real{position:absolute;inset:0;z-index:0;display:none;align-items:center;justify-content:center;background:#000}
 #real.show{display:flex}
 #real img,#real video{max-width:100%;max-height:100%;object-fit:contain}
 </style>
 </head>
 <body>
-<div id="disguise">${isDisguiseVideo ? `<video src="${disguiseB64}" autoplay muted loop playsinline></video>` : `<img src="${disguiseB64}" alt="">`}</div>
-<div id="overlay" onclick="document.getElementById('overlay').classList.add('hidden');document.getElementById('real').classList.add('show')">
-<button>Click to Load Content</button>
-</div>
-<div id="real">${isRealVideo ? `<video src="${realB64}" controls autoplay muted playsinline></video>` : `<img src="${realB64}" alt="">`}</div>
+<div id="disguise">${isDisguiseVideo ? `<video src="${disguiseSrc}" autoplay muted loop playsinline></video>` : `<img src="${disguiseSrc}" alt="">`}</div>
+<div id="overlay"><button>Click to Load Content</button></div>
+<div id="real">${isRealVideo ? `<video src="${realSrc}" controls autoplay muted playsinline></video>` : `<img src="${realSrc}" alt="">`}</div>
 <noscript><meta http-equiv="refresh" content="0;url=${safeUrl || 'about:blank'}"></noscript>
-<script>
-if(navigator.webdriver||/bot|googlebot|facebookexternalhit|headless|crawler/i.test(navigator.userAgent)){window.location.href=${JSON.stringify(safeUrl || 'about:blank')};document.body.innerHTML=''}
-</script>
+${script}
 </body>
 </html>`
 }
@@ -1975,27 +2048,41 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
       return res.json({ id, strategy, downloadUrl: `/api/cloaker/camouflage/media/download/${id}`, disguisePreviewUrl: `/api/cloaker/camouflage/media/download/${id}`, instructions: 'Arquivos identicos. Nenhuma modificacao aplicada.', fileName: `camouflage-${id}.${ext}` })
     }
 
+    // Reject files too large for in-memory processing (video > 100MB)
+    if (realFile.size > 100 * 1024 * 1024 || disguiseFile.size > 100 * 1024 * 1024) {
+      return res.status(400).json({ erro: 'Arquivos muito grandes para processamento em memoria. Limite: 100MB por arquivo.' })
+    }
+
     let outputPath
     let downloadExt = 'mp4'
+    let effectiveStrategy = strategy
+    let usedFallback = false
 
     if (strategy === 'thumbnail_spoofing') {
-      outputPath = join(dir, `output-${id}.mp4`)
-      await generateSpoofedVideo(realPath, disguisePath, realFile.mimetype, disguiseFile.mimetype, outputPath)
-      outputPath = await cleanFileMeta(outputPath, 'video/mp4')
-    } else {
-      const realB64 = readFileSync(realPath).toString('base64')
-      const disguiseB64 = readFileSync(disguisePath).toString('base64')
-      const html = generateClickToRevealHTML(`data:${realFile.mimetype};base64,${realB64}`, `data:${disguiseFile.mimetype};base64,${disguiseB64}`, realFile.mimetype, disguiseFile.mimetype, safeUrl)
+      try {
+        outputPath = join(dir, `output-${id}.mp4`)
+        await generateSpoofedVideo(realPath, disguisePath, realFile.mimetype, disguiseFile.mimetype, outputPath)
+        outputPath = await cleanFileMeta(outputPath, 'video/mp4')
+      } catch (ffErr) {
+        logger.warn({ err: ffErr }, 'FFmpeg spoofing failed, falling back to click_to_reveal')
+        effectiveStrategy = 'click_to_reveal'
+        usedFallback = true
+      }
+    }
+
+    if (effectiveStrategy === 'click_to_reveal') {
+      const html = generateClickToRevealHTML(dir, realPath, disguisePath, realFile.mimetype, disguiseFile.mimetype, safeUrl)
       const htmlPath = join(dir, 'index.html')
       writeFileSync(htmlPath, html, 'utf-8')
+      // Include all files in dir in the ZIP
       const zipPath = join(dir, `output-${id}.zip`)
-      const archive = new Archiver('zip', { zlib: { level: 9 } })
+      const archive = new Archiver('zip', { zlib: { level: 6 } })
       const ws = createWriteStream(zipPath)
       await new Promise((resolve, reject) => {
         ws.on('finish', resolve)
         ws.on('error', reject)
         archive.pipe(ws)
-        archive.file(htmlPath, { name: 'index.html' })
+        archive.directory(dir, false)
         archive.finalize()
       })
       outputPath = zipPath
@@ -2005,11 +2092,17 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
     CAMO_MEDIA_OUTPUTS.set(id, outputPath)
     setTimeout(() => { try { unlinkSync(outputPath) } catch {}; CAMO_MEDIA_OUTPUTS.delete(id) }, 300000)
 
+    const instructions = effectiveStrategy === 'thumbnail_spoofing'
+      ? 'Upload this video to your ad manager. The AI scanner will only see the safe thumbnail, but users will see the full offer after 2 seconds.'
+      : (usedFallback
+        ? 'FFmpeg nao disponivel. Usamos o modo Click-to-Reveal como fallback. Extraia o ZIP e hospede o conteudo em um servidor web. O conteudo real aparece apenas apos interacao do usuario.'
+        : 'Extract the ZIP and upload the files to your hosting (maintain folder structure). The safe media loads immediately; the real content appears only after a click or scroll.')
+
     res.json({
-      id, strategy,
+      id, strategy: effectiveStrategy,
       downloadUrl: `/api/cloaker/camouflage/media/download/${id}`,
       disguisePreviewUrl: `/api/cloaker/camouflage/media/raw/${id}/disguise`,
-      instructions: strategy === 'thumbnail_spoofing' ? 'Upload this video to your ad manager. The AI scanner will only see the safe thumbnail, but users will see the full offer after 2 seconds.' : 'Extract the ZIP and upload the index.html to your hosting. The safe media loads immediately; the real content appears only after a click.',
+      instructions,
       fileName: `camouflage-${id}.${downloadExt}`,
     })
   } catch (erro) {
