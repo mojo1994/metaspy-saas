@@ -40,8 +40,14 @@ type LoadingState = 'checking' | 'loading' | 'ready'
 
 export default function App() {
   const [loadingState, setLoadingState] = useState<LoadingState>('checking')
+  const { isAuthenticated } = useAuth()
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setLoadingState('ready')
+      return
+    }
+
     let cancelled = false
     let retryTimer: ReturnType<typeof setInterval> | null = null
     let safetyTimer: ReturnType<typeof setTimeout> | null = null
@@ -90,11 +96,11 @@ export default function App() {
       if (retryTimer) clearInterval(retryTimer)
       if (safetyTimer) clearTimeout(safetyTimer)
     }
-  }, [])
+  }, [isAuthenticated])
 
   return (
     <>
-      {loadingState === 'loading' && <LoadingScreen />}
+      {loadingState === 'loading' && isAuthenticated && <LoadingScreen />}
       <Routes>
       <Route path="/" element={<Navigate to="/planos" replace />} />
       <Route path="/login" element={<Login />} />
