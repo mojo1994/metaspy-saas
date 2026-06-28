@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useQuizStore } from '../stores/quizStore'
 import { PenSquare } from 'lucide-react'
 
 interface QuizListItem {
@@ -28,10 +29,9 @@ export default function QuizzesList() {
   async function create() {
     setCreating(true)
     try {
-      const res = await fetchWithAuth('/api/quizzes', { method: 'POST' })
-      if (!res.ok) return
-      const data = await res.json()
-      navigate(`/dashboard/quiz/${data.id}`)
+      const id = await useQuizStore.getState().createNewQuiz(fetchWithAuth)
+      if (!id) { setCreating(false); return }
+      navigate(`/dashboard/quiz/${id}`)
     } catch {}
     setCreating(false)
   }

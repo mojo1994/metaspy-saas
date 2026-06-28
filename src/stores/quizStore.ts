@@ -358,42 +358,54 @@ export const useQuizStore = create<QuizState>((set, get) => ({
 
   setQuiz: (quiz) => set({ currentQuiz: quiz, savedVersion: quiz.version, isDirty: false }),
 
-  createNewQuiz: async (fetchWithAuth) => {
-    try {
-      const res = await fetchWithAuth('/api/quizzes', { method: 'POST' })
-      if (!res.ok) return null
-      const data = await res.json()
-      set({
-        currentQuiz: data,
-        savedVersion: data.version,
-        isDirty: false,
-        past: [] as Quiz[],
-        future: [] as Quiz[],
-        selectedNodeId: null,
-        selectedFreehandId: null,
-        isPreview: false,
-      })
-      return data.id
-    } catch { return null }
-  },
+    createNewQuiz: async (fetchWithAuth) => {
+      try {
+        const res = await fetchWithAuth('/api/quizzes', { method: 'POST' })
+        if (!res.ok) return null
+        const data = await res.json()
+        set({
+          currentQuiz: {
+            ...data,
+            nodes: data.nodes || [],
+            edges: data.edges || [],
+            settings: data.settings || { theme: 'dark', layout: 'single', progressBar: true, allowBacktracking: false, randomizeQuestions: false, timeLimit: 0, redirectAfterComplete: '' },
+            freehand: data.freehand || [],
+          },
+          savedVersion: data.version,
+          isDirty: false,
+          past: [] as Quiz[],
+          future: [] as Quiz[],
+          selectedNodeId: null,
+          selectedFreehandId: null,
+          isPreview: false,
+        })
+        return data.id
+      } catch { return null }
+    },
 
-  loadQuiz: async (id, fetchWithAuth) => {
-    try {
-      const res = await fetchWithAuth(`/api/quizzes/${id}`)
-      if (!res.ok) return
-      const quiz = await res.json()
-      set({
-        currentQuiz: quiz,
-        savedVersion: quiz.version,
-        isDirty: false,
-        past: [] as Quiz[],
-        future: [] as Quiz[],
-        selectedNodeId: null,
-        selectedFreehandId: null,
-        isPreview: false,
-      })
-    } catch {}
-  },
+    loadQuiz: async (id, fetchWithAuth) => {
+      try {
+        const res = await fetchWithAuth(`/api/quizzes/${id}`)
+        if (!res.ok) return
+        const quiz = await res.json()
+        set({
+          currentQuiz: {
+            ...quiz,
+            nodes: quiz.nodes || [],
+            edges: quiz.edges || [],
+            settings: quiz.settings || { theme: 'dark', layout: 'single', progressBar: true, allowBacktracking: false, randomizeQuestions: false, timeLimit: 0, redirectAfterComplete: '' },
+            freehand: quiz.freehand || [],
+          },
+          savedVersion: quiz.version,
+          isDirty: false,
+          past: [] as Quiz[],
+          future: [] as Quiz[],
+          selectedNodeId: null,
+          selectedFreehandId: null,
+          isPreview: false,
+        })
+      } catch {}
+    },
 
   saveQuiz: async (fetchWithAuth) => {
     const { currentQuiz, savedVersion } = get()
