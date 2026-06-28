@@ -8,7 +8,7 @@ export default function CamuflagemMidia() {
   // Dual-layer
   const [realMedia, setRealMedia] = useState<File | null>(null)
   const [disguiseMedia, setDisguiseMedia] = useState<File | null>(null)
-  const [strategy, setStrategy] = useState<'thumbnail_spoofing' | 'click_to_reveal'>('thumbnail_spoofing')
+  const [strategy, setStrategy] = useState<'thumbnail_spoofing' | 'click_to_reveal'>('click_to_reveal')
   const [camoSafeUrl, setCamoSafeUrl] = useState('')
   const [camoLoading, setCamoLoading] = useState(false)
   const [camoResult, setCamoResult] = useState<any>(null)
@@ -261,7 +261,7 @@ export default function CamuflagemMidia() {
               <div className="clone-config-header">Download e Instrucoes</div>
               <div className="clone-config-body" style={{ gap: 8 }}>
                 <button className="btn btn-primary" onClick={handleCamoDownload} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <IconDownload size={18} /> Baixar {strategy === 'thumbnail_spoofing' ? 'Video MP4' : 'ZIP'}
+                  <IconDownload size={18} /> Baixar ZIP
                 </button>
                 <div style={{ padding: 12, background: 'var(--bg-primary)', borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                   {camoResult.instructions}

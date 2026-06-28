@@ -2021,9 +2021,13 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
   { name: 'real_media', maxCount: 1 },
   { name: 'disguise_media', maxCount: 1 },
 ]), async (req, res) => {
+  const timer = setTimeout(() => {
+    if (!res.headersSent) res.status(504).json({ erro: 'Tempo limite excedido. Tente com arquivos menores.' })
+  }, 20000)
+  function done(data, status = 200) { clearTimeout(timer); return res.status(status).json(data) }
   try {
     const features = PLAN_FEATURES[req.user.plan]
-    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Premium.' })
+    if (!features?.cloaker) return done({ erro: 'Disponivel apenas no plano Premium.' }, 403)
 
     const files = req.files || {}
     const realFile = Array.isArray(files['real_media']) ? files['real_media'][0] : undefined
@@ -2031,8 +2035,8 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
     const strategy = req.body.strategy
     const safeUrl = req.body.safe_url || ''
 
-    if (!realFile || !disguiseFile) return res.status(400).json({ erro: 'Envie real_media e disguise_media.' })
-    if (!['thumbnail_spoofing', 'click_to_reveal'].includes(strategy)) return res.status(400).json({ erro: 'Estrategia invalida.' })
+    if (!realFile || !disguiseFile) return done({ erro: 'Envie real_media e disguise_media.' }, 400)
+    if (!['thumbnail_spoofing', 'click_to_reveal'].includes(strategy)) return done({ erro: 'Estrategia invalida.' }, 400)
 
     const dir = req.camoMediaDir
     const realPath = realFile.path
@@ -2045,67 +2049,45 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
       const ext = realFile.mimetype.startsWith('video/') ? 'mp4' : 'jpg'
       CAMO_MEDIA_OUTPUTS.set(id, cleanPath)
       setTimeout(() => CAMO_MEDIA_OUTPUTS.delete(id), 300000)
-      return res.json({ id, strategy, downloadUrl: `/api/cloaker/camouflage/media/download/${id}`, disguisePreviewUrl: `/api/cloaker/camouflage/media/download/${id}`, instructions: 'Arquivos identicos. Nenhuma modificacao aplicada.', fileName: `camouflage-${id}.${ext}` })
+      return done({ id, strategy, downloadUrl: `/api/cloaker/camouflage/media/download/${id}`, instructions: 'Arquivos identicos. Nenhuma modificacao aplicada.', fileName: `camouflage-${id}.${ext}` })
     }
 
-    // Reject files too large for in-memory processing (video > 100MB)
+    // Reject files too large for in-memory processing
     if (realFile.size > 100 * 1024 * 1024 || disguiseFile.size > 100 * 1024 * 1024) {
-      return res.status(400).json({ erro: 'Arquivos muito grandes para processamento em memoria. Limite: 100MB por arquivo.' })
+      return done({ erro: 'Arquivos muito grandes. Limite: 100MB por arquivo.' }, 400)
     }
 
     let outputPath
-    let downloadExt = 'mp4'
-    let effectiveStrategy = strategy
-    let usedFallback = false
+    let downloadExt = 'zip'
+    let effectiveStrategy = 'click_to_reveal'
 
-    if (strategy === 'thumbnail_spoofing') {
-      try {
-        outputPath = join(dir, `output-${id}.mp4`)
-        await generateSpoofedVideo(realPath, disguisePath, realFile.mimetype, disguiseFile.mimetype, outputPath)
-        outputPath = await cleanFileMeta(outputPath, 'video/mp4')
-      } catch (ffErr) {
-        logger.warn({ err: ffErr }, 'FFmpeg spoofing failed, falling back to click_to_reveal')
-        effectiveStrategy = 'click_to_reveal'
-        usedFallback = true
-      }
-    }
-
-    if (effectiveStrategy === 'click_to_reveal') {
-      const html = generateClickToRevealHTML(dir, realPath, disguisePath, realFile.mimetype, disguiseFile.mimetype, safeUrl)
-      const htmlPath = join(dir, 'index.html')
-      writeFileSync(htmlPath, html, 'utf-8')
-      // Include all files in dir in the ZIP
-      const zipPath = join(dir, `output-${id}.zip`)
-      const archive = new Archiver('zip', { zlib: { level: 6 } })
-      const ws = createWriteStream(zipPath)
-      await new Promise((resolve, reject) => {
-        ws.on('finish', resolve)
-        ws.on('error', reject)
-        archive.pipe(ws)
-        archive.directory(dir, false)
-        archive.finalize()
-      })
-      outputPath = zipPath
-      downloadExt = 'zip'
-    }
+    // thumbnail_spoofing via ffmpeg is unreliable; always use click_to_reveal
+    const html = generateClickToRevealHTML(dir, realPath, disguisePath, realFile.mimetype, disguiseFile.mimetype, safeUrl)
+    const htmlPath = join(dir, 'index.html')
+    writeFileSync(htmlPath, html, 'utf-8')
+    const zipPath = join(dir, `output-${id}.zip`)
+    const archive = new Archiver('zip', { zlib: { level: 6 } })
+    const ws = createWriteStream(zipPath)
+    await new Promise((resolve, reject) => {
+      ws.on('finish', resolve)
+      ws.on('error', reject)
+      archive.pipe(ws)
+      archive.directory(dir, false)
+      archive.finalize()
+    })
+    outputPath = zipPath
 
     CAMO_MEDIA_OUTPUTS.set(id, outputPath)
     setTimeout(() => { try { unlinkSync(outputPath) } catch {}; CAMO_MEDIA_OUTPUTS.delete(id) }, 300000)
 
-    const instructions = effectiveStrategy === 'thumbnail_spoofing'
-      ? 'Upload this video to your ad manager. The AI scanner will only see the safe thumbnail, but users will see the full offer after 2 seconds.'
-      : (usedFallback
-        ? 'FFmpeg nao disponivel. Usamos o modo Click-to-Reveal como fallback. Extraia o ZIP e hospede o conteudo em um servidor web. O conteudo real aparece apenas apos interacao do usuario.'
-        : 'Extract the ZIP and upload the files to your hosting (maintain folder structure). The safe media loads immediately; the real content appears only after a click or scroll.')
-
-    res.json({
+    done({
       id, strategy: effectiveStrategy,
       downloadUrl: `/api/cloaker/camouflage/media/download/${id}`,
-      disguisePreviewUrl: `/api/cloaker/camouflage/media/raw/${id}/disguise`,
-      instructions,
+      instructions: 'Extraia o ZIP e hospede os arquivos em um servidor web. O conteudo seguro carrega imediatamente; o real aparece apos clique ou scroll.',
       fileName: `camouflage-${id}.${downloadExt}`,
     })
   } catch (erro) {
+    clearTimeout(timer)
     logger.error({ err: erro }, 'Erro no camouflage media')
     res.status(500).json({ erro: 'Erro ao processar camuflagem de midia.' })
   }
