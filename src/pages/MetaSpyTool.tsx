@@ -331,6 +331,9 @@ export default function MetaSpyTool() {
         limit: '10',
         fields: CAMPOS_API_MINIMO
       })
+      if (filtros.plataforma && filtros.plataforma !== 'ambos') {
+        params.set('publisher_platforms', JSON.stringify([filtros.plataforma]))
+      }
       const url = `${FB_API_BASE}?${params.toString()}`
       try {
         const json = await requisicaoApiComRetry(url)
@@ -456,7 +459,7 @@ export default function MetaSpyTool() {
     return { total: base.length, ativos, altos, medios, baixos, comWhatsApp, nutraCount, infoCount, scoreMedia: (scoreSum / base.length).toFixed(1), top10 }
   }, [anuncios, anunciosFiltrados])
 
-  const montarCenariosApi = useCallback((termo: string, pais: string, statusFiltro: string) => {
+  const montarCenariosApi = useCallback((termo: string, pais: string, statusFiltro: string, plataforma: string) => {
     const base: Record<string, string> = {
       ad_active_status: statusFiltro || 'ACTIVE',
       limit: '50',
@@ -464,6 +467,9 @@ export default function MetaSpyTool() {
     }
     const termoSeguro = termo.trim()
     if (termoSeguro) base.search_terms = termoSeguro
+    if (plataforma && plataforma !== 'ambos') {
+      base.publisher_platforms = JSON.stringify([plataforma])
+    }
 
     function montarUrl(params: Record<string, string>) {
       const p = new URLSearchParams()
@@ -530,7 +536,7 @@ export default function MetaSpyTool() {
   }, [])
 
   const buscarDaApi = useCallback(async (termo: string): Promise<Anuncio[]> => {
-    const cenarios = montarCenariosApi(termo, filtros.pais, filtros.statusApi)
+    const cenarios = montarCenariosApi(termo, filtros.pais, filtros.statusApi, filtros.plataforma)
     let ultimoErro: Error | null = null
 
     for (const cenario of cenarios) {
@@ -554,7 +560,7 @@ export default function MetaSpyTool() {
       }
     }
     throw ultimoErro || new Error('Nenhum cenario de consulta funcionou.')
-  }, [filtros.pais, filtros.statusApi, montarCenariosApi])
+  }, [filtros.pais, filtros.statusApi, filtros.plataforma, montarCenariosApi])
 
   async function iniciarBusca() {
     setPaginaAtual(1)
