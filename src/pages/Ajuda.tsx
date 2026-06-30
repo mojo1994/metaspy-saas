@@ -168,11 +168,11 @@ const CATEGORIAS: CategoriaProps[] = [
     itens: [
       {
         pergunta: 'Como criar uma conta no MetaSpy?',
-        resposta: 'Acesse a pagina de cadastro em /signup. Digite seu email no primeiro passo. Se o email nao estiver cadastrado, preencha seu nome e crie uma senha com no minimo 6 caracteres. Um codigo de verificacao sera enviado ao seu email. Insira o codigo para ativar sua conta.',
+        resposta: 'Acesse a pagina de cadastro em /signup. Digite seu email no primeiro passo. Se o email nao estiver cadastrado, preencha seu nome e crie uma senha com no minimo 6 caracteres. Sua conta sera criada automaticamente.',
       },
       {
         pergunta: 'Nao recebi o codigo de verificacao',
-        resposta: 'Verifique a pasta de spam ou lixo eletronico. O codigo pode levar alguns minutos para chegar. Na pagina de cadastro, clique em "Reenviar codigo" apos 30 segundos. Se o problema persistir, tente usar outro email ou entre em contato com o suporte.',
+        resposta: 'O envio de codigos de verificacao por email foi desativado temporariamente. Sua conta e criada automaticamente apos o cadastro. Se tiver problemas, entre em contato com o suporte.',
       },
       {
         pergunta: 'Como faco login na plataforma?',
@@ -180,7 +180,7 @@ const CATEGORIAS: CategoriaProps[] = [
       },
       {
         pergunta: 'Esqueci minha senha. O que fazer?',
-        resposta: 'Acesse /esqueci-senha e digite seu email. Um codigo de 6 digitos sera enviado para recuperacao. Insira o codigo e crie uma nova senha com no minimo 6 caracteres. A senha sera redefinida imediatamente.',
+        resposta: 'Acesse /esqueci-senha e digite seu email. Se o email estiver cadastrado, voce podera criar uma nova senha diretamente. Escolha uma senha com no minimo 6 caracteres.',
       },
       {
         pergunta: 'Como escolher o melhor plano para mim?',
@@ -536,7 +536,7 @@ const CATEGORIAS: CategoriaProps[] = [
       },
       {
         pergunta: 'Codigo de verificacao invalido ou expirado',
-        resposta: 'O codigo de verificacao expira apos alguns minutos. Solicite um novo codigo clicando em "Reenviar". Certifique-se de digitar exatamente os 6 digitos recebidos no email.',
+        resposta: 'O envio de codigos de verificacao foi desativado temporariamente. Sua conta e criada automaticamente sem necessidade de confirmacao por email.',
       },
       {
         pergunta: 'Limite de uso atingido',
