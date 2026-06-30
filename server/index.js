@@ -561,26 +561,19 @@ app.post('/api/auth/signup', validate(signupSchema), async (req, res) => {
     const existing = await one('SELECT id FROM users WHERE email = $1', [emailLower])
     if (existing) return res.status(409).json({ error: 'Email ja cadastrado' })
 
-    await run('UPDATE email_codes SET used = 1 WHERE email = $1 AND type = $2 AND used = 0', [emailLower, 'signup'])
-
     const hash = await bcrypt.hash(password, 10)
-    const code = generateCode()
-    const now = new Date()
-    const expires = new Date(now.getTime() + 5 * 60 * 1000)
     const id = randomUUID()
-    const metadata = JSON.stringify({ name: name.trim(), password_hash: hash })
-    await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [id, '', emailLower, code, 'signup', expires.toISOString(), metadata, now.toISOString()])
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    await run('INSERT INTO users (id, name, email, password_hash, plan, subscription_status, email_verified, clones_used, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [id, name.trim(), emailLower, hash, 'nenhum', 'inactive', 1, 0, now])
 
-    const emailResult = await sendEmail({ to: emailLower, subject: 'MetaSpy - Confirme seu cadastro', html: verificationEmailHtml(code) })
-    if (emailResult.error) {
-      logger.error({ emailError: emailResult.error, email }, 'Falha ao enviar email de confirmacao (signup)')
-      return res.status(500).json({ error: 'Erro ao enviar codigo de confirmacao. Verifique se o email e valido e tente novamente.' })
-    }
-    res.json({ ok: true, message: 'Codigo de confirmacao enviado para seu email.' })
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [id])
+    const accessToken = generateToken(id)
+    const refreshToken = generateRefreshToken(id)
+    res.json({ user, accessToken, refreshToken })
   } catch (err) {
     logger.error({ err }, 'Erro signup')
-    res.status(500).json({ error: 'Erro ao enviar codigo de confirmacao.' })
+    res.status(500).json({ error: 'Erro ao criar conta.' })
   }
 })
 
