@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { useEffect, useState } from 'react'
-import { IconGear } from '../components/Icons'
+import { IconGear, IconLocked } from '../components/Icons'
 
 export default function Dashboard() {
   const { user, logout, isAuthenticated } = useAuth()
@@ -23,7 +23,7 @@ export default function Dashboard() {
     if (!user || user.plano !== 'nenhum') return
     const path = location.pathname
     if (path === '/dashboard') return
-    if (path === '/dashboard/perfil' || path === '/dashboard/configuracoes' || path === '/dashboard/admin') return
+    if (path === '/dashboard/perfil' || path === '/dashboard/configuracoes' || path === '/dashboard/admin' || path === '/dashboard/hospedar') return
     navigate('/planos', { replace: true })
   }, [location.pathname, user, navigate])
 
@@ -64,10 +64,12 @@ export default function Dashboard() {
         <div className="sidebar-section-label">Ferramentas</div>
         <nav className="sidebar-nav">
           <NavLink to="/dashboard" end onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            MetaSpy
+            <span>MetaSpy</span>
+            {isFree && <IconLocked size={14} />}
           </NavLink>
           <NavLink to="/dashboard/pagevault" onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            Clonador
+            <span>Clonador</span>
+            {isFree && <IconLocked size={14} />}
           </NavLink>
           <div className="sidebar-group">
             <button
@@ -76,30 +78,37 @@ export default function Dashboard() {
               onClick={() => setCloackerOpen(!cloackerOpen)}
               aria-expanded={cloackerOpen}
             >
-              <span>Cloacker</span>
+              <span>Cloacker{isFree && <span style={{ marginLeft: 4, display: 'inline-flex' }}><IconLocked size={14} /></span>}</span>
               <span className="sidebar-arrow" data-open={cloackerOpen}>›</span>
             </button>
             <div className={`sidebar-subnav${cloackerOpen ? ' open' : ''}`}>
               <NavLink to="/dashboard/cloacker" end onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Gerar Script
+                <span>Gerar Script</span>
+                {isFree && <IconLocked size={12} />}
               </NavLink>
               <NavLink to="/dashboard/cloacker/avancado" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Script Avancado
+                <span>Script Avancado</span>
+                {isFree && <IconLocked size={12} />}
               </NavLink>
               <NavLink to="/dashboard/cloacker/campanhas" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Campanhas
+                <span>Campanhas</span>
+                {isFree && <IconLocked size={12} />}
               </NavLink>
               <NavLink to="/dashboard/cloacker/steganografia" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Esteganografia
+                <span>Esteganografia</span>
+                {isFree && <IconLocked size={12} />}
               </NavLink>
               <NavLink to="/dashboard/cloacker/fingerprint" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Detector Fingerprint
+                <span>Detector Fingerprint</span>
+                {isFree && <IconLocked size={12} />}
               </NavLink>
               <NavLink to="/dashboard/cloacker/logs" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Logs
+                <span>Logs</span>
+                {isFree && <IconLocked size={12} />}
               </NavLink>
               <NavLink to="/dashboard/cloacker/detector" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Quebra de Cloacker
+                <span>Quebra de Cloacker</span>
+                {isFree && <IconLocked size={12} />}
               </NavLink>
               <div className="sidebar-group">
                 <button
@@ -109,15 +118,17 @@ export default function Dashboard() {
                   style={{ paddingLeft: 16, fontSize: 12 }}
                   aria-expanded={camoOpen}
                 >
-                  <span>Camuflagem</span>
+                  <span>Camuflagem{isFree && <span style={{ marginLeft: 4, display: 'inline-flex' }}><IconLocked size={12} /></span>}</span>
                   <span className="sidebar-arrow" data-open={camoOpen}>›</span>
                 </button>
                 <div className={`sidebar-subnav${camoOpen ? ' open' : ''}`}>
                   <NavLink to="/dashboard/cloacker/camouflage/texto" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                    Texto
+                    <span>Texto</span>
+                    {isFree && <IconLocked size={12} />}
                   </NavLink>
                   <NavLink to="/dashboard/cloacker/camouflage/midia" onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                    Midia
+                    <span>Midia</span>
+                    {isFree && <IconLocked size={12} />}
                   </NavLink>
                 </div>
               </div>
@@ -134,13 +145,14 @@ export default function Dashboard() {
               <span className="sidebar-arrow" data-open={hospedarOpen}>›</span>
             </button>
             <div className={`sidebar-subnav${hospedarOpen ? ' open' : ''}`}>
-              <NavLink to="/dashboard/hospedar" end onClick={redirectIfFree} className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
-                Hospedar Pagina
+              <NavLink to="/dashboard/hospedar" end className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}>
+                <span>Hospedar Pagina</span>
               </NavLink>
             </div>
           </div>
           <NavLink to="/dashboard/cleaner" onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            Remover Metadados
+            <span>Remover Metadados</span>
+            {isFree && <IconLocked size={14} />}
           </NavLink>
         </nav>
 

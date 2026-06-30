@@ -95,7 +95,7 @@ const PLAN_CONFIG = {
 }
 
 const PLAN_FEATURES = {
-  nenhum: { clone: false, minerador: false, cloaker: false, pagevault: false, analise: false, cleaner: false, bypass: false },
+  nenhum: { clone: false, minerador: false, cloaker: false, pagevault: true, analise: false, cleaner: false, bypass: false },
   basico: { clone: false, minerador: true, cloaker: false, pagevault: false, analise: false, cleaner: true, bypass: false },
   gold: { clone: false, minerador: true, cloaker: false, pagevault: true, analise: true, cleaner: true, bypass: true },
   premium: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: true, bypass: true },
@@ -2830,6 +2830,10 @@ async function createPageRecord(userId, title, customSlug, cfUrl) {
 app.post('/api/pages/upload', authMiddleware, async (req, res, next) => {
   const blocked = checkFeature(req, res, 'pagevault')
   if (blocked) return blocked
+  if (req.user.plan === 'nenhum') {
+    const count = await one('SELECT COUNT(*) AS cnt FROM pages WHERE user_id = $1 AND type = $2', [req.user.id, 'hosted'])
+    if (count && count.cnt >= 1) return res.status(403).json({ error: 'Limite gratuito: 1 pagina. Faca upgrade para publicar mais paginas.' })
+  }
   next()
 }, uploadPage.array('files', 500), async (req, res) => {
   try {
