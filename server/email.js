@@ -1,7 +1,15 @@
 const MAILEROO_API_KEY = process.env.MAILEROO_API_KEY || ''
-const FROM_EMAIL = process.env.FROM_EMAIL || ''
+const FROM_EMAIL_RAW = process.env.FROM_EMAIL || ''
 
 const MAILEROO_API = 'https://smtp.maileroo.com/api/v2/emails'
+
+function parseEmail(input) {
+  const match = input.match(/^(?:(.+?)\s*)?<([^>]+)>$/)
+  if (match) {
+    return { address: match[2].trim(), name: (match[1] || '').trim() || 'MetaSpy' }
+  }
+  return { address: input.trim(), name: 'MetaSpy' }
+}
 
 async function sendWithFrom({ to, subject, html, from }) {
   const res = await fetch(MAILEROO_API, {
@@ -23,7 +31,8 @@ async function sendWithFrom({ to, subject, html, from }) {
     console.error('Erro Maileroo:', errMsg)
     return { error: errMsg }
   }
-  return { sent: true }
+  const data = await res.json()
+  return { sent: true, referenceId: data?.data?.reference_id }
 }
 
 export async function sendEmail({ to, subject, html }) {
@@ -33,16 +42,18 @@ export async function sendEmail({ to, subject, html }) {
     return { simulated: true }
   }
 
-  if (!FROM_EMAIL) {
+  if (!FROM_EMAIL_RAW) {
     console.error('FROM_EMAIL nao configurada. Defina a env var FROM_EMAIL.')
     return { error: 'FROM_EMAIL nao configurada' }
   }
+
+  const from = parseEmail(FROM_EMAIL_RAW)
 
   return await sendWithFrom({
     to,
     subject,
     html,
-    from: { address: FROM_EMAIL, name: 'MetaSpy' },
+    from,
   })
 }
 

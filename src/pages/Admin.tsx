@@ -197,7 +197,7 @@ export default function Admin() {
       </div>
 
       <div className="admin-wh-label">
-        <span>Webhooks recebidos: <a href="/api/debug/webhooks" target="_blank" rel="noopener noreferrer">/api/debug/webhooks</a></span>
+        <span>Webhooks recebidos: <a href="/api/debug/webhooks" target="_blank" rel="noopener noreferrer" onClick={e => { e.preventDefault(); fetchWithAuth('/api/debug/webhooks').then(r => r.json()).then(d => alert(JSON.stringify(d, null, 2))).catch(() => alert('Erro ao carregar webhooks')) }}>/api/debug/webhooks</a></span>
       </div>
     </div>
   )

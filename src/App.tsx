@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -24,7 +23,6 @@ import Profile from './pages/Profile'
 import Settings from './pages/Settings'
 import Admin from './pages/Admin'
 import { useAuth } from './contexts/AuthContext'
-import LoadingScreen from './components/LoadingScreen'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
@@ -32,71 +30,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-type LoadingState = 'checking' | 'loading' | 'ready'
-
 export default function App() {
-  const [loadingState, setLoadingState] = useState<LoadingState>('checking')
-  const { isAuthenticated } = useAuth()
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setLoadingState('ready')
-      return
-    }
-
-    let cancelled = false
-    let retryTimer: ReturnType<typeof setInterval> | null = null
-    let safetyTimer: ReturnType<typeof setTimeout> | null = null
-
-    async function quickCheck(): Promise<boolean> {
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 2000)
-        const res = await fetch('/api/health', { signal: controller.signal })
-        clearTimeout(timeoutId)
-        if (res.ok && !cancelled) return true
-      } catch {}
-      return false
-    }
-
-    quickCheck().then(ok => {
-      if (cancelled) return
-      if (ok) {
-        setLoadingState('ready')
-        return
-      }
-
-      setLoadingState('loading')
-
-      retryTimer = setInterval(async () => {
-        try {
-          const res = await fetch('/api/health')
-          if (res.ok && !cancelled) {
-            setLoadingState('ready')
-            if (retryTimer) clearInterval(retryTimer)
-            if (safetyTimer) clearTimeout(safetyTimer)
-          }
-        } catch {}
-      }, 3000)
-
-      safetyTimer = setTimeout(() => {
-        if (!cancelled) {
-          setLoadingState('ready')
-          if (retryTimer) clearInterval(retryTimer)
-        }
-      }, 30000)
-    })
-
-    return () => {
-      cancelled = true
-      if (retryTimer) clearInterval(retryTimer)
-      if (safetyTimer) clearTimeout(safetyTimer)
-    }
-  }, [isAuthenticated])
-
   return (
     <>
-      {loadingState === 'loading' && isAuthenticated && <LoadingScreen />}
       <Routes>
       <Route path="/" element={<Navigate to="/planos" replace />} />
       <Route path="/login" element={<Login />} />

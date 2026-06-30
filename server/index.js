@@ -572,7 +572,11 @@ app.post('/api/auth/signup', validate(signupSchema), async (req, res) => {
     await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [id, '', emailLower, code, 'signup', expires.toISOString(), metadata, now.toISOString()])
 
-    await sendEmail({ to: emailLower, subject: 'MetaSpy - Confirme seu cadastro', html: verificationEmailHtml(code) })
+    const emailResult = await sendEmail({ to: emailLower, subject: 'MetaSpy - Confirme seu cadastro', html: verificationEmailHtml(code) })
+    if (emailResult.error) {
+      logger.error({ emailError: emailResult.error, email }, 'Falha ao enviar email de confirmacao (signup)')
+      return res.status(500).json({ error: 'Erro ao enviar codigo de confirmacao. Verifique se o email e valido e tente novamente.' })
+    }
     res.json({ ok: true, message: 'Codigo de confirmacao enviado para seu email.' })
   } catch (err) {
     logger.error({ err }, 'Erro signup')
@@ -684,8 +688,11 @@ app.post('/api/auth/forgot-password', validate(forgotPasswordSchema), async (req
     await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [id, user.id, user.email, code, 'recovery', expires.toISOString(), now.toISOString()])
 
-    await sendEmail({ to: user.email, subject: 'MetaSpy - Codigo de Recuperacao', html: recoveryEmailHtml(code) })
-    res.json({ ok: true, message: 'Codigo enviado para seu email.' })
+    const emailResult = await sendEmail({ to: user.email, subject: 'MetaSpy - Codigo de Recuperacao', html: recoveryEmailHtml(code) })
+    if (emailResult.error) {
+      logger.error({ emailError: emailResult.error, userId: user.id }, 'Falha ao enviar email de recuperacao')
+    }
+    res.json({ ok: true, message: 'Se o email existir, voce recebera um codigo.' })
   } catch (err) {
     logger.error({ err }, 'Erro forgot-password')
     res.status(500).json({ error: 'Erro ao enviar codigo.' })
@@ -726,7 +733,11 @@ app.post('/api/auth/send-verification', authMiddleware, async (req, res) => {
     await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [id, user.id, user.email, code, 'verification', expires.toISOString(), now.toISOString()])
 
-    await sendEmail({ to: user.email, subject: 'MetaSpy - Confirme seu Email', html: verificationEmailHtml(code) })
+    const emailResult = await sendEmail({ to: user.email, subject: 'MetaSpy - Confirme seu Email', html: verificationEmailHtml(code) })
+    if (emailResult.error) {
+      logger.error({ emailError: emailResult.error, userId: user.id }, 'Falha ao enviar email de verificacao')
+      return res.status(500).json({ error: 'Erro ao enviar codigo. Tente novamente mais tarde.' })
+    }
     res.json({ ok: true, message: 'Codigo enviado para seu email.' })
   } catch (err) {
     logger.error({ err }, 'Erro send-verification')
@@ -1234,7 +1245,11 @@ app.get('/api/ad-image-apify', async (req, res) => {
 
     if (!runResp.ok) {
       const errText = await runResp.text().catch(() => '')
-      logger.warn({ status: runResp.status, errText }, 'Apify run falhou')
+      if (runResp.status === 402 || errText.includes('concurrent-runs-limit')) {
+        logger.warn({ status: runResp.status }, 'Apify: limite de execucoes concorrentes atingido')
+      } else {
+        logger.warn({ status: runResp.status, errText: errText.slice(0, 200) }, 'Apify run falhou')
+      }
       return res.json({ imageUrl: null })
     }
 
@@ -2657,8 +2672,10 @@ app.put('/api/admin/users/:id/plan', adminMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Erro ao atualizar plano' }) }
 })
 
-// ─── Debug ────────────────────────────────────────────────────────
-app.get('/api/debug/user', async (req, res) => {
+// ─── Debug (protegido — apenas admin) ─────────────────────────────
+const WEBHOOK_LOG = []
+
+app.get('/api/debug/user', adminMiddleware, async (req, res) => {
   const { email } = req.query
   if (!email) return res.status(400).json({ error: '?email= obrigatorio' })
   try {
@@ -2668,7 +2685,7 @@ app.get('/api/debug/user', async (req, res) => {
   } catch { res.status(500).json({ error: 'Erro' }) }
 })
 
-app.get('/api/debug/webhooks', (req, res) => {
+app.get('/api/debug/webhooks', adminMiddleware, (req, res) => {
   res.json({ webhooks: WEBHOOK_LOG })
 })
 

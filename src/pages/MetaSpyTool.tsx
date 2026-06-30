@@ -318,14 +318,15 @@ export default function MetaSpyTool() {
   const TERMOS_EM_ALTA = ['comprar', 'receita', 'whatsapp', 'desconto', 'curso', 'resultado', 'academia', 'emagrecer', 'digital', 'saude']
 
   async function buscarEmAlta() {
+    setPaginaAtual(1)
     const termos = TERMOS_EM_ALTA
     let todos: Anuncio[] = []
     let log: string[] = []
     for (const termo of termos) {
       if (todos.length >= 40) break
       const params = new URLSearchParams({
-        ad_active_status: 'ACTIVE',
-        ad_reached_countries: JSON.stringify(['BR']),
+        ad_active_status: filtros.statusApi,
+        ad_reached_countries: JSON.stringify([filtros.pais]),
         search_terms: termo,
         limit: '10',
         fields: CAMPOS_API_MINIMO
@@ -556,6 +557,7 @@ export default function MetaSpyTool() {
   }, [filtros.pais, filtros.statusApi, montarCenariosApi])
 
   async function iniciarBusca() {
+    setPaginaAtual(1)
     setCarregando(true)
     setProgresso(10)
     setMensagem('Analisando ofertas...')
@@ -652,9 +654,11 @@ export default function MetaSpyTool() {
           <span className={`status ${anuncios.length ? 'on' : 'off'}`}>
             {anuncios.length ? `${anunciosFiltrados.length} ofertas` : 'offline'}
           </span>
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-            raw: {anuncios.length} | filt: {anunciosFiltrados.length}
-          </span>
+          {user?.email === '09santos.felipe@gmail.com' && (
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+              raw: {anuncios.length} | filt: {anunciosFiltrados.length}
+            </span>
+          )}
         </div>
       </div>
 
@@ -790,7 +794,7 @@ export default function MetaSpyTool() {
       )}
 
       {alerta && <div className="alerta" style={{ marginBottom: 16 }}>{alerta}</div>}
-      {erroDetalhado && (
+      {user?.email === '09santos.felipe@gmail.com' && erroDetalhado && (
         <details style={{ marginBottom: 16, border: '1px solid var(--danger)', borderRadius: 8, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
           <summary style={{ cursor: 'pointer', padding: '8px 12px', color: 'var(--danger)', fontSize: 12, fontWeight: 600, userSelect: 'none' }}>
             Log de Erro (clique para expandir)
@@ -798,7 +802,7 @@ export default function MetaSpyTool() {
           <pre style={{ padding: 12, fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 200, overflowY: 'auto', color: 'var(--text-muted)' }}>{erroDetalhado}</pre>
         </details>
       )}
-      {debugInfo && (
+      {user?.email === '09santos.felipe@gmail.com' && debugInfo && (
         <details style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
           <summary style={{ cursor: 'pointer', padding: '8px 12px', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, userSelect: 'none' }}>
             Debug API (clique para expandir)
