@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import type { CloneJob } from '../types'
 import HelpTooltip from '../components/HelpTooltip'
 import PageEditor from '../components/PageEditor'
@@ -191,6 +191,91 @@ export default function PageVaultTool() {
     URL.revokeObjectURL(a.href)
   }
 
+  // ─── Deep / Completo Clone ──────────────────────────────────────
+  const [deepCloneId, setDeepCloneId] = useState<string | null>(null)
+  const [deepCloneFiles, setDeepCloneFiles] = useState<any[] | null>(null)
+  const [deepLoading, setDeepLoading] = useState(false)
+  const [deepError, setDeepError] = useState('')
+
+  async function startDeepClone() {
+    const urlTrimmed = url.trim()
+    if (!urlTrimmed || !validUrl(urlTrimmed)) { setError('Informe uma URL valida'); return }
+    setDeepLoading(true)
+    setDeepError('')
+    setDeepCloneFiles(null)
+    setDeepCloneId(null)
+    try {
+      const resp = await fetchWithAuth('/api/clone/deep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlTrimmed })
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.error || `HTTP ${resp.status}`)
+      }
+      const data = await resp.json()
+      setDeepCloneId(data.cloneId)
+      setDeepCloneFiles(data.files)
+      addLog('Clone completo realizado com sucesso!')
+      addLog(`Recursos baixados e organizados em pastas.`)
+    } catch (e: any) {
+      setDeepError(e.message || 'Erro no clone completo')
+      addLog(`Erro: ${e.message}`)
+    }
+    setDeepLoading(false)
+  }
+
+  async function downloadDeepZip() {
+    if (!deepCloneId) return
+    try {
+      const resp = await fetchWithAuth(`/api/clone/deep/download/${deepCloneId}`)
+      if (!resp.ok) throw new Error('Erro ao baixar ZIP')
+      const blob = await resp.blob()
+      const dlUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = dlUrl
+      a.download = 'clone-completo.zip'
+      a.click()
+      URL.revokeObjectURL(dlUrl)
+    } catch (e: any) {
+      setDeepError(e.message || 'Erro ao baixar ZIP')
+    }
+  }
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / 1048576).toFixed(1) + ' MB'
+  }
+
+  function FileTreeNode({ node, depth }: { node: any; depth?: number }) {
+    const [open, setOpen] = useState(true)
+    const indent = depth || 0
+    if (node.type === 'directory') {
+      return (
+        <div>
+          <div className="ft-node" style={{ paddingLeft: 12 + indent * 16, cursor: 'pointer' }} onClick={() => setOpen(!open)}>
+            <span className="ft-arrow">{open ? '▾' : '▸'}</span>
+            <span className="ft-icon">{'📁'}</span>
+            <span className="ft-name ft-dir">{node.name}</span>
+          </div>
+          {open && node.children && node.children.map((c: any) => (
+            <FileTreeNode key={c.path} node={c} depth={indent + 1} />
+          ))}
+        </div>
+      )
+    }
+    return (
+      <div className="ft-node" style={{ paddingLeft: 12 + indent * 16 }}>
+        <span className="ft-arrow" style={{ visibility: 'hidden' }}>▸</span>
+        <span className="ft-icon">{'📄'}</span>
+        <span className="ft-name ft-file">{node.name}</span>
+        {node.size != null && <span className="ft-size">{formatSize(node.size)}</span>}
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="tool-header">
@@ -218,9 +303,12 @@ export default function PageVaultTool() {
           />
         </div>
         <button className="btn btn-gradient" onClick={startClone} disabled={running}>
-          {running ? 'Clonando...' : 'Clonar'}
+          {running ? 'Clonando...' : 'Clonar HTML'}
         </button>
-        <button className="btn btn-secondary" onClick={() => { setLog([]); setProgress(0); setError('') }}>
+        <button className="btn btn-accent" onClick={startDeepClone} disabled={deepLoading}>
+          {deepLoading ? 'Processando...' : 'Clone Completo'}
+        </button>
+        <button className="btn btn-secondary" onClick={() => { setLog([]); setProgress(0); setError(''); setDeepError(''); setDeepCloneFiles(null); setDeepCloneId(null) }}>
           Limpar
         </button>
       </div>
@@ -311,6 +399,24 @@ export default function PageVaultTool() {
             </div>
           )}
 
+          {deepError && <div className="alerta" style={{ marginBottom: 8 }}>{deepError}</div>}
+
+          {deepCloneFiles && deepCloneId && (
+            <div className="clone-log-card">
+              <div className="clone-log-header">
+                <span>Clone Completo - Arquivos Organizados</span>
+                <button className="btn btn-primary" onClick={downloadDeepZip} style={{ fontSize: 11, padding: '2px 10px' }}>
+                  Baixar ZIP
+                </button>
+              </div>
+              <div className="clone-log-body" style={{ maxHeight: 300, overflow: 'auto' }}>
+                {deepCloneFiles.map((node: any) => (
+                  <FileTreeNode key={node.path} node={node} />
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="clone-history-card">
             <div className="clone-history-header">
               <span>Historico de Clones ({jobs.length})</span>
@@ -361,7 +467,7 @@ export default function PageVaultTool() {
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Editando: {cloneUrl}</span>
             <button className="btn btn-secondary" onClick={() => setMode('clone')} style={{ marginLeft: 'auto', fontSize: 11 }}>✕ Fechar editor</button>
           </div>
-          <PageEditor html={cloneHtml} sourceUrl={cloneUrl} onExtract={handleExtract} />
+          <PageEditor html={cloneHtml} sourceUrl={cloneUrl} onExtract={handleExtract} fetchWithAuth={fetchWithAuth} />
         </div>
       )}
     </div>

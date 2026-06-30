@@ -782,9 +782,10 @@ app.post('/api/clone/deep', authMiddleware, async (req, res) => {
     const id = randomUUID()
     const dir = join(CLONES_DIR, id)
     mkdirSync(dir, { recursive: true })
-    const { downloadSite } = await import('./clone.js')
+    const { downloadSite, buildFileTree } = await import('./clone.js')
     await downloadSite(url, { outputDir: dir, fbToken: FB_TOKEN, deep: true })
-    res.json({ id, path: dir })
+    const files = buildFileTree(dir)
+    res.json({ id, cloneId: id, path: dir, files })
   } catch (err) {
     res.status(500).json({ error: 'Erro ao clonar site' })
   }
@@ -796,23 +797,8 @@ app.get('/api/clone/deep/:id/files', authMiddleware, async (req, res) => {
   const dir = join(CLONES_DIR, req.params.id)
   if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
   try {
-    async function buildTree(dirPath) {
-      const { readdir, stat } = await import('node:fs/promises')
-      const entries = await readdir(dirPath, { withFileTypes: true })
-      const items = []
-      for (const entry of entries) {
-        const fullPath = join(dirPath, entry.name)
-        const stats = await stat(fullPath)
-        if (entry.name.startsWith('.')) continue
-        if (entry.isDirectory()) {
-          items.push({ name: entry.name, type: 'directory', size: stats.size, children: await buildTree(fullPath) })
-        } else {
-          items.push({ name: entry.name, type: 'file', size: stats.size })
-        }
-      }
-      return items.sort((a, b) => (a.type === 'directory' ? -1 : 1) - (b.type === 'directory' ? -1 : 1) || a.name.localeCompare(b.name))
-    }
-    const tree = await buildTree(dir)
+    const { buildFileTree } = await import('./clone.js')
+    const tree = buildFileTree(dir)
     res.json({ id: req.params.id, tree })
   } catch {
     res.status(500).json({ error: 'Erro ao listar arquivos' })

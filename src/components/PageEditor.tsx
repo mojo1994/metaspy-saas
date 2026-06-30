@@ -289,9 +289,10 @@ interface PageEditorProps {
   html: string
   sourceUrl?: string
   onExtract?: (html: string) => void
+  fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>
 }
 
-export default function PageEditor({ html, sourceUrl, onExtract }: PageEditorProps) {
+export default function PageEditor({ html, sourceUrl, onExtract, fetchWithAuth }: PageEditorProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [editMode, setEditMode] = useState(false)
   const [selectedElement, setSelectedElement] = useState<ElementState | null>(null)
@@ -442,7 +443,8 @@ export default function PageEditor({ html, sourceUrl, onExtract }: PageEditorPro
     setLoadingTree(true)
     setTreeError('')
     try {
-      const resp = await fetch('/api/clone/deep', {
+      const fetcher = fetchWithAuth || fetch
+      const resp = await fetcher('/api/clone/deep', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: sourceUrl })
@@ -463,12 +465,22 @@ export default function PageEditor({ html, sourceUrl, onExtract }: PageEditorPro
     setLoadingTree(false)
   }
 
-  function downloadZip() {
+  async function downloadZip() {
     if (!cloneId) return
-    const a = document.createElement('a')
-    a.href = '/api/clone/deep/download/' + cloneId
-    a.download = 'pagina-clonada.zip'
-    a.click()
+    try {
+      const fetcher = fetchWithAuth || fetch
+      const resp = await fetcher('/api/clone/deep/download/' + cloneId)
+      if (!resp.ok) throw new Error('Erro ao baixar ZIP')
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'pagina-clonada.zip'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setTreeError(e.message || 'Erro ao baixar ZIP')
+    }
   }
 
   function renderStyleInput(label: string, prop: string, type: string = 'text', options?: string[]) {
