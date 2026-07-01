@@ -99,7 +99,7 @@ class TtlLRUMap {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
-const CLONES_DIR = join(DATA_DIR, '..', 'clones')
+const CLONES_DIR = join(__dirname, '..', 'clones_data')
 if (!existsSync(CLONES_DIR)) mkdirSync(CLONES_DIR, { recursive: true })
 
 const PAGES_DIR = join(DATA_DIR, 'pages')
