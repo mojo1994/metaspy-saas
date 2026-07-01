@@ -12,7 +12,7 @@ import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
-import { Archiver } from 'archiver'
+import { ZipArchive } from 'archiver'
 import { exiftool } from 'exiftool-vendored'
 import mime from 'mime-types'
 import AdmZip from 'adm-zip'
@@ -855,24 +855,11 @@ app.get('/api/clone/deep/:id/download', authMiddleware, async (req, res) => {
   const dir = join(CLONES_DIR, req.params.id)
   if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
   try {
-    const archive = new Archiver('zip', { zlib: { level: 9 } })
+    const archive = new ZipArchive({ zlib: { level: 9 } })
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="clone-${req.params.id}.zip"`)
     archive.pipe(res)
-    function addDirToZip(dirPath, basePath = '') {
-      const entries = readdirSync(dirPath, { withFileTypes: true })
-      for (const entry of entries) {
-        if (entry.name.startsWith('.')) continue
-        const fullPath = join(dirPath, entry.name)
-        const entryPath = basePath ? join(basePath, entry.name) : entry.name
-        if (entry.isDirectory()) {
-          addDirToZip(fullPath, entryPath)
-        } else {
-          archive.add(createReadStream(fullPath), { name: entryPath })
-        }
-      }
-    }
-    addDirToZip(dir)
+    archive.directory(dir, false)
     archive.finalize()
   } catch {
     res.status(500).json({ error: 'Erro ao gerar ZIP' })
@@ -1831,7 +1818,7 @@ app.get('/api/cloaker/camouflage-download/:id', authMiddleware, async (req, res)
     if (!htmlFile) return res.status(404).json({ erro: 'Arquivo nao encontrado.' })
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="camuflado-${req.params.id}.zip"`)
-    const archive = new Archiver('zip', { zlib: { level: 9 } })
+    const archive = new ZipArchive({ zlib: { level: 9 } })
     archive.pipe(res)
     archive.file(join(dir, htmlFile), { name: htmlFile })
     if (mediaFile) archive.file(join(dir, mediaFile), { name: mediaFile })
@@ -2122,7 +2109,7 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
     req._camoOutputDir = outputDir
     const zipPath = join(outputDir, `output-${id}.zip`)
 
-    const archive = new Archiver('zip', { zlib: { level: 6 } })
+    const archive = new ZipArchive({ zlib: { level: 6 } })
     const ws = createWriteStream(zipPath)
     await new Promise((resolve, reject) => {
       ws.on('finish', resolve)
@@ -2715,6 +2702,13 @@ app.get('/api/debug/webhooks', adminMiddleware, (req, res) => {
 
 
 // ─── Health ───────────────────────────────────────────────────────
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  })
+})
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', online: !!FB_TOKEN, db: 'postgresql' })
 })
