@@ -817,6 +817,10 @@ function checkFeature(req, res, feature) {
   return null
 }
 
+const CLONE_ZIPS_DIR = join(CLONES_DIR, '_zips')
+if (!existsSync(CLONE_ZIPS_DIR)) mkdirSync(CLONE_ZIPS_DIR, { recursive: true })
+const CLONE_ZIP_CACHE = new Map()
+
 app.post('/api/clone/deep', authMiddleware, async (req, res) => {
   const blocked = checkFeature(req, res, 'bypass')
   if (blocked) return blocked
@@ -825,12 +829,25 @@ app.post('/api/clone/deep', authMiddleware, async (req, res) => {
     if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
     const id = randomUUID()
     const dir = join(CLONES_DIR, id)
-    logger.info({ cloneId: id, dir, CLONES_DIR }, 'clone-deep POST criando diretorio')
     mkdirSync(dir, { recursive: true })
     const { downloadSite, buildFileTree } = await import('./clone.js')
     await downloadSite(url, { outputDir: dir, fbToken: FB_TOKEN, deep: true })
     const files = buildFileTree(dir)
-    logger.info({ cloneId: id, dir, fileCount: files.length }, 'clone-deep POST concluido')
+
+    const zipPath = join(CLONE_ZIPS_DIR, `${id}.zip`)
+    const archive = new ZipArchive({ zlib: { level: 6 } })
+    const ws = createWriteStream(zipPath)
+    await new Promise((resolve, reject) => {
+      ws.on('finish', resolve)
+      ws.on('error', reject)
+      archive.on('error', reject)
+      archive.pipe(ws)
+      archive.directory(dir, false)
+      archive.finalize()
+    })
+    CLONE_ZIP_CACHE.set(id, zipPath)
+    setTimeout(() => CLONE_ZIP_CACHE.delete(id), 300_000)
+
     res.json({ id, cloneId: id, path: dir, files })
   } catch (err) {
     logger.error({ err }, 'clone-deep POST error')
@@ -855,26 +872,31 @@ app.get('/api/clone/deep/:id/files', authMiddleware, async (req, res) => {
 app.get('/api/clone/deep/:id/download', authMiddleware, async (req, res) => {
   const blocked = checkFeature(req, res, 'bypass')
   if (blocked) return blocked
-  const dir = join(CLONES_DIR, req.params.id)
-  logger.info({ cloneId: req.params.id, dir, CLONES_DIR, exists: existsSync(dir) }, 'clone-download GET')
-  if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
+  const id = req.params.id
   try {
-    const archive = new ZipArchive({ zlib: { level: 9 } })
-    res.setHeader('Content-Type', 'application/zip')
-    res.setHeader('Content-Disposition', `attachment; filename="clone-${req.params.id}.zip"`)
-    await new Promise((resolve, reject) => {
-      res.on('finish', resolve)
-      res.on('error', (err) => { logger.error({ err, cloneId: req.params.id }, 'clone-download res error'); reject(err) })
-      archive.on('error', (err) => { logger.error({ err, cloneId: req.params.id }, 'clone-download archive error'); reject(err) })
-      archive.pipe(res)
-      archive.directory(dir, false)
-      archive.finalize()
-    })
-  } catch (err) {
-    logger.error({ err, cloneId: req.params.id }, 'clone-download failed')
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Erro ao gerar ZIP' })
+    let zipPath = CLONE_ZIP_CACHE.get(id)
+    if (!zipPath || !existsSync(zipPath)) {
+      const dir = join(CLONES_DIR, id)
+      if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
+      zipPath = join(CLONE_ZIPS_DIR, `${id}.zip`)
+      const archive = new ZipArchive({ zlib: { level: 6 } })
+      const ws = createWriteStream(zipPath)
+      await new Promise((resolve, reject) => {
+        ws.on('finish', resolve)
+        ws.on('error', reject)
+        archive.on('error', reject)
+        archive.pipe(ws)
+        archive.directory(dir, false)
+        archive.finalize()
+      })
+      CLONE_ZIP_CACHE.set(id, zipPath)
     }
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="clone-${id}.zip"`)
+    createReadStream(zipPath).pipe(res)
+  } catch (err) {
+    logger.error({ err, cloneId: id }, 'clone-download error')
+    if (!res.headersSent) res.status(500).json({ error: 'Erro ao baixar ZIP' })
   }
 })
 
