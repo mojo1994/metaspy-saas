@@ -194,6 +194,7 @@ export default function PageVaultTool() {
   // ─── Deep / Completo Clone ──────────────────────────────────────
   const [deepCloneId, setDeepCloneId] = useState<string | null>(null)
   const [deepCloneFiles, setDeepCloneFiles] = useState<any[] | null>(null)
+  const [deepDownloadUrl, setDeepDownloadUrl] = useState<string | null>(null)
   const [deepLoading, setDeepLoading] = useState(false)
   const [deepError, setDeepError] = useState('')
 
@@ -204,6 +205,7 @@ export default function PageVaultTool() {
     setDeepError('')
     setDeepCloneFiles(null)
     setDeepCloneId(null)
+    setDeepDownloadUrl(null)
     try {
       const resp = await fetchWithAuth('/api/clone/deep', {
         method: 'POST',
@@ -217,6 +219,7 @@ export default function PageVaultTool() {
       const data = await resp.json()
       setDeepCloneId(data.cloneId)
       setDeepCloneFiles(data.files)
+      setDeepDownloadUrl(data.downloadUrl)
       addLog('Clone completo realizado com sucesso!')
       addLog(`Recursos baixados e organizados em pastas.`)
     } catch (e: any) {
@@ -227,10 +230,10 @@ export default function PageVaultTool() {
   }
 
   async function downloadDeepZip() {
-    if (!deepCloneId) { addLog('downloadDeepZip: deepCloneId vazio'); return }
-    addLog(`Baixando ZIP cloneId=${deepCloneId}`)
+    if (!deepDownloadUrl) { addLog('downloadDeepZip: URL de download nao disponivel'); return }
+    addLog(`Baixando ZIP de ${deepDownloadUrl}`)
     try {
-      const resp = await fetchWithAuth(`/api/clone/deep/download/${deepCloneId}`)
+      const resp = await fetchWithAuth(deepDownloadUrl)
       if (!resp.ok) {
         const text = await resp.text().catch(() => '')
         let msg = `HTTP ${resp.status}`
@@ -316,7 +319,7 @@ export default function PageVaultTool() {
         <button className="btn btn-accent" onClick={startDeepClone} disabled={deepLoading}>
           {deepLoading ? 'Processando...' : 'Clone Completo'}
         </button>
-        <button className="btn btn-secondary" onClick={() => { setLog([]); setProgress(0); setError(''); setDeepError(''); setDeepCloneFiles(null); setDeepCloneId(null) }}>
+        <button className="btn btn-secondary" onClick={() => { setLog([]); setProgress(0); setError(''); setDeepError(''); setDeepCloneFiles(null); setDeepCloneId(null); setDeepDownloadUrl(null) }}>
           Limpar
         </button>
       </div>

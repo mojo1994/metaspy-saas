@@ -848,7 +848,7 @@ app.post('/api/clone/deep', authMiddleware, async (req, res) => {
     CLONE_ZIP_CACHE.set(id, zipPath)
     setTimeout(() => CLONE_ZIP_CACHE.delete(id), 300_000)
 
-    res.json({ id, cloneId: id, path: dir, files })
+    res.json({ id, cloneId: id, path: dir, files, downloadUrl: `/api/clone/deep/download/${id}` })
   } catch (err) {
     logger.error({ err }, 'clone-deep POST error')
     res.status(500).json({ error: 'Erro ao clonar site' })
@@ -869,7 +869,7 @@ app.get('/api/clone/deep/:id/files', authMiddleware, async (req, res) => {
   }
 })
 
-app.get('/api/clone/deep/:id/download', authMiddleware, async (req, res) => {
+app.get('/api/clone/deep/download/:id', authMiddleware, async (req, res) => {
   const blocked = checkFeature(req, res, 'bypass')
   if (blocked) return blocked
   const id = req.params.id
