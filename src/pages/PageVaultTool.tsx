@@ -458,7 +458,7 @@ export default function PageVaultTool() {
                           Remover
                         </button>
                         {job.status === 'completed' && cloneHtml && job.url === cloneUrl && (
-                          <button className="btn btn-primary" onClick={() => openEditor(cloneHtml, cloneUrl)} title="Editar no editor visual">
+                          <button className="btn btn-primary" onClick={() => !deepCloneFiles && openEditor(cloneHtml, cloneUrl)} disabled={!!deepCloneFiles} title={deepCloneFiles ? 'Editor indisponivel durante Clone Completo' : 'Editar no editor visual'}>
                             <IconTarget size={14} /> Editar
                           </button>
                         )}
