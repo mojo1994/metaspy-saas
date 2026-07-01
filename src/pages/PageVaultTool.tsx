@@ -227,13 +227,15 @@ export default function PageVaultTool() {
   }
 
   async function downloadDeepZip() {
-    if (!deepCloneId) return
+    if (!deepCloneId) { addLog('downloadDeepZip: deepCloneId vazio'); return }
+    addLog(`Baixando ZIP cloneId=${deepCloneId}`)
     try {
       const resp = await fetchWithAuth(`/api/clone/deep/download/${deepCloneId}`)
       if (!resp.ok) {
         const text = await resp.text().catch(() => '')
         let msg = `HTTP ${resp.status}`
         try { const j = JSON.parse(text); msg = j.error || j.erro || msg } catch {}
+        addLog(`Resposta do servidor: ${msg}`)
         throw new Error(msg)
       }
       const blob = await resp.blob()

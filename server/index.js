@@ -825,12 +825,15 @@ app.post('/api/clone/deep', authMiddleware, async (req, res) => {
     if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
     const id = randomUUID()
     const dir = join(CLONES_DIR, id)
+    logger.info({ cloneId: id, dir, CLONES_DIR }, 'clone-deep POST criando diretorio')
     mkdirSync(dir, { recursive: true })
     const { downloadSite, buildFileTree } = await import('./clone.js')
     await downloadSite(url, { outputDir: dir, fbToken: FB_TOKEN, deep: true })
     const files = buildFileTree(dir)
+    logger.info({ cloneId: id, dir, fileCount: files.length }, 'clone-deep POST concluido')
     res.json({ id, cloneId: id, path: dir, files })
   } catch (err) {
+    logger.error({ err }, 'clone-deep POST error')
     res.status(500).json({ error: 'Erro ao clonar site' })
   }
 })
@@ -853,6 +856,7 @@ app.get('/api/clone/deep/:id/download', authMiddleware, async (req, res) => {
   const blocked = checkFeature(req, res, 'bypass')
   if (blocked) return blocked
   const dir = join(CLONES_DIR, req.params.id)
+  logger.info({ cloneId: req.params.id, dir, CLONES_DIR, exists: existsSync(dir) }, 'clone-download GET')
   if (!existsSync(dir)) return res.status(404).json({ error: 'Clone nao encontrado' })
   try {
     const archive = new ZipArchive({ zlib: { level: 9 } })
