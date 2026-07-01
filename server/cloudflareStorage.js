@@ -3,7 +3,8 @@ import { join, dirname } from 'node:path'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID
-const API_TOKEN = process.env.CLOUDFLARE_API_TOKEN
+const R2_ACCESS_KEY = process.env.CLOUDFLARE_R2_ACCESS_KEY || process.env.CLOUDFLARE_API_TOKEN
+const R2_SECRET_KEY = process.env.CLOUDFLARE_R2_SECRET_KEY || process.env.CLOUDFLARE_API_TOKEN
 const BUCKET_NAME = process.env.CLOUDFLARE_R2_BUCKET || 'metaspy-pages'
 const PAGES_WORKER_HOST = process.env.PAGES_WORKER_HOST || 'metaspy-host.09santos-felipe.workers.dev'
 
@@ -15,15 +16,18 @@ let s3Client = null
 
 function getS3Client() {
   if (!s3Client) {
-    if (!ACCOUNT_ID || !API_TOKEN) {
-      throw new Error('CLOUDFLARE_ACCOUNT_ID e CLOUDFLARE_API_TOKEN sao obrigatorios')
+    if (!ACCOUNT_ID || !R2_ACCESS_KEY || !R2_SECRET_KEY) {
+      throw new Error('CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_R2_ACCESS_KEY e CLOUDFLARE_R2_SECRET_KEY sao obrigatorios')
+    }
+    if (!process.env.CLOUDFLARE_R2_ACCESS_KEY) {
+      console.warn('[R2] CLOUDFLARE_R2_ACCESS_KEY e CLOUDFLARE_R2_SECRET_KEY nao definidas — usando CLOUDFLARE_API_TOKEN como fallback. Gere chaves S3 no dashboard R2.')
     }
     s3Client = new S3Client({
       region: 'auto',
       endpoint: `https://${ACCOUNT_ID}.r2.cloudflarestorage.com`,
       credentials: {
-        accessKeyId: API_TOKEN,
-        secretAccessKey: API_TOKEN,
+        accessKeyId: R2_ACCESS_KEY,
+        secretAccessKey: R2_SECRET_KEY,
       },
     })
   }

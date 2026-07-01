@@ -26,21 +26,17 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [refreshToken, setRefreshToken] = useState<string | null>(null)
 
   useEffect(() => {
     const stored = localStorage.getItem('metaspy_session')
     const storedAccess = localStorage.getItem('metaspy_access_token')
-    const storedRefresh = localStorage.getItem('metaspy_refresh_token')
     if (stored && storedAccess) {
       try {
         setUser(JSON.parse(stored))
         setAccessToken(storedAccess)
-        if (storedRefresh) setRefreshToken(storedRefresh)
       } catch {
         localStorage.removeItem('metaspy_session')
         localStorage.removeItem('metaspy_access_token')
-        localStorage.removeItem('metaspy_refresh_token')
       }
     }
   }, [])
@@ -50,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, password })
       })
       if (!res.ok) {
@@ -69,10 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(u)
       setAccessToken(data.accessToken)
-      setRefreshToken(data.refreshToken)
       localStorage.setItem('metaspy_session', JSON.stringify(u))
       localStorage.setItem('metaspy_access_token', data.accessToken)
-      localStorage.setItem('metaspy_refresh_token', data.refreshToken)
       return null
     } catch {
       return 'Erro de conexão com o servidor'
@@ -84,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, name, password })
       })
       if (!res.ok) {
@@ -103,10 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(u)
       setAccessToken(data.accessToken)
-      setRefreshToken(data.refreshToken)
       localStorage.setItem('metaspy_session', JSON.stringify(u))
       localStorage.setItem('metaspy_access_token', data.accessToken)
-      localStorage.setItem('metaspy_refresh_token', data.refreshToken)
       return null
     } catch {
       return 'Erro de conexão com o servidor'
@@ -114,12 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
     setUser(null)
     setAccessToken(null)
-    setRefreshToken(null)
     localStorage.removeItem('metaspy_session')
     localStorage.removeItem('metaspy_access_token')
-    localStorage.removeItem('metaspy_refresh_token')
   }
 
   function updateUser(data: Partial<User>) {
@@ -139,27 +132,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json')
     }
-    let res = await fetch(url, { ...options, headers })
+    let res = await fetch(url, { ...options, headers, credentials: 'include' })
 
-    if (res.status === 401 && refreshToken) {
+    if (res.status === 401) {
       const refreshRes = await fetch('/api/auth/refresh', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken })
       })
       if (refreshRes.ok) {
         const data = await refreshRes.json()
         setAccessToken(data.accessToken)
-        setRefreshToken(data.refreshToken)
         localStorage.setItem('metaspy_access_token', data.accessToken)
-        localStorage.setItem('metaspy_refresh_token', data.refreshToken)
         headers.set('Authorization', `Bearer ${data.accessToken}`)
-        res = await fetch(url, { ...options, headers })
+        res = await fetch(url, { ...options, headers, credentials: 'include' })
       }
     }
 
     return res
-  }, [accessToken, refreshToken])
+  }, [accessToken])
 
   return (
     <AuthContext.Provider value={{ user, login, signup, logout, isAuthenticated: !!user, fetchWithAuth, updateUser }}>

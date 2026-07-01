@@ -4,8 +4,9 @@ import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import multer from 'multer'
-import { randomUUID, createHash, createHmac, createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto'
+import { randomUUID, createHash, createHmac, createCipheriv, createDecipheriv, timingSafeEqual, randomInt } from 'node:crypto'
 import { join, dirname, extname } from 'node:path'
+import { freemem } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync } from 'node:fs'
 import bcrypt from 'bcryptjs'
@@ -75,6 +76,27 @@ if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
 
 initDb(DATABASE_URL)
 await initSchema()
+
+// ─── LRU Cache com TTL ──────────────────────────────────────────
+class TtlLRUMap {
+  #map = new Map()
+  #maxSize
+  #ttlMs
+  constructor(maxSize = 1000, ttlMs = 300_000) { this.#maxSize = maxSize; this.#ttlMs = ttlMs }
+  get(key) {
+    const entry = this.#map.get(key)
+    if (!entry) return undefined
+    if (Date.now() - entry.time > this.#ttlMs) { this.#map.delete(key); return undefined }
+    this.#map.delete(key); this.#map.set(key, entry)
+    return entry.value
+  }
+  set(key, value) {
+    if (this.#map.size >= this.#maxSize) { const first = this.#map.keys().next().value; this.#map.delete(first) }
+    this.#map.set(key, { value, time: Date.now() })
+  }
+  delete(key) { this.#map.delete(key) }
+  get size() { return this.#map.size }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────
 const CLONES_DIR = join(DATA_DIR, '..', 'clones')
@@ -409,6 +431,22 @@ function generateRefreshToken(userId) {
   return jwt.sign({ userId, type: 'refresh' }, JWT_SECRET, { expiresIn: '30d' })
 }
 
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  path: '/api/auth',
+  maxAge: 30 * 24 * 60 * 60,
+}
+
+function setRefreshCookie(res, token) {
+  res.cookie('refreshToken', token, COOKIE_OPTIONS)
+}
+
+function clearRefreshCookie(res) {
+  res.clearCookie('refreshToken', { ...COOKIE_OPTIONS, maxAge: 0 })
+}
+
 async function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token nao fornecido' })
@@ -569,8 +607,9 @@ app.post('/api/auth/signup', validate(signupSchema), async (req, res) => {
 
     const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [id])
     const accessToken = generateToken(id)
-    const refreshToken = generateRefreshToken(id)
-    res.json({ user, accessToken, refreshToken })
+    const refToken = generateRefreshToken(id)
+    setRefreshCookie(res, refToken)
+    res.json({ user, accessToken })
   } catch (err) {
     logger.error({ err }, 'Erro signup')
     res.status(500).json({ error: 'Erro ao criar conta.' })
@@ -596,8 +635,9 @@ app.post('/api/auth/verify-signup', validate(verifyCodeSchema), async (req, res)
 
     const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [id])
     const accessToken = generateToken(id)
-    const refreshToken = generateRefreshToken(id)
-    res.json({ user, accessToken, refreshToken })
+    const refToken = generateRefreshToken(id)
+    setRefreshCookie(res, refToken)
+    res.json({ user, accessToken })
   } catch (err) {
     logger.error({ err }, 'Erro verify-signup')
     res.status(500).json({ error: 'Erro ao confirmar cadastro.' })
@@ -625,16 +665,18 @@ app.post('/api/auth/login', validate(loginSchema), async (req, res) => {
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) return res.status(401).json({ error: 'Credenciais invalidas' })
     const accessToken = generateToken(user.id)
-    const refreshToken = generateRefreshToken(user.id)
+    const refToken = generateRefreshToken(user.id)
+    setRefreshCookie(res, refToken)
     const { password_hash, ...safe } = user
-    res.json({ user: safe, accessToken, refreshToken })
+    res.json({ user: safe, accessToken })
   } catch {
     res.status(500).json({ error: 'Erro ao fazer login' })
   }
 })
 
-app.post('/api/auth/refresh', async (req, res) => {
-  const { refreshToken } = req.body
+const refreshLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: { error: 'Muitas requisicoes de refresh. Aguarde.' } })
+app.post('/api/auth/refresh', refreshLimiter, async (req, res) => {
+  const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken
   if (!refreshToken) return res.status(401).json({ error: 'Refresh token nao fornecido' })
   try {
     const decoded = jwt.verify(refreshToken, JWT_SECRET)
@@ -642,14 +684,16 @@ app.post('/api/auth/refresh', async (req, res) => {
     const user = await one('SELECT id FROM users WHERE id = $1', [decoded.userId])
     if (!user) return res.status(401).json({ error: 'Usuario nao encontrado' })
     const newAccessToken = generateToken(user.id)
-    const newRefreshToken = generateRefreshToken(user.id)
-    res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken })
+    const newRefToken = generateRefreshToken(user.id)
+    setRefreshCookie(res, newRefToken)
+    res.json({ accessToken: newAccessToken })
   } catch {
     res.status(401).json({ error: 'Refresh token invalido' })
   }
 })
 
 app.post('/api/auth/logout', (req, res) => {
+  clearRefreshCookie(res)
   res.json({ ok: true })
 })
 
@@ -661,7 +705,7 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 import { sendEmail, verificationEmailHtml, purchaseConfirmationEmailHtml, pendingCheckoutEmailHtml } from './email.js'
 
 function generateCode() {
-  return String(Math.floor(100000 + Math.random() * 900000))
+  return String(randomInt(100000, 999999))
 }
 
 app.post('/api/auth/forgot-password', validate(forgotPasswordSchema), async (req, res) => {
@@ -871,7 +915,7 @@ async function resolveImageHash(hash) {
 }
 
   // ─── Ad Image Extraction ─────────────────────────────────────────
-const cachePreview = new Map()
+const cachePreview = new TtlLRUMap(500, 600_000)
 app.get('/api/ad-extract-image', async (req, res) => {
   const { id, snapshot, linkUrl, pageId: pageIdParam, objectStorySpec } = req.query
   if (!id && !snapshot) return res.status(400).json({ error: 'Informe id ou snapshot' })
@@ -1167,7 +1211,7 @@ async function getPageProfilePic(pageId, adId) {
 // ─── Apify Facebook Ads Scraper Integration ────────────────────
 const APIFY_TOKEN = process.env.APIFY_TOKEN
 const APIFY_ACTOR_ID = 'XtaWFhbtfxyzqrFmd'
-const apifyCache = new Map()
+const apifyCache = new TtlLRUMap(200, 1_800_000)
 
 async function extractImageFromApifyData(items) {
   if (!Array.isArray(items) || items.length === 0) return null
@@ -1349,16 +1393,23 @@ app.post('/api/enqueue-thumbnails', async (req, res) => {
 })
 
 // ─── Puppeteer Snapshot (headless browser for ads without thumbnails) ─
+const PUPPETEER_MEM_MIN = 600 // 600MB — abaixo disso nao tenta
 let browserInstance = null
 async function getBrowser() {
   if (browserInstance && browserInstance.isConnected()) return browserInstance
+  const memUsage = process.memoryUsage()
+  const freeMem = typeof freemem === 'function' ? freemem() / 1024 / 1024 : Infinity
+  if (freeMem < PUPPETEER_MEM_MIN) {
+    logger.warn({ freeMemMb: Math.round(freeMem) }, 'Memoria insuficiente para Puppeteer — use o Cloudflare Worker (Browser Rendering) em vez do Chrome local')
+    throw new Error(`Memoria insuficiente para Puppeteer (${Math.round(freeMem)}MB livres, minimo ${PUPPETEER_MEM_MIN}MB). Configure CF_WORKER_URL para usar Browser Rendering.`)
+  }
   const puppeteer = await import('puppeteer')
   browserInstance = await puppeteer.launch({
     headless: true,
     args: [
       '--no-sandbox', '--disable-setuid-sandbox',
       '--disable-dev-shm-usage', '--disable-gpu',
-      '--window-size=1920,1080'
+      '--window-size=1280,720'
     ]
   })
   return browserInstance
@@ -1866,7 +1917,7 @@ function generateEnhancedScript(safeUrl, revealOnClick) {
 }
 
 // ─── Dual-Layer Media Camouflage ──────────────────────────────────
-const CAMO_MEDIA_OUTPUTS = new Map()
+const CAMO_MEDIA_OUTPUTS = new TtlLRUMap(100, 600_000)
 
 const camoMediaStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -3044,13 +3095,18 @@ app.listen(PORT, async () => {
 })
 
 // Keep-Alive: ping a cada 60s para evitar cold start no Render
+// NOTA: Ping interno (localhost) NAO impede o Render de dormir.
+// O Render free tier hiberna apos ~15min sem TRÁFEGO EXTERNO.
+// Para manter ativo 24/7, configure um cron EXTERNO (ex: UptimeRobot.com - gratis)
+// para pingar https://metaspy-saas.onrender.com/api/health a cada 5 minutos.
 if (IS_RENDER) {
-  const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `http://localhost:${PORT}/api/health`
+  const EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || 'https://metaspy-saas.onrender.com'
+  const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `${EXTERNAL_URL}/api/health`
   setInterval(async () => {
     try {
-      const resp = await fetch(KEEP_ALIVE_URL, { signal: AbortSignal.timeout(5000) })
-      if (resp.ok) logger.debug('Keep-Alive OK')
+      const resp = await fetch(KEEP_ALIVE_URL, { signal: AbortSignal.timeout(8000) })
+      if (resp.ok) logger.debug({ url: KEEP_ALIVE_URL }, 'Keep-Alive OK')
     } catch { /* silent */ }
-  }, 60000)
-  logger.info('Keep-Alive ativado (60s)')
+  }, 300000)
+  logger.warn({ url: KEEP_ALIVE_URL }, 'Keep-Alive externo ativado (5min). AINDA ASSIM, Render free tier pode dormir sem cron externo. Configure UptimeRobot (gratis) para ping a cada 5min.')
 }
