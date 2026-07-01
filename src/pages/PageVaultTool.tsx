@@ -230,7 +230,12 @@ export default function PageVaultTool() {
     if (!deepCloneId) return
     try {
       const resp = await fetchWithAuth(`/api/clone/deep/download/${deepCloneId}`)
-      if (!resp.ok) throw new Error('Erro ao baixar ZIP')
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '')
+        let msg = `HTTP ${resp.status}`
+        try { const j = JSON.parse(text); msg = j.error || j.erro || msg } catch {}
+        throw new Error(msg)
+      }
       const blob = await resp.blob()
       const dlUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -240,6 +245,7 @@ export default function PageVaultTool() {
       URL.revokeObjectURL(dlUrl)
     } catch (e: any) {
       setDeepError(e.message || 'Erro ao baixar ZIP')
+      addLog(`Erro no download: ${e.message}`)
     }
   }
 

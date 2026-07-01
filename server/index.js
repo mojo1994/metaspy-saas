@@ -860,13 +860,14 @@ app.get('/api/clone/deep/:id/download', authMiddleware, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="clone-${req.params.id}.zip"`)
     await new Promise((resolve, reject) => {
       res.on('finish', resolve)
-      res.on('error', reject)
-      archive.on('error', reject)
+      res.on('error', (err) => { logger.error({ err, cloneId: req.params.id }, 'clone-download res error'); reject(err) })
+      archive.on('error', (err) => { logger.error({ err, cloneId: req.params.id }, 'clone-download archive error'); reject(err) })
       archive.pipe(res)
       archive.directory(dir, false)
       archive.finalize()
     })
-  } catch {
+  } catch (err) {
+    logger.error({ err, cloneId: req.params.id }, 'clone-download failed')
     if (!res.headersSent) {
       res.status(500).json({ error: 'Erro ao gerar ZIP' })
     }
