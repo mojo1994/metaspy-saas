@@ -1553,12 +1553,22 @@ app.post('/api/subscription/webhook', async (req, res) => {
   try {
     const event = req.body
     const eventId = event.id || event.subscription_id || event.transaction_id || randomUUID()
+    const eventType = event.event || event.type || ''
+
+    // Log webhook for debug inspection (keep last 50)
+    const logEntry = { id: eventId?.slice(0, 20), event: eventType, time: new Date().toISOString(), summary: {} }
+    try {
+      const { event: ev, metadata, customer, ...rest } = event
+      logEntry.summary = { keys: Object.keys(rest).slice(0, 10), hasMetadata: !!metadata, hasCustomer: !!customer, customerEmail: customer?.email }
+    } catch {}
+    WEBHOOK_LOG.unshift(logEntry)
+    if (WEBHOOK_LOG.length > 50) WEBHOOK_LOG.length = 50
 
     // Idempotency: deduplicate webhook events
-    const idempotencyKey = createHash('sha256').update(`webhook:${eventId}:${event.event}`).digest('hex')
+    const idempotencyKey = createHash('sha256').update(`webhook:${eventId}:${eventType}`).digest('hex')
     const existing = await one('SELECT key FROM idempotency_keys WHERE key = $1', [idempotencyKey])
     if (existing) {
-      logger.info({ eventId, event: event.event }, 'Webhook duplicado ignorado (idempotency)')
+      logger.info({ eventId, event: eventType }, 'Webhook duplicado ignorado (idempotency)')
       return res.json({ received: true, dedup: true })
     }
     const now = new Date()
@@ -1566,17 +1576,52 @@ app.post('/api/subscription/webhook', async (req, res) => {
     await run('INSERT INTO idempotency_keys (key, expires_at, created_at) VALUES ($1, $2, $3)',
       [idempotencyKey, expiresAt.toISOString(), now.toISOString()]).catch(() => {})
 
-    logger.info({ event: event.event, eventId: eventId.slice(0, 20) }, 'Webhook recebido')
+    logger.info({ event: eventType, eventId: eventId?.slice(0, 20) }, 'Webhook recebido')
 
-    if (event.event === 'payment.approved' || event.event === 'subscription.approved') {
+    const isApproved = ['payment.approved', 'subscription.approved', 'payment.success', 'subscription.active', 'charge.completed'].includes(eventType)
+    const isCanceled = ['subscription.canceled', 'payment.refunded', 'subscription.expired', 'payment.chargeback'].includes(eventType)
+
+    // ── Helper: find user by webhook data ──
+    async function findUserFromWebhook() {
       const metadata = event.metadata || {}
-      let userId = metadata.user_id
-      if (!userId && event.customer?.email) {
-        const user = await one('SELECT id, pending_plan FROM users WHERE email = $1', [event.customer.email.toLowerCase().trim()])
-        if (user) userId = user.id
+      if (metadata.user_id) return { userId: metadata.user_id, source: 'metadata.user_id' }
+      if (metadata.userId) return { userId: metadata.userId, source: 'metadata.userId' }
+      if (metadata.customer_id) {
+        const u = await one('SELECT id FROM users WHERE id = $1', [metadata.customer_id])
+        if (u) return { userId: u.id, source: 'metadata.customer_id' }
       }
-      if (userId) {
-        const user = await one('SELECT pending_plan FROM users WHERE id = $1', [userId])
+
+      const customerEmail = event.customer?.email || event.customer_email || event.billing?.email || event.email || ''
+      if (customerEmail) {
+        const emailClean = customerEmail.toLowerCase().trim()
+        const u = await one('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [emailClean])
+        if (u) return { userId: u.id, source: 'email' }
+        logger.warn({ email: emailClean }, 'Webhook: email nao encontrado no banco')
+      }
+
+      const customerId = event.customer?.id || event.customer_id || ''
+      if (customerId) {
+        const u = await one('SELECT id FROM users WHERE id = $1', [customerId])
+        if (u) return { userId: u.id, source: 'customer_id' }
+      }
+
+      if (event.phone || event.customer?.phone) {
+        const phone = (event.phone || event.customer?.phone || '').replace(/\D/g, '')
+        if (phone) {
+          const users = await query('SELECT id FROM users WHERE phone = $1', [phone])
+          if (users?.length === 1) return { userId: users[0].id, source: 'phone' }
+        }
+      }
+
+      return null
+    }
+
+    if (isApproved) {
+      const found = await findUserFromWebhook()
+      if (found) {
+        const { userId, source } = found
+        logger.info({ userId, source, eventId: eventId?.slice(0, 20) }, 'Webhook: usuario identificado')
+        const user = await one('SELECT id, name, email, pending_plan FROM users WHERE id = $1', [userId])
         const plan = user?.pending_plan || 'nenhum'
         const config = PLAN_CONFIG[plan]
         if (config) {
@@ -1585,32 +1630,49 @@ app.post('/api/subscription/webhook', async (req, res) => {
           await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4, pending_plan = NULL WHERE id = $5',
             ['active', eventId, expiryStr, plan, userId])
 
-          try {
-            const userInfo = await one('SELECT name, email FROM users WHERE id = $1', [userId])
-            if (userInfo) {
+          if (user?.email) {
+            try {
               await sendEmail({
-                to: userInfo.email,
+                to: user.email,
                 subject: 'MetaSpy - Pagamento confirmado!',
-                html: purchaseConfirmationEmailHtml({ name: userInfo.name, plan, days: config.days }),
+                html: purchaseConfirmationEmailHtml({ name: user.name || user.email, plan, days: config.days }),
               })
+            } catch (emailErr) {
+              logger.error({ err: emailErr }, 'Erro ao enviar email de confirmacao')
             }
-          } catch (emailErr) {
-            logger.error({ err: emailErr }, 'Erro ao enviar email de confirmacao')
           }
+
+          logger.info({ userId, plan, expiry: expiryStr }, 'Webhook: plano ativado com sucesso')
+        } else {
+          logger.warn({ userId, plan }, 'Webhook: plano invalido em pending_plan')
         }
+      } else {
+        logger.error({ eventType, eventId: eventId?.slice(0, 20), payload: JSON.stringify(event).slice(0, 2000) }, 'Webhook: nao foi possivel identificar usuario')
+        try {
+          await run('INSERT INTO webhook_failures (id, submission_id, attempt_count, last_error, created_at) VALUES ($1, $2, $3, $4, $5)',
+            [randomUUID(), eventId || 'unknown', 1, 'Usuario nao identificado: ' + JSON.stringify(event).slice(0, 500), new Date().toISOString()])
+        } catch {}
       }
     }
-    if (event.event === 'subscription.canceled' || event.event === 'payment.refunded') {
-      const metadata = event.metadata || {}
-      const userId = metadata.user_id
-      if (userId) {
+
+    if (isCanceled) {
+      const found = await findUserFromWebhook()
+      if (found) {
+        const { userId } = found
         await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4 WHERE id = $5',
           ['canceled', '', null, 'nenhum', userId])
+        logger.info({ userId, eventType }, 'Webhook: assinatura cancelada')
       }
     }
+
     res.json({ received: true })
   } catch (err) {
     logger.error({ err }, 'Erro no webhook')
+    try {
+      const safe = JSON.stringify(req?.body).slice(0, 500) || 'unknown'
+      await run('INSERT INTO webhook_failures (id, submission_id, attempt_count, last_error, created_at) VALUES ($1, $2, $3, $4, $5)',
+        [randomUUID(), 'error', 1, 'Excecao: ' + (err.message || '') + ' | payload: ' + safe, new Date().toISOString()])
+    } catch {}
     res.json({ received: true })
   }
 })
@@ -2715,6 +2777,44 @@ app.put('/api/admin/users/:id/plan', adminMiddleware, async (req, res) => {
       [plan, plan === 'nenhum' ? 'inactive' : 'active', expiryStr, req.params.id])
     res.json({ ok: true })
   } catch { res.status(500).json({ error: 'Erro ao atualizar plano' }) }
+})
+
+app.post('/api/admin/activate-plan', adminMiddleware, async (req, res) => {
+  try {
+    const { email, plan, days } = req.body
+    if (!email || !plan) return res.status(400).json({ error: 'email e plan sao obrigatorios' })
+    if (!['nenhum', 'basico', 'gold', 'premium'].includes(plan)) return res.status(400).json({ error: 'Plano invalido' })
+    const config = PLAN_CONFIG[plan]
+    if (!config) return res.status(400).json({ error: 'Plano invalido' })
+
+    const user = await one('SELECT id, name, email, plan, subscription_status, pending_plan FROM users WHERE LOWER(email) = LOWER($1)', [email.trim()])
+    if (!user) return res.status(404).json({ error: 'Usuario nao encontrado' })
+
+    const now = new Date()
+    const planDays = days || config.days
+    const expiry = plan === 'nenhum' ? null : new Date(now.getTime() + planDays * 24 * 60 * 60 * 1000)
+    const expiryStr = expiry ? expiry.toISOString().replace('T', ' ').slice(0, 19) : null
+
+    await run('UPDATE users SET plan = $1, subscription_status = $2, subscription_expiry = $3, pending_plan = NULL WHERE id = $4',
+      [plan, plan === 'nenhum' ? 'inactive' : 'active', expiryStr, user.id])
+
+    logger.info({ userId: user.id, email: user.email, plan, expiry: expiryStr, admin: req.adminUser?.email }, 'Admin: plano ativado manualmente')
+
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: 'MetaSpy - Plano ativado!',
+        html: purchaseConfirmationEmailHtml({ name: user.name || user.email, plan, days: planDays }),
+      })
+    } catch (emailErr) {
+      logger.error({ err: emailErr }, 'Erro ao enviar email de confirmacao (admin)')
+    }
+
+    res.json({ ok: true, user: { id: user.id, email: user.email, plan, expiry: expiryStr } })
+  } catch (err) {
+    logger.error({ err }, 'Erro ao ativar plano manualmente')
+    res.status(500).json({ error: 'Erro ao ativar plano' })
+  }
 })
 
 // ─── Debug (protegido — apenas admin) ─────────────────────────────
