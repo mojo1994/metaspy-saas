@@ -2426,9 +2426,9 @@ button:active,
   font-family: var(--font-display);
   font-weight: 800;
   font-size: clamp(3.7rem, 8vw, 5.2rem);
-  line-height: 0.95;
-  letter-spacing: -0.07em;
-  max-width: 11ch;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  max-width: 20ch;
   background: linear-gradient(135deg, var(--text-primary) 0%, var(--purple-100) 36%, var(--purple-300) 68%, var(--purple-500) 100%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -2680,8 +2680,8 @@ button:active,
   font-family: var(--font-display);
   font-size: clamp(2.6rem, 5vw, 3.6rem);
   font-weight: 900;
-  line-height: .9;
-  letter-spacing: -.07em;
+  line-height: 1;
+  letter-spacing: -0.03em;
   color: var(--text-primary);
 }
 

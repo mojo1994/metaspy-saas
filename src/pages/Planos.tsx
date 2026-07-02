@@ -36,9 +36,9 @@ const ALL_FEATURES = [
   'Hospedagem de páginas',
   'Páginas ocultas',
   'Análise avançada',
-  'Clonagem de 50',
+  'Clonagem de 50 páginas/mês',
   'Quebra de Cloaker',
-  'Camuflagem de',
+  'Camuflagem de Vídeo e Imagem',
   'Suporte Prioritário',
 ]
 
