@@ -10,8 +10,9 @@ import {
   Sliders,
   Download,
   Play,
-  Check,
+  SealCheck,
   Minus,
+  Star,
 } from '@phosphor-icons/react'
 
 const FEATURE_ITEMS = [
@@ -204,7 +205,7 @@ export default function Landing() {
                   <h3>{plan.title}</h3>
                   {plan.highlighted && (
                     <div className="planos-card-badge planos-card-badge-animated">
-                      RECOMENDADO
+                      <Star size={10} weight="fill" /> RECOMENDADO
                     </div>
                   )}
                 </div>
@@ -229,7 +230,7 @@ export default function Landing() {
                 {plan.features.map(([label, ok]) => (
                   <li key={label} className={ok ? '' : 'off'}>
                     <span className="planos-check">
-                      {ok ? <Check size={12} weight="bold" /> : <Minus size={12} weight="bold" />}
+                      {ok ? <SealCheck size={14} weight="fill" /> : <Minus size={12} weight="bold" />}
                     </span>
                     <span>{label}</span>
                   </li>

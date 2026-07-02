@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Check, Minus } from '@phosphor-icons/react'
+import { CheckCircle, Minus, SealCheck, Star } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
   { label: 'Minerador de Anúncios', ok: true },
@@ -342,7 +342,7 @@ export default function Planos() {
                 <h2>{plan.title}</h2>
                 {plan.highlighted && (
                   <div className="planos-card-badge planos-card-badge-animated">
-                    RECOMENDADO
+                    <Star size={10} weight="fill" /> RECOMENDADO
                   </div>
                 )}
               </div>
@@ -363,7 +363,7 @@ export default function Planos() {
               {plan.features.map(f => (
                 <li key={f.label} className={f.ok ? '' : 'off'}>
                   <span className="planos-check">
-                    {f.ok ? <Check size={12} weight="bold" /> : <Minus size={12} weight="bold" />}
+                    {f.ok ? <SealCheck size={14} weight="fill" /> : <Minus size={12} weight="bold" />}
                   </span>
                     <span>{f.label}</span>
                 </li>
@@ -425,13 +425,13 @@ export default function Planos() {
                     {feature}
                   </div>
                   <div className="planos-table-cell planos-table-flag" role="cell">
-                    {basic ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
+                    {basic ? <SealCheck size={16} weight="fill" /> : <Minus size={16} weight="bold" />}
                   </div>
                   <div className="planos-table-cell planos-table-flag planos-table-flag-highlight" role="cell">
-                    {premium ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
+                    {premium ? <SealCheck size={16} weight="fill" /> : <Minus size={16} weight="bold" />}
                   </div>
                   <div className="planos-table-cell planos-table-flag" role="cell">
-                    {gold ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
+                    {gold ? <SealCheck size={16} weight="fill" /> : <Minus size={16} weight="bold" />}
                   </div>
                 </div>
               )

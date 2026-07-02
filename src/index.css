@@ -2459,24 +2459,58 @@ button:active,
   margin-left: 2px;
 }
 
+/* ─── Plan Cards ────────────────────────────────────────── */
+
+@keyframes planosBorderGlow {
+  0%, 100% { opacity: .4; }
+  50% { opacity: .9; }
+}
+
+@keyframes planosBadgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(168,85,247,.5); }
+  50% { box-shadow: 0 0 0 8px rgba(168,85,247,0); }
+}
+
+@keyframes planosSweep {
+  to { transform: translateX(150%); }
+}
+
+@keyframes planosFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes planosPriceGlow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.15); }
+}
+
 .planos-cards {
-  max-width: 1180px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 8px 24px 36px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 24px;
 }
 
 .planos-card {
-  padding: 28px 26px 24px;
+  padding: 36px 30px 28px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.01), transparent 100%), var(--bg-card);
-  border: 1px solid var(--border);
+  gap: 20px;
   position: relative;
-  border-radius: 6px;
+  border-radius: 20px;
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,.03) 0%,
+    rgba(168,85,247,.03) 30%,
+    transparent 70%
+  ), var(--bg-card);
+  border: 1px solid rgba(255,255,255,.06);
+  transition: all .45s cubic-bezier(.22,1,.36,1);
+  will-change: transform, box-shadow;
+  overflow: hidden;
 }
 
 .planos-card::before {
@@ -2486,8 +2520,10 @@ button:active,
   border-radius: inherit;
   pointer-events: none;
   opacity: 0;
-  transition: opacity var(--motion-base) var(--ease-standard);
-  background: radial-gradient(circle at top, rgba(168,85,247,0.1), transparent 44%);
+  transition: opacity .6s ease;
+  background:
+    radial-gradient(600px circle at 0% 0%, rgba(168,85,247,.12), transparent 50%),
+    radial-gradient(400px circle at 100% 100%, rgba(236,72,153,.08), transparent 40%);
 }
 
 .planos-card:hover::before {
@@ -2495,11 +2531,23 @@ button:active,
 }
 
 .planos-card:hover {
-  border-color: var(--border-hover);
+  transform: translateY(-6px);
+  border-color: rgba(168,85,247,.2);
+  box-shadow:
+    0 24px 80px rgba(0,0,0,.35),
+    0 0 0 1px rgba(168,85,247,.08),
+    0 0 60px rgba(168,85,247,.06);
 }
 
 .planos-card-destaque {
-  border-color: rgba(168,85,247,0.28);
+  border-color: rgba(168,85,247,.25);
+  background: linear-gradient(
+    160deg,
+    rgba(168,85,247,.06) 0%,
+    rgba(168,85,247,.02) 40%,
+    transparent 70%
+  ), var(--bg-card);
+  animation: planosFloat 5s ease-in-out infinite;
 }
 
 .planos-card-destaque::after {
@@ -2508,16 +2556,57 @@ button:active,
   inset: -1px;
   border-radius: inherit;
   pointer-events: none;
-  opacity: .5;
-  background: linear-gradient(90deg, transparent, rgba(168,85,247,0.22), transparent);
-  transform: translateX(-100%);
-  animation: planosSweep 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  z-index: -1;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    rgba(168,85,247,.25) 60deg,
+    rgba(236,72,153,.2) 120deg,
+    transparent 180deg,
+    rgba(168,85,247,.25) 240deg,
+    rgba(236,72,153,.2) 300deg,
+    transparent 360deg
+  );
+  animation: planosBorderGlow 4s ease-in-out infinite;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  padding: 1.5px;
+}
+
+.planos-card-destaque::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .6s ease;
+  background:
+    radial-gradient(800px circle at 20% 0%, rgba(168,85,247,.18), transparent 50%),
+    radial-gradient(500px circle at 80% 100%, rgba(236,72,153,.1), transparent 40%);
+}
+
+.planos-card-destaque:hover::before {
+  opacity: 1;
 }
 
 .planos-card-destaque:hover {
-  box-shadow: var(--shadow-elevated), 0 0 0 1px rgba(168,85,247,0.2), 0 0 40px rgba(168,85,247,0.18);
+  transform: translateY(-8px) scale(1.01);
+  box-shadow:
+    0 32px 100px rgba(0,0,0,.4),
+    0 0 0 1px rgba(168,85,247,.15),
+    0 0 80px rgba(168,85,247,.12);
 }
 
+/* ─── Inner glow overlay ─── */
+.planos-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Title row ─── */
 .planos-card-title-row {
   display: flex;
   align-items: center;
@@ -2527,9 +2616,13 @@ button:active,
 
 .planos-card h2 {
   font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -.04em;
+  background: linear-gradient(135deg, var(--text-primary) 50%, var(--purple-300));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .planos-card-desc {
@@ -2539,146 +2632,189 @@ button:active,
   line-height: 1.6;
 }
 
+.planos-card-destaque .planos-card-desc {
+  color: rgba(192,132,252,.7);
+}
+
+/* ─── Price ─── */
 .planos-card-price {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 6px;
+  padding: 4px 0;
 }
 
 .planos-original {
   position: relative;
   display: inline-flex;
   align-items: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-muted);
-  opacity: .78;
+  opacity: .6;
   margin-right: 4px;
 }
 
 .planos-original::after {
   content: '';
   position: absolute;
-  left: -4px;
-  right: -4px;
+  left: -2px;
+  right: -2px;
   top: 50%;
   height: 1.5px;
   border-radius: 999px;
   background: currentColor;
-  transform: rotate(-12deg);
+  transform: rotate(-10deg);
   transform-origin: center;
 }
 
 .planos-current {
   font-family: var(--font-display);
-  font-size: clamp(2.25rem, 4vw, 3.1rem);
-  font-weight: 800;
-  line-height: .95;
-  letter-spacing: -0.06em;
-  color: var(--text-primary);
+  font-size: clamp(2.6rem, 5vw, 3.6rem);
+  font-weight: 900;
+  line-height: .9;
+  letter-spacing: -.07em;
+  background: linear-gradient(135deg, #fff 20%, var(--purple-300) 80%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: planosPriceGlow 3s ease-in-out infinite;
+}
+
+.planos-card-destaque .planos-current {
+  background: linear-gradient(135deg, #fff 10%, var(--purple-300) 50%, var(--purple-400) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 
 .planos-period {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text-muted);
+  letter-spacing: -.02em;
 }
 
+/* ─── Features list ─── */
 .planos-features {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  padding: 4px 0;
 }
 
 .planos-features li {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 22px;
+  gap: 12px;
+  min-height: 24px;
   font-size: 14px;
   line-height: 1.45;
   color: var(--text-secondary);
+  transition: color .2s ease;
+}
+
+.planos-features li:hover {
+  color: var(--text-primary);
 }
 
 .planos-features li.off {
-  opacity: .38;
+  opacity: .35;
 }
 
 .planos-check {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   display: inline-grid;
   place-items: center;
   flex-shrink: 0;
-  color: var(--success);
   line-height: 0;
+  border-radius: 50%;
+  background: rgba(16,185,129,.12);
+  color: #10b981;
+  transition: all .25s ease;
 }
 
+.planos-features li:hover .planos-check {
+  background: rgba(16,185,129,.2);
+  transform: scale(1.1);
+}
+
+.planos-features li.off .planos-check {
+  background: rgba(255,255,255,.04);
+  color: var(--text-muted);
+}
+
+/* ─── CTA button ─── */
 .planos-cta {
   margin-top: auto;
   width: 100%;
   justify-content: center;
-  padding: 13px 16px;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  padding: 15px 16px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: .04em;
   position: relative;
   overflow: hidden;
+  border-radius: 14px;
+  transition: all .3s cubic-bezier(.22,1,.36,1);
 }
 
-.planos-cta::after,
-.planos-nav .btn::after,
-.planos-bottom-cta::after {
+.planos-cta::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(120deg, transparent 28%, rgba(255,255,255,0.08) 45%, transparent 62%);
+  background: linear-gradient(120deg, transparent 28%, rgba(255,255,255,.1) 45%, transparent 62%);
   transform: translateX(-120%);
-  transition: transform 220ms var(--ease-expo);
+  transition: transform .5s cubic-bezier(.22,1,.36,1);
   pointer-events: none;
 }
 
-.planos-cta:hover::after,
-.planos-nav .btn:hover::after,
-.planos-bottom-cta:hover::after {
+.planos-cta:hover::after {
   transform: translateX(120%);
 }
 
+.planos-cta.btn-gradient {
+  box-shadow: 0 0 30px rgba(168,85,247,.2);
+}
+
+.planos-cta.btn-gradient:hover {
+  box-shadow: 0 0 50px rgba(168,85,247,.35);
+  transform: translateY(-2px);
+}
+
+.planos-cta.btn-primary {
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.04);
+}
+
+.planos-cta.btn-primary:hover {
+  background: rgba(168,85,247,.12);
+  border-color: rgba(168,85,247,.25);
+  color: var(--purple-300);
+}
+
+/* ─── Badge ─── */
 .planos-card-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  padding: 7px 11px;
+  padding: 6px 12px;
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: .1em;
   text-transform: uppercase;
-  background: rgba(168,85,247,0.12);
-  border: 1px solid rgba(168,85,247,0.22);
+  background: linear-gradient(135deg, rgba(168,85,247,.15), rgba(236,72,153,.1));
+  border: 1px solid rgba(168,85,247,.25);
   color: var(--purple-300);
-  position: static;
-  top: auto;
-  left: auto;
-  transform: none;
   white-space: nowrap;
+  position: relative;
 }
 
 .planos-card-badge-animated {
-  position: relative;
-  overflow: hidden;
-  animation: planosBadgePulse 3.4s var(--ease-expo) infinite;
-}
-
-.planos-card-badge-animated::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.08) 42%, transparent 64%);
-  transform: translateX(-140%);
-  animation: planosSweep 3.6s var(--ease-expo) infinite;
+  animation: planosBadgePulse 2.4s ease-in-out infinite;
 }
 
 .planos-comparison {
@@ -3003,18 +3139,6 @@ button:active,
 .planos-bottom-cta:active {
   transform: translateY(0) scale(0.97);
 }
-
-@keyframes planosSweep {
-  0% { transform: translateX(-100%); }
-  50% { transform: translateX(100%); }
-  100% { transform: translateX(100%); }
-}
-
-@keyframes planosBadgePulse {
-  0%, 100% { transform: translateY(0); filter: brightness(1); }
-  50% { transform: translateY(-1px); filter: brightness(1.05); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .planos-card-destaque::after,
   .planos-card-badge-animated,
@@ -3325,13 +3449,13 @@ button:active,
   margin-top: 26px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 24px;
   max-width: none;
   align-items: stretch;
 }
 
 .landing-plan-card {
-  padding: 28px 24px 24px;
+  padding: 36px 30px 28px;
   min-height: 100%;
   overflow: visible;
 }
@@ -3343,9 +3467,13 @@ button:active,
 .landing-plan-card .planos-card h2,
 .landing-plan-card .planos-card-title-row h3 {
   font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.04em;
+  background: linear-gradient(135deg, var(--text-primary) 50%, var(--purple-300));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .landing-plan-card .planos-card-desc {
