@@ -19,6 +19,7 @@ import {
   CaretRight,
   Download,
   ArrowUp,
+  Folder,
 } from '@phosphor-icons/react'
 
 type Props = { size?: number; className?: string }
@@ -105,4 +106,8 @@ export function IconDownload({ size = 18, className }: Props) {
 
 export function IconArrowUp({ size = 14, className }: Props) {
   return <ArrowUp size={size} weight="bold" className={className} />
+}
+
+export function IconFolder({ size = 24, className }: Props) {
+  return <Folder size={size} weight="regular" className={className} />
 }

@@ -6,48 +6,42 @@ import { Check, Minus } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
   { label: 'Minerador de Anúncios', ok: true },
-  { label: 'Hospedar Páginas', ok: false },
-  { label: 'Cloacker', ok: false },
   { label: 'Removedor de Metadados', ok: true },
 ]
 
 const FEATURES_GOLD = [
   { label: 'Minerador de Anúncios', ok: true },
-  { label: 'Hospedar Páginas', ok: true },
-  { label: 'Cloacker', ok: false },
+  { label: 'Clonador', ok: true },
+  { label: 'Hospedar 10 páginas/mês', ok: true },
+  { label: 'Detector de Cloacking', ok: true },
   { label: 'Removedor de Metadados', ok: true },
 ]
 
 const FEATURES_PREMIUM = [
   { label: 'Minerador de Anúncios', ok: true },
-  { label: '  • Deep Clone de Páginas', ok: true },
-  { label: '  • Editor Visual Drag-and-Drop', ok: true },
-  { label: '  • Download ZIP + R2 Hosting', ok: true },
-  { label: 'Hospedar Páginas (PageVault)', ok: true },
-  { label: '  • Anti-Ferramenta via SHA256', ok: true },
-  { label: '  • Proteção Iframe/Right-Click', ok: true },
+  { label: 'Clonador', ok: true },
+  { label: 'Hospedar 50 páginas/mês', ok: true },
   { label: 'Cloacker Premium', ok: true },
   { label: '  • Gerador de Scripts', ok: true },
-  { label: '  • Script Avançado (13 Heurísticas)', ok: true },
-  { label: '  • Detector de Cloaking', ok: true },
+  { label: '  • Script Avançado', ok: true },
+  { label: '  • Detector de Cloacking', ok: true },
   { label: '  • Camuflagem de Texto', ok: true },
-  { label: '  • Camuflagem de Mídia Dual-Layer', ok: true },
-  { label: '  • Campanhas com URL Pool', ok: true },
-  { label: '  • Links Assinados HMAC', ok: true },
-  { label: '  • Esteganografia LSB com AES-256', ok: true },
-  { label: '  • Fingerprint Analyzer', ok: true },
-  { label: '  • Logs em Tempo Real (SSE)', ok: true },
-  { label: '  • Bypass Engines (JS/PHP/PY/TS)', ok: true },
-  { label: 'Removedor de Metadados (EXIF)', ok: true },
-  { label: '  • Limpeza de Imagens e Vídeos', ok: true },
-  { label: '  • Estatísticas de Uso', ok: true },
+  { label: '  • Camuflagem de Mídia', ok: true },
+  { label: '  • Campanhas', ok: true },
+  { label: '  • Links Assinados', ok: true },
+  { label: '  • Esteganografia', ok: true },
+  { label: '  • Fingerprint', ok: true },
+  { label: '  • Logs em Tempo Real', ok: true },
+  { label: '  • Bypass Engines', ok: true },
+  { label: 'Removedor de Metadados', ok: true },
   { label: 'Suporte Prioritário 24/7', ok: true },
 ]
 
 const ALL_FEATURES = [
   'Minerador de Anúncios',
-  'Hospedar Páginas',
-  'Cloacker',
+  'Clonador',
+  'Hospedar 10 páginas/mês',
+  'Detector de Cloacking',
   'Removedor de Metadados',
 ]
 
@@ -75,7 +69,7 @@ const PLAN_CARD_DATA = [
     title: 'Gold',
     description: 'O pacote completo para máquinas de guerra',
     original: null,
-    current: 'R$ 57,90',
+    current: 'R$ 97,00',
     button: 'Assinar Agora',
     features: FEATURES_GOLD,
     className: 'plan-card-gold',
@@ -468,7 +462,7 @@ export default function Planos() {
             { p: 'O pagamento é seguro?', r: 'Totalmente. Processamos via Kirvano com cartão, Pix ou boleto. Seus dados estão protegidos.' },
             { p: 'Funciona para qualquer nicho?', r: 'Sim. O MetaSpy funciona para Nutra, Info, Ecommerce, leads e qualquer vertical do Meta Ads.' },
             { p: 'Precisa de conhecimento técnico?', r: 'Não. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiência em programação.' },
-            { p: 'Qual a diferença entre os planos?', r: 'O Básico dá acesso ao Minerador de Anúncios e ao Removedor de Metadados. O Gold inclui tudo isso mais Hospedar Páginas. O Premium libera todas as ferramentas incluindo o Cloacker profissional.' },
+            { p: 'Qual a diferença entre os planos?', r: 'O Básico dá acesso ao Minerador de Anúncios e ao Removedor de Metadados. O Gold inclui tudo isso mais Clonador, Detector de Cloacking e hospedar 10 páginas/mês. O Premium libera todas as ferramentas incluindo o Cloacker completo e hospedar 50 páginas/mês.' },
           ].map((faq, index) => (
             <details key={faq.p} className="planos-faq-item" data-reveal style={revealStyle(index * 60)}>
               <summary>{faq.p}</summary>

@@ -112,14 +112,14 @@ const uploadPage = multer({
 
 const PLAN_CONFIG = {
   basico: { price: 39.90, days: 30, kirvanoPlan: 'basico' },
-  gold: { price: 57.90, days: 30, kirvanoPlan: 'gold' },
+  gold: { price: 97.00, days: 30, kirvanoPlan: 'gold' },
   premium: { price: 97.00, days: 30, kirvanoPlan: 'premium' },
 }
 
 const PLAN_FEATURES = {
   nenhum: { clone: false, minerador: false, cloaker: false, pagevault: true, analise: false, cleaner: false, bypass: false },
   basico: { clone: false, minerador: true, cloaker: false, pagevault: false, analise: false, cleaner: true, bypass: false },
-  gold: { clone: false, minerador: true, cloaker: false, pagevault: true, analise: true, cleaner: true, bypass: true },
+  gold: { clone: false, minerador: true, cloaker: false, cloaker_detect: true, pagevault: true, analise: true, cleaner: true, bypass: true },
   premium: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: true, bypass: true },
 }
 
@@ -1787,7 +1787,7 @@ const USER_AGENTS = {
 app.post('/api/cloaker/detect', authMiddleware, validate(detectSchema), async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
-    if (!features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas no plano Premium.' })
+    if (!features?.cloaker_detect && !features?.cloaker) return res.status(403).json({ erro: 'Disponivel apenas nos planos Gold e Premium.' })
     const { url } = req.body
     if (!url) return res.status(400).json({ erro: 'URL e obrigatoria.' })
     const resultados = {}
@@ -3085,6 +3085,16 @@ app.post('/api/pages/upload', authMiddleware, async (req, res, next) => {
   if (req.user.plan === 'nenhum') {
     const count = await one('SELECT COUNT(*) AS cnt FROM pages WHERE user_id = $1 AND type = $2', [req.user.id, 'hosted'])
     if (count && count.cnt >= 1) return res.status(403).json({ error: 'Limite gratuito: 1 pagina. Faca upgrade para publicar mais paginas.' })
+  }
+  if (req.user.plan === 'gold') {
+    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().replace('T', ' ').slice(0, 19)
+    const count = await one('SELECT COUNT(*) AS cnt FROM pages WHERE user_id = $1 AND type = $2 AND created_at >= $3', [req.user.id, 'hosted', firstOfMonth])
+    if (count && count.cnt >= 10) return res.status(403).json({ error: 'Limite Gold: 10 paginas por mes. Faca upgrade para publicar mais.' })
+  }
+  if (req.user.plan === 'premium') {
+    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().replace('T', ' ').slice(0, 19)
+    const count = await one('SELECT COUNT(*) AS cnt FROM pages WHERE user_id = $1 AND type = $2 AND created_at >= $3', [req.user.id, 'hosted', firstOfMonth])
+    if (count && count.cnt >= 50) return res.status(403).json({ error: 'Limite Premium: 50 paginas por mes.' })
   }
   next()
 }, uploadPage.array('files', 500), async (req, res) => {

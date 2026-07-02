@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { IconTarget, IconDiamond, IconLocked } from '../components/Icons'
+import { IconTarget, IconFolder, IconLocked } from '../components/Icons'
 
 export default function DashboardHome() {
   const { user } = useAuth()
@@ -50,7 +50,7 @@ export default function DashboardHome() {
           onClick={() => user?.plano === 'nenhum' ? navigate('/planos') : navigate('/dashboard/pagevault')}
           style={{ cursor: 'pointer', '--i': 1 } as React.CSSProperties}
         >
-          <div className="feature-icon"><IconDiamond size={24} /></div>
+          <div className="feature-icon"><IconFolder size={24} /></div>
           <h3>Clonador</h3>
           <p>Clone paginas web offline com suporte a sites complexos e bypass.</p>
           <div className="feature-action">
