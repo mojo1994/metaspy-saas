@@ -184,7 +184,7 @@ const CATEGORIAS: CategoriaProps[] = [
       },
       {
         pergunta: 'Como escolher o melhor plano para mim?',
-        resposta: 'Analise as ferramentas que voce precisa: o plano Basico (R$ 39,90/mes) inclui Minerador de Anuncios e Removedor de Metadados. O Gold (R$ 57,90/mes) adiciona Hospedar Paginas. O Premium (R$ 197/mes) libera todas as ferramentas incluindo Cloacker profissional.',
+        resposta: 'Analise as ferramentas que voce precisa: o plano Basico (R$ 39,90/mes) inclui Minerador de Anuncios e Removedor de Metadados. O Gold (R$ 57,90/mes) adiciona Hospedar Paginas. O Premium (R$ 97/mes) libera todas as ferramentas incluindo Cloacker profissional com 15 sub-ferramentas, Bypass Engines e suporte prioritario.',
       },
       {
         pergunta: 'Como assinar um plano?',

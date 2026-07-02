@@ -20,9 +20,28 @@ const FEATURES_GOLD = [
 
 const FEATURES_PREMIUM = [
   { label: 'Minerador de Anúncios', ok: true },
-  { label: 'Hospedar Páginas', ok: true },
-  { label: 'Cloacker', ok: true },
-  { label: 'Removedor de Metadados', ok: true },
+  { label: '  • Deep Clone de Páginas', ok: true },
+  { label: '  • Editor Visual Drag-and-Drop', ok: true },
+  { label: '  • Download ZIP + R2 Hosting', ok: true },
+  { label: 'Hospedar Páginas (PageVault)', ok: true },
+  { label: '  • Anti-Ferramenta via SHA256', ok: true },
+  { label: '  • Proteção Iframe/Right-Click', ok: true },
+  { label: 'Cloacker Premium', ok: true },
+  { label: '  • Gerador de Scripts', ok: true },
+  { label: '  • Script Avançado (13 Heurísticas)', ok: true },
+  { label: '  • Detector de Cloaking', ok: true },
+  { label: '  • Camuflagem de Texto', ok: true },
+  { label: '  • Camuflagem de Mídia Dual-Layer', ok: true },
+  { label: '  • Campanhas com URL Pool', ok: true },
+  { label: '  • Links Assinados HMAC', ok: true },
+  { label: '  • Esteganografia LSB com AES-256', ok: true },
+  { label: '  • Fingerprint Analyzer', ok: true },
+  { label: '  • Logs em Tempo Real (SSE)', ok: true },
+  { label: '  • Bypass Engines (JS/PHP/PY/TS)', ok: true },
+  { label: 'Removedor de Metadados (EXIF)', ok: true },
+  { label: '  • Limpeza de Imagens e Vídeos', ok: true },
+  { label: '  • Estatísticas de Uso', ok: true },
+  { label: 'Suporte Prioritário 24/7', ok: true },
 ]
 
 const ALL_FEATURES = [

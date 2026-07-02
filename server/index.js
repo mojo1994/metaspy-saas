@@ -113,7 +113,7 @@ const uploadPage = multer({
 const PLAN_CONFIG = {
   basico: { price: 39.90, days: 30, kirvanoPlan: 'basico' },
   gold: { price: 57.90, days: 30, kirvanoPlan: 'gold' },
-  premium: { price: 197.00, days: 30, kirvanoPlan: 'premium' },
+  premium: { price: 97.00, days: 30, kirvanoPlan: 'premium' },
 }
 
 const PLAN_FEATURES = {
