@@ -1176,7 +1176,7 @@ select {
 .planos-toggle-thumb.left { left: 2px; }
 .planos-toggle-thumb.right { left: 24px; }
 .planos-badge-economia { font-size: 12px; font-weight: 700; color: var(--success); background: var(--success-bg); border: 1px solid rgba(16,185,129,0.25); padding: 4px 12px; border-radius: 20px; }
-.planos-cards { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; max-width: 720px; margin: 0 auto; padding: 0 24px 40px; }
+.planos-cards { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; max-width: 720px; margin: 0 auto; padding: 0 24px 40px; align-items: start; }
 .planos-card { position: relative; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 32px; display: flex; flex-direction: column; gap: 20px; transition: all 0.3s; }
 .planos-card:hover { border-color: var(--border-hover); box-shadow: var(--shadow-elevated), var(--shadow-glow); }
 .planos-card-destaque { border-color: var(--purple-500) !important; box-shadow: 0 0 30px rgba(168,85,247,0.15) !important; }

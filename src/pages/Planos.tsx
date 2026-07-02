@@ -21,7 +21,17 @@ const FEATURES_PREMIUM = [
   { label: 'Minerador de Anúncios', ok: true },
   { label: 'Clonador', ok: true },
   { label: 'Hospedar 50 páginas/mês', ok: true },
-  { label: 'Cloacker Premium (11 ferramentas)', ok: true },
+  { label: 'Cloacker Premium', ok: true },
+  { label: '  • Gerador de Scripts', ok: true },
+  { label: '  • Script Avançado', ok: true },
+  { label: '  • Detector de Cloacking', ok: true },
+  { label: '  • Camuflagem de Texto', ok: true },
+  { label: '  • Camuflagem de Mídia', ok: true },
+  { label: '  • Campanhas', ok: true },
+  { label: '  • Links Assinados', ok: true },
+  { label: '  • Esteganografia', ok: true },
+  { label: '  • Logs em Tempo Real', ok: true },
+  { label: '  • Bypass Engines', ok: true },
   { label: 'Removedor de Metadados', ok: true },
   { label: 'Suporte Prioritário 24/7', ok: true },
 ]
@@ -29,10 +39,18 @@ const FEATURES_PREMIUM = [
 const ALL_FEATURES = [
   'Minerador de Anúncios',
   'Clonador',
-  'Hospedar 10 páginas/mês',
-  'Detector de Cloacking',
+  'Hospedar Páginas',
+  'Cloacker',
   'Removedor de Metadados',
 ]
+
+function hasFeature(list: { label: string; ok: boolean }[], name: string) {
+  return list.some(f => {
+    if (!f.ok) return false
+    const clean = f.label.trim()
+    return clean === name || clean.startsWith(name)
+  })
+}
 
 const DEPO_IMAGENS = [
   { handle: '@thzmkt', idade: '25 anos', arquivo: '/depoimentos/foto1.jpg' },
@@ -391,9 +409,9 @@ export default function Planos() {
             </div>
 
             {ALL_FEATURES.map((feature, index) => {
-              const basic = FEATURES_BASICO.find(x => x.label === feature)?.ok
-              const gold = FEATURES_GOLD.find(x => x.label === feature)?.ok
-              const premium = FEATURES_PREMIUM.find(x => x.label === feature)?.ok
+              const basic = hasFeature(FEATURES_BASICO, feature)
+              const gold = hasFeature(FEATURES_GOLD, feature)
+              const premium = hasFeature(FEATURES_PREMIUM, feature)
 
               return (
                 <div
