@@ -27,26 +27,12 @@ const FEATURES_GOLD = [
 ]
 
 const FEATURES_PREMIUM = [
-  { label: 'Tudo do plano Gold', ok: true },
-  { label: 'Encontre anúncios ativos em poucos segundos', ok: true },
-  { label: 'Descubra ofertas que já estão vendendo', ok: true },
-  { label: 'Analise criativos vencedores', ok: true },
-  { label: 'Veja estratégias utilizadas pelos concorrentes', ok: true },
-  { label: 'Remova metadados de imagens e criativos', ok: true },
-  { label: 'Clone páginas para análise', ok: true },
-  { label: 'Hospede até 10 páginas', ok: true },
-  { label: 'Descubra páginas ocultas dos concorrentes', ok: true },
-  { label: 'Analise estruturas avançadas de campanhas', ok: true },
-  { label: 'Organize seus projetos em um só lugar', ok: true },
-  { label: 'Hospede até 50 páginas', ok: true },
-  { label: 'Descubra campanhas ocultas dos concorrentes', ok: true },
-  { label: 'Biblioteca completa de inteligência competitiva', ok: true },
-  { label: 'Ferramentas avançadas de análise de páginas', ok: true },
-  { label: 'Monitoramento avançado de campanhas', ok: true },
-  { label: 'Logs e rastreamento em tempo real', ok: true },
-  { label: 'Ferramentas exclusivas para pesquisa de mercado', ok: true },
-  { label: 'Atualizações prioritárias', ok: true },
-  { label: 'Suporte prioritário 24/7', ok: true },
+  { label: 'Inteligência de mercado', ok: true },
+  { label: 'Anúncios validados', ok: true },
+  { label: 'Ofertas vencedoras', ok: true },
+  { label: 'Análise competitiva', ok: true },
+  { label: 'Clonagem de páginas', ok: true },
+  { label: 'Monitoramento em tempo real', ok: true },
 ]
 
 const ALL_FEATURES = [
@@ -57,18 +43,15 @@ const ALL_FEATURES = [
   'Remova metadados',
   'Clone páginas',
   'Hospede até 10',
-  'Hospede até 50',
   'Descubra páginas ocultas',
   'Analise estruturas',
   'Organize seus',
-  'Descubra campanhas',
-  'Biblioteca completa',
-  'Ferramentas avançadas',
-  'Monitoramento avançado',
-  'Logs e rastreamento',
-  'Ferramentas exclusivas',
-  'Atualizações prioritárias',
-  'Suporte prioritário',
+  'Inteligência de mercado',
+  'Anúncios validados',
+  'Ofertas vencedoras',
+  'Análise competitiva',
+  'Clonagem de páginas',
+  'Monitoramento em tempo',
 ]
 
 function hasFeature(list: { label: string; ok: boolean }[], name: string) {
