@@ -2679,19 +2679,16 @@ button:active,
   font-weight: 900;
   line-height: .9;
   letter-spacing: -.07em;
-  background: linear-gradient(270deg, #fff, var(--purple-300), #fff, var(--purple-400), #fff);
-  background-size: 400% 400%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: planosPriceShimmer 4s ease-in-out infinite;
+  color: var(--text-primary);
 }
 
 .planos-card-destaque .planos-current {
   background: linear-gradient(270deg, #fff, var(--purple-300), var(--purple-400), #fff, var(--purple-300));
   background-size: 400% 400%;
   -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   background-clip: text;
+  animation: planosPriceShimmer 4s ease-in-out infinite;
 }
 
 .planos-period {
