@@ -2475,14 +2475,15 @@ button:active,
   to { transform: translateX(150%); }
 }
 
+@keyframes planosPriceShimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 @keyframes planosFloat {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
-}
-
-@keyframes planosPriceGlow {
-  0%, 100% { filter: brightness(1); }
-  50% { filter: brightness(1.15); }
 }
 
 .planos-cards {
@@ -2675,15 +2676,17 @@ button:active,
   font-weight: 900;
   line-height: .9;
   letter-spacing: -.07em;
-  background: linear-gradient(135deg, #fff 20%, var(--purple-300) 80%);
+  background: linear-gradient(270deg, #fff, var(--purple-300), #fff, var(--purple-400), #fff);
+  background-size: 400% 400%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: planosPriceGlow 3s ease-in-out infinite;
+  animation: planosPriceShimmer 4s ease-in-out infinite;
 }
 
 .planos-card-destaque .planos-current {
-  background: linear-gradient(135deg, #fff 10%, var(--purple-300) 50%, var(--purple-400) 90%);
+  background: linear-gradient(270deg, #fff, var(--purple-300), var(--purple-400), #fff, var(--purple-300));
+  background-size: 400% 400%;
   -webkit-background-clip: text;
   background-clip: text;
 }
