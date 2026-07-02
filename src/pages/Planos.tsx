@@ -5,35 +5,70 @@ import { useAuth } from '../contexts/AuthContext'
 import { CheckCircle, Minus, SealCheck, Star } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
-  { label: 'Minerador de Anúncios', ok: true },
-  { label: 'Removedor de Metadados', ok: true },
+  { label: 'Encontre anúncios ativos em poucos segundos', ok: true },
+  { label: 'Descubra ofertas que já estão vendendo', ok: true },
+  { label: 'Analise criativos vencedores', ok: true },
+  { label: 'Veja estratégias utilizadas pelos concorrentes', ok: true },
+  { label: 'Remova metadados de imagens e criativos', ok: true },
 ]
 
 const FEATURES_GOLD = [
-  { label: 'Minerador de Anúncios', ok: true },
-  { label: 'Clonador', ok: true },
-  { label: 'Hospedar 10 páginas/mês', ok: true },
-  { label: 'Detector de Cloacking', ok: true },
-  { label: 'Removedor de Metadados', ok: true },
+  { label: 'Tudo do plano Básico', ok: true },
+  { label: 'Encontre anúncios ativos em poucos segundos', ok: true },
+  { label: 'Descubra ofertas que já estão vendendo', ok: true },
+  { label: 'Analise criativos vencedores', ok: true },
+  { label: 'Veja estratégias utilizadas pelos concorrentes', ok: true },
+  { label: 'Remova metadados de imagens e criativos', ok: true },
+  { label: 'Clone páginas para análise', ok: true },
+  { label: 'Hospede até 10 páginas', ok: true },
+  { label: 'Descubra páginas ocultas dos concorrentes', ok: true },
+  { label: 'Analise estruturas avançadas de campanhas', ok: true },
+  { label: 'Organize seus projetos em um só lugar', ok: true },
 ]
 
 const FEATURES_PREMIUM = [
-  { label: 'Minerador de Anúncios', ok: true },
-  { label: 'Clonador', ok: true },
-  { label: 'Hospedar 50 páginas/mês', ok: true },
-  { label: 'Cloacker Premium', ok: true },
-  { label: '  • Camuflagem de Texto', ok: true },
-  { label: '  • Camuflagem de Mídia', ok: true },
-  { label: 'Removedor de Metadados', ok: true },
-  { label: 'Suporte Prioritário 24/7', ok: true },
+  { label: 'Tudo do plano Gold', ok: true },
+  { label: 'Encontre anúncios ativos em poucos segundos', ok: true },
+  { label: 'Descubra ofertas que já estão vendendo', ok: true },
+  { label: 'Analise criativos vencedores', ok: true },
+  { label: 'Veja estratégias utilizadas pelos concorrentes', ok: true },
+  { label: 'Remova metadados de imagens e criativos', ok: true },
+  { label: 'Clone páginas para análise', ok: true },
+  { label: 'Hospede até 10 páginas', ok: true },
+  { label: 'Descubra páginas ocultas dos concorrentes', ok: true },
+  { label: 'Analise estruturas avançadas de campanhas', ok: true },
+  { label: 'Organize seus projetos em um só lugar', ok: true },
+  { label: 'Hospede até 50 páginas', ok: true },
+  { label: 'Descubra campanhas ocultas dos concorrentes', ok: true },
+  { label: 'Biblioteca completa de inteligência competitiva', ok: true },
+  { label: 'Ferramentas avançadas de análise de páginas', ok: true },
+  { label: 'Monitoramento avançado de campanhas', ok: true },
+  { label: 'Logs e rastreamento em tempo real', ok: true },
+  { label: 'Ferramentas exclusivas para pesquisa de mercado', ok: true },
+  { label: 'Atualizações prioritárias', ok: true },
+  { label: 'Suporte prioritário 24/7', ok: true },
 ]
 
 const ALL_FEATURES = [
-  'Minerador de Anúncios',
-  'Clonador',
-  'Hospedar Páginas',
-  'Cloacker',
-  'Removedor de Metadados',
+  'Encontre anúncios',
+  'Descubra ofertas',
+  'Analise criativos',
+  'Veja estratégias',
+  'Remova metadados',
+  'Clone páginas',
+  'Hospede até 10',
+  'Hospede até 50',
+  'Descubra páginas ocultas',
+  'Analise estruturas',
+  'Organize seus',
+  'Descubra campanhas',
+  'Biblioteca completa',
+  'Ferramentas avançadas',
+  'Monitoramento avançado',
+  'Logs e rastreamento',
+  'Ferramentas exclusivas',
+  'Atualizações prioritárias',
+  'Suporte prioritário',
 ]
 
 function hasFeature(list: { label: string; ok: boolean }[], name: string) {
@@ -55,10 +90,10 @@ const PLAN_CARD_DATA = [
   {
     key: 'basico',
     title: 'Básico',
-    description: 'Para quem quer começar a escalar agora',
+    description: 'Ideal para quem está começando a encontrar ofertas vencedoras.',
     original: null,
     current: 'R$ 39,90',
-    button: 'Assinar Agora',
+    button: 'Começar Agora',
     features: FEATURES_BASICO,
     className: 'plan-card-basic',
     highlighted: false,
@@ -66,21 +101,21 @@ const PLAN_CARD_DATA = [
   {
     key: 'premium',
     title: 'Premium',
-    description: 'Todas as ferramentas sem limites',
+    description: 'Acesso completo para afiliados, produtores e gestores de tráfego que operam em escala.',
     original: 'R$ 397',
     current: 'R$ 97,00',
-    button: 'Assinar Agora',
+    button: 'Começar Agora',
     features: FEATURES_PREMIUM,
     className: 'plan-card-premium',
-    highlighted: false,
+    highlighted: true,
   },
   {
     key: 'gold',
     title: 'Gold',
-    description: 'O pacote completo para máquinas de guerra',
+    description: 'Para quem já anuncia e deseja escalar mais rápido.',
     original: null,
     current: 'R$ 57,90',
-    button: 'Assinar Agora',
+    button: 'Começar Agora',
     features: FEATURES_GOLD,
     className: 'plan-card-gold',
     highlighted: false,
@@ -348,7 +383,7 @@ export default function Planos() {
                 <h2>{plan.title}</h2>
                 {plan.highlighted && (
                   <div className="planos-card-badge planos-card-badge-animated">
-                    <Star size={10} weight="fill" /> RECOMENDADO
+                    MAIS ESCOLHIDO
                   </div>
                 )}
               </div>
@@ -388,6 +423,12 @@ export default function Planos() {
         ))}
       </section>
 
+      <div className="planos-trust" data-reveal style={revealStyle(160)}>
+        <div className="planos-trust-item"><span className="planos-trust-icon">🔒</span> Pagamento seguro</div>
+        <div className="planos-trust-item"><span className="planos-trust-icon">⚡</span> Liberação imediata após confirmação</div>
+        <div className="planos-trust-item"><span className="planos-trust-icon">💳</span> Cancele quando quiser</div>
+      </div>
+
       <div className="planos-help-btn" data-reveal style={revealStyle(160)}>
         <button type="button" className="btn btn-secondary" onClick={() => navigate('/ajuda')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -408,7 +449,7 @@ export default function Planos() {
               </div>
               <div className="planos-table-cell planos-plan-col planos-plan-col-highlight" role="columnheader">
                 <span className="planos-plan-name">Premium</span>
-                <span className="planos-plan-badge">RECOMENDADO</span>
+                <span className="planos-plan-badge">MAIS ESCOLHIDO</span>
               </div>
               <div className="planos-table-cell planos-plan-col" role="columnheader">
                 <span className="planos-plan-name">Gold</span>

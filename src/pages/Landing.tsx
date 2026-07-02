@@ -238,7 +238,7 @@ export default function Landing() {
               </ul>
 
               <Link to="/signup" className={`btn ${plan.highlighted ? 'btn-gradient' : 'btn-primary'} planos-cta`}>
-                Assinar Agora
+                Começar Agora
               </Link>
             </article>
           ))}
