@@ -326,7 +326,7 @@ export default function Planos() {
       <section className="planos-hero" data-tilt>
         <div className="planos-hero-inner">
           <h1 className="reveal-lift planos-hero-title" data-reveal style={revealStyle(120)}>
-            Escolha o Plano Ideal para Escalar suas Campanhas
+            Porque voce deve escalar com a gente
           </h1>
           <p className="planos-subtitle reveal-lift" data-reveal style={revealStyle(240)}>
             As ferramentas que os top players usam para escalar ofertas no Meta Ads. <br />
@@ -449,7 +449,7 @@ export default function Planos() {
               </div>
               <div className="planos-table-cell planos-plan-col planos-plan-col-highlight" role="columnheader">
                 <span className="planos-plan-name">Premium</span>
-                <span className="planos-plan-badge">MAIS ESCOLHIDO</span>
+              
               </div>
               <div className="planos-table-cell planos-plan-col" role="columnheader">
                 <span className="planos-plan-name">Gold</span>
