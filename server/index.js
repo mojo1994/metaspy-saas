@@ -2224,23 +2224,33 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
     const htmlPath = join(dir, 'index.html')
     writeFileSync(htmlPath, html, 'utf-8')
 
-    // Upload to R2 instead of ZIP download
+    // Upload/host generated files
     const hostId = randomUUID()
-    const r2Files = readdirSync(dir).map(f => {
-      const filePath = join(dir, f)
-      const ext = extname(f).toLowerCase()
-      const mimeMap = { '.html': 'text/html', '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }
-      return { path: f, buffer: readFileSync(filePath), contentType: mimeMap[ext] || 'application/octet-stream' }
-    })
+    let publicUrl
 
-    try {
-      await uploadPageToR2(hostId, r2Files)
-    } catch (r2Err) {
-      logger.error({ err: r2Err }, 'R2 upload failed in media camouflage')
-      return done({ erro: 'Falha ao hospedar arquivos. Tente novamente.' }, 500)
+    if (USE_CF_STORAGE) {
+      const r2Files = readdirSync(dir).map(f => {
+        const filePath = join(dir, f)
+        const ext = extname(f).toLowerCase()
+        const mimeMap = { '.html': 'text/html', '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }
+        return { path: f, buffer: readFileSync(filePath), contentType: mimeMap[ext] || 'application/octet-stream' }
+      })
+      try {
+        await uploadPageToR2(hostId, r2Files)
+        publicUrl = `${getWorkerUrl(hostId)}/index.html`
+      } catch (r2Err) {
+        logger.error({ err: r2Err }, 'R2 upload failed, falling back to local hosting')
+      }
     }
 
-    const publicUrl = `${getWorkerUrl(hostId)}/index.html`
+    if (!publicUrl) {
+      const localHostDir = join(DATA_DIR, 'camo-hosting', hostId)
+      mkdirSync(localHostDir, { recursive: true })
+      readdirSync(dir).forEach(f => {
+        copyFileSync(join(dir, f), join(localHostDir, f))
+      })
+      publicUrl = `${req.protocol}://${req.get('host')}/api/cloaker/camouflage/media/hosted/${hostId}/index.html`
+    }
 
     // Insert into pages table
     try {
@@ -2268,6 +2278,21 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
     logger.error({ err: erro }, 'Erro no camouflage media')
     res.status(500).json({ erro: 'Erro ao processar camuflagem de midia.' })
   }
+})
+
+// ─── Serve locally-hosted camouflage files ───────────────────────
+const CAMO_HOST_DIR = join(DATA_DIR, 'camo-hosting')
+app.get('/api/cloaker/camouflage/media/hosted/:hostId/*', async (req, res) => {
+  const relPath = req.params[0] || 'index.html'
+  if (relPath.includes('..')) return res.status(403).end()
+  const filePath = join(CAMO_HOST_DIR, req.params.hostId, relPath)
+  if (!filePath.startsWith(join(CAMO_HOST_DIR, req.params.hostId))) return res.status(403).end()
+  if (!existsSync(filePath)) return res.status(404).end()
+  const ext = extname(filePath).toLowerCase()
+  const mimeMap = { '.html': 'text/html', '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }
+  res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream')
+  res.setHeader('Cache-Control', 'public, max-age=86400')
+  createReadStream(filePath).pipe(res)
 })
 
 app.get('/api/cloaker/camouflage/media/download/:id', authMiddleware, async (req, res) => {
