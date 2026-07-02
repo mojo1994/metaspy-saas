@@ -465,7 +465,7 @@ export default function Planos() {
         <div className="planos-faq-grid">
           {[
             { p: 'Posso cancelar quando quiser?', r: 'Sim. Cancele a qualquer momento. Seu acesso continua até o fim do período pago.' },
-            { p: 'O pagamento é seguro?', r: 'Totalmente. Processamos via Kirvano com cartão, Pix ou boleto. Seus dados estão protegidos.' },
+            { p: 'O pagamento é seguro?', r: 'Totalmente. Processamos via PerfectPay com cartão, Pix ou boleto. Seus dados estão protegidos.' },
             { p: 'Funciona para qualquer nicho?', r: 'Sim. O MetaSpy funciona para Nutra, Info, Ecommerce, leads e qualquer vertical do Meta Ads.' },
             { p: 'Precisa de conhecimento técnico?', r: 'Não. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiência em programação.' },
             { p: 'Qual a diferença entre os planos?', r: 'O Básico dá acesso ao Minerador de Anúncios e ao Removedor de Metadados. O Gold inclui tudo isso mais Clonador, Detector de Cloacking e hospedar 10 páginas/mês. O Premium libera todas as ferramentas incluindo o Cloacker completo e hospedar 50 páginas/mês.' },

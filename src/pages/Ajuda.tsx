@@ -188,7 +188,7 @@ const CATEGORIAS: CategoriaProps[] = [
       },
       {
         pergunta: 'Como assinar um plano?',
-        resposta: 'Acesse a pagina /planos, escolha o plano desejado e clique em "Assinar Agora". Se ja estiver logado, sera redirecionado ao checkout da Kirvano para pagamento via cartao, Pix ou boleto. Apos a confirmacao, seu plano sera ativado automaticamente.',
+        resposta: 'Acesse a pagina /planos, escolha o plano desejado e clique em "Assinar Agora". Se ja estiver logado, sera redirecionado ao checkout da PerfectPay para pagamento via cartao, Pix ou boleto. Apos a confirmacao, seu plano sera ativado automaticamente.',
       },
     ],
   },
@@ -518,7 +518,7 @@ const CATEGORIAS: CategoriaProps[] = [
       },
       {
         pergunta: 'Como cancelar minha assinatura?',
-        resposta: 'O cancelamento pode ser solicitado diretamente pelo Kirvano ou entrando em contato com o suporte. Apos o cancelamento, seu acesso continua ate o fim do periodo pago.',
+        resposta: 'O cancelamento pode ser solicitado diretamente pelo PerfectPay ou entrando em contato com o suporte. Apos o cancelamento, seu acesso continua ate o fim do periodo pago.',
       },
     ],
   },
