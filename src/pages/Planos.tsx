@@ -14,16 +14,11 @@ const FEATURES_BASICO = [
 
 const FEATURES_GOLD = [
   { label: 'Tudo do plano Básico', ok: true },
-  { label: 'Encontre anúncios ativos em poucos segundos', ok: true },
-  { label: 'Descubra ofertas que já estão vendendo', ok: true },
-  { label: 'Analise criativos vencedores', ok: true },
-  { label: 'Veja estratégias utilizadas pelos concorrentes', ok: true },
-  { label: 'Remova metadados de imagens e criativos', ok: true },
-  { label: 'Clone páginas para análise', ok: true },
-  { label: 'Hospede até 10 páginas', ok: true },
-  { label: 'Descubra páginas ocultas dos concorrentes', ok: true },
-  { label: 'Analise estruturas avançadas de campanhas', ok: true },
-  { label: 'Organize seus projetos em um só lugar', ok: true },
+  { label: 'Clonagem de páginas', ok: true },
+  { label: 'Hospedagem de páginas', ok: true },
+  { label: 'Páginas ocultas dos concorrentes', ok: true },
+  { label: 'Inteligência competitiva', ok: true },
+  { label: 'Análise avançada', ok: true },
 ]
 
 const FEATURES_PREMIUM = [
@@ -41,17 +36,16 @@ const ALL_FEATURES = [
   'Analise criativos',
   'Veja estratégias',
   'Remova metadados',
-  'Clone páginas',
-  'Hospede até 10',
-  'Descubra páginas ocultas',
-  'Analise estruturas',
-  'Organize seus',
+  'Clonagem de páginas',
+  'Hospedagem de páginas',
+  'Páginas ocultas',
+  'Inteligência competitiva',
+  'Análise avançada',
   'Inteligência de mercado',
   'Anúncios validados',
   'Ofertas vencedoras',
   'Análise competitiva',
-  'Clonagem de páginas',
-  'Monitoramento em tempo',
+  'Monitoramento em',
 ]
 
 function hasFeature(list: { label: string; ok: boolean }[], name: string) {
