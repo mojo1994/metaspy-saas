@@ -5,47 +5,41 @@ import { useAuth } from '../contexts/AuthContext'
 import { CheckCircle, Minus, SealCheck, Star } from '@phosphor-icons/react'
 
 const FEATURES_BASICO = [
-  { label: 'Encontre anúncios ativos em poucos segundos', ok: true },
-  { label: 'Descubra ofertas que já estão vendendo', ok: true },
-  { label: 'Analise criativos vencedores', ok: true },
-  { label: 'Veja estratégias utilizadas pelos concorrentes', ok: true },
-  { label: 'Remova metadados de imagens e criativos', ok: true },
+  { label: 'Minerador de ofertas', ok: true },
+  { label: 'Análise de concorrentes', ok: true },
+  { label: 'Limpeza de metadados', ok: true },
 ]
 
 const FEATURES_GOLD = [
   { label: 'Tudo do plano Básico', ok: true },
   { label: 'Clonagem de páginas', ok: true },
   { label: 'Hospedagem de páginas', ok: true },
-  { label: 'Páginas ocultas dos concorrentes', ok: true },
-  { label: 'Inteligência competitiva', ok: true },
+  { label: 'Páginas ocultas', ok: true },
   { label: 'Análise avançada', ok: true },
 ]
 
 const FEATURES_PREMIUM = [
-  { label: 'Inteligência de mercado', ok: true },
-  { label: 'Anúncios validados', ok: true },
-  { label: 'Ofertas vencedoras', ok: true },
-  { label: 'Análise competitiva', ok: true },
-  { label: 'Clonagem de páginas', ok: true },
-  { label: 'Monitoramento em tempo real', ok: true },
+  { label: 'Tudo do plano Gold', ok: true },
+  { label: 'Minerador de ofertas avançado', ok: true },
+  { label: 'Clonagem de 50 páginas/mês', ok: true },
+  { label: 'Quebra de Cloaker', ok: true },
+  { label: 'Camuflagem de Vídeo e Imagem', ok: true },
+  { label: 'Limpeza de Metadados', ok: true },
+  { label: 'Suporte Prioritário', ok: true },
 ]
 
 const ALL_FEATURES = [
-  'Encontre anúncios',
-  'Descubra ofertas',
-  'Analise criativos',
-  'Veja estratégias',
-  'Remova metadados',
+  'Minerador de ofertas',
+  'Análise de concorrentes',
+  'Limpeza de metadados',
   'Clonagem de páginas',
   'Hospedagem de páginas',
   'Páginas ocultas',
-  'Inteligência competitiva',
   'Análise avançada',
-  'Inteligência de mercado',
-  'Anúncios validados',
-  'Ofertas vencedoras',
-  'Análise competitiva',
-  'Monitoramento em',
+  'Clonagem de 50',
+  'Quebra de Cloaker',
+  'Camuflagem de',
+  'Suporte Prioritário',
 ]
 
 function hasFeature(list: { label: string; ok: boolean }[], name: string) {

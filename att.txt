@@ -1,8 +1,18 @@
+Básico
+Minerador de ofertas
+Análise de concorrentes
+Limpeza de metadados
+Gold
 Tudo do plano Básico
 Clonagem de páginas
 Hospedagem de páginas
-Páginas ocultas dos concorrentes
-Inteligência competitiva
+Páginas ocultas
 Análise avançada
-
-(plano gold) 
+Premium
+Tudo do plano Gold
+Minerador de ofertas avançado
+Clonagem de 50 páginas/mês
+Quebra de Cloaker
+Camuflagem de Vídeo e Imagem
+Limpeza de Metadados
+Suporte Prioritário
