@@ -1,0 +1,384 @@
+﻿You are an expert senior full‑stack developer fixing critical bugs and adding essential functionality to the MetaSpy SaaS cloaking module (React 18 + Express + Cloudflare R2).  
+You will implement **6 fixes** described below.  
+The code files are: `server/index.js`, `src/pages/CloakerFingerprint.tsx`, `src/pages/CloakerCampanhas.tsx`, `src/pages/CamuflagemMidia.tsx`, `src/bypass/*` (if needed).  
+All modifications must be production‑ready.
+
+================================================================================
+  FIX 1 – ALL CLOAKING SCRIPTS ARE MISSING `<noscript>` FALLBACK
+================================================================================
+**Impact:** When a bot/crawler has JavaScript disabled (common for preview scrapers,
+WhatsApp, Facebook link previews), **no redirection happens** and the real offer
+page is exposed. The cloaking is completely bypassed.
+
+**Locations in `server/index.js`:**
+- `generateCloakerScript()` (used by `POST /api/cloaker/generate`)
+- `generateEnhancedCloakerScript()` (used by `POST /api/cloaker/generate-enhanced`)
+- HTML page generated inside `POST /api/cloaker/upload-camouflage`
+
+**Required changes:**
+
+1.1 In `generateCloakerScript`, after the closing `</script>` tag, append:
+```javascript
+<noscript><meta http-equiv="refresh" content="0;url=${safeUrl}"></noscript>
+and return the complete template.
+
+1.2 In generateEnhancedCloakerScript, do the same.
+
+1.3 Inside the POST /api/cloaker/upload-camouflage route, in the generated HTML
+(both the video and image branches), add exactly one line right before </body>:
+
+html
+<noscript><meta http-equiv="refresh" content="0;url=${safeUrl}"></noscript>
+================================================================================
+FIX 2 – LSB STEGANOGRAPHY COMPLETELY BROKEN (operates on compressed PNG)
+================================================================================
+Impact: embedLSB and extractLSB receive raw PNG file buffers (compressed)
+but treat them as raw RGBA pixels. The output is a corrupt, unopenable file.
+The feature is unusable.
+
+Locations: server/index.js functions embedLSB, extractLSB, and routes
+POST /api/cloaker/steg/embed, POST /api/cloaker/steg/extract.
+
+Required changes:
+
+2.1 Rewrite embedLSB as an async function that uses sharp to decode the
+cover image to raw RGBA, embeds the secret into the alpha channel, then re‑encodes
+to PNG:
+
+javascript
+const sharp = require('sharp');
+
+async function embedLSB(coverImageBuffer, secretBuffer) {
+  const { data: pixels, info } = await sharp(coverImageBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const secret = stegEncrypt(secretBuffer);
+  const maxBytes = Math.floor(pixels.length / 4) * 3 / 8;
+  if (secret.length > maxBytes) throw new Error('Secret too large for cover image');
+
+  const len = Buffer.alloc(4);
+  len.writeUInt32LE(secret.length);
+  const fullPayload = Buffer.concat([len, secret]);
+
+  for (let i = 0; i < fullPayload.length; i++) {
+    for (let bit = 0; bit < 8; bit++) {
+      const pixelIdx = i * 8 + bit;
+      const byteIdx = pixelIdx * 4 + 3; // Alpha channel
+      if (byteIdx >= pixels.length) break;
+      pixels[byteIdx] = (pixels[byteIdx] & 0xFC) | ((fullPayload[i] >> bit) & 1);
+    }
+  }
+
+  return sharp(pixels, {
+    raw: { width: info.width, height: info.height, channels: 4 }
+  }).png().toBuffer();
+}
+2.2 Rewrite extractLSB as an async function that decodes the stego image
+to raw pixels, extracts the payload, then decrypts:
+
+javascript
+async function extractLSB(stegoImageBuffer) {
+  const { data: pixels } = await sharp(stegoImageBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  // Extract 4‑byte length prefix
+  const lenBytes = [];
+  for (let i = 0; i < 4; i++) {
+    let byte = 0;
+    for (let bit = 0; bit < 8; bit++) {
+      const pixelIdx = i * 8 + bit;
+      const byteIdx = pixelIdx * 4 + 3;
+      if (byteIdx >= pixels.length) return null;
+      byte |= ((pixels[byteIdx] & 1) << bit);
+    }
+    lenBytes.push(byte);
+  }
+  const secretLen = Buffer.from(lenBytes).readUInt32LE(0);
+  if (secretLen < 1 || secretLen > pixels.length / 8) return null;
+
+  const secretBuf = Buffer.alloc(secretLen);
+  for (let i = 0; i < secretLen; i++) {
+    for (let bit = 0; bit < 8; bit++) {
+      const pixelIdx = (i + 4) * 8 + bit;
+      const byteIdx = pixelIdx * 4 + 3;
+      if (byteIdx >= pixels.length) return null;
+      secretBuf[i] |= ((pixels[byteIdx] & 1) << bit);
+    }
+  }
+  return stegDecrypt(secretBuf);
+}
+2.3 Update both routes to await these functions when using req.file.buffer.
+
+================================================================================
+FIX 3 – FINGERPRINT ENDPOINT TESTS THE CALLER, NOT THE TARGET URL
+================================================================================
+Impact: The user enters a URL expecting the remote site’s fingerprint score,
+but the endpoint ignores the URL and scores the user’s own request. The feature
+misleads the user.
+
+Locations:
+
+server/index.js: POST /api/cloaker/fingerprint
+
+src/pages/CloakerFingerprint.tsx
+
+Required changes (convert to self‑diagnostic tool):
+
+3.1 In CloakerFingerprint.tsx:
+
+Remove the URL input field and the validation if (!url) ….
+
+Change the description to: “This tool analyses your own browser connection
+and shows how suspicious it looks to cloaking systems. Use it to verify your
+fingerprint setup.”
+
+Keep the “Testar Fingerprint” button that calls the API without any body.
+
+3.2 In the back‑end route, remove validate(detectSchema) and do not read
+req.body.url. The endpoint will only score the current request’s headers (as
+it already does). Update the response to indicate it’s a self‑scan.
+
+================================================================================
+FIX 4 – SSE LOGS LEAK DATA ACROSS ALL USERS
+================================================================================
+Impact: Any authenticated user can open the SSE stream and receive redirect
+logs from all campaigns of all users (hashed IPs, destination URLs).
+This is a severe privacy/security breach.
+
+Locations:
+
+SSE endpoint: GET /api/cloaker/logs/sse
+
+Notification function: notifySSEClients()
+
+Log insertion in GET /go/:campaignId
+
+Required changes:
+
+4.1 Change sseClients from a Set to a Map<res, userId>:
+
+javascript
+const sseClients = new Map();
+4.2 In the SSE endpoint, after JWT and feature check (checkFeature), store the
+user ID:
+
+javascript
+sseClients.set(res, req.user.id);
+req.on('close', () => sseClients.delete(res));
+4.3 Modify notifySSEClients to accept campaignUserId and broadcast only to
+that user:
+
+javascript
+function notifySSEClients(logEntry, campaignUserId) {
+  const msg = JSON.stringify(logEntry);
+  for (const [client, userId] of sseClients.entries()) {
+    if (userId === campaignUserId) {
+      try { client.write(`data: ${msg}\n\n`); } catch { sseClients.delete(client); }
+    }
+  }
+}
+4.4 In GET /go/:campaignId, the campaign query must now include user_id:
+
+javascript
+const campaign = await one(
+  'SELECT id, user_id, default_safe_url, is_active FROM cloaker_campaigns WHERE id = $1',
+  [campaignId]
+);
+Then pass campaign.user_id as the second argument to notifySSEClients.
+
+================================================================================
+FIX 5 – HMAC SIGNED LINKS ARE NEVER GENERATED
+================================================================================
+Impact: The campaign page shows a static unsigned link. Users cannot obtain
+tamper‑proof URLs, making the HMAC verification in /go/:campaignId useless.
+
+Locations:
+
+Back‑end: missing signing endpoint
+
+Front‑end: src/pages/CloakerCampanhas.tsx
+
+Required changes:
+
+5.1 Add a POST /api/cloaker/campaign/:id/sign endpoint:
+
+javascript
+app.post('/api/cloaker/campaign/:id/sign', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker');
+  if (blocked) return blocked;
+  try {
+    const campaignId = req.params.id;
+    const { target } = req.body;
+    if (!target) return res.status(400).json({ error: 'target URL required' });
+    const campaign = await one(
+      'SELECT id FROM cloaker_campaigns WHERE id = $1 AND user_id = $2',
+      [campaignId, req.user.id]
+    );
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const timestamp = Date.now().toString();
+    const nonce = randomUUID();
+    const signature = generateHMACSignature(campaignId, target, timestamp, nonce);
+    const link = `${BASE_URL}/go/${campaignId}?target=${encodeURIComponent(target)}&timestamp=${timestamp}&nonce=${nonce}&signature=${signature}`;
+    res.json({ link });
+  } catch { res.status(500).json({ error: 'Signing failed' }); }
+});
+5.2 In CloakerCampanhas.tsx, replace the static hmacLink generation with a
+“Gerar Link Assinado” section:
+
+Add a text input for the target URL.
+
+On button click, call POST /api/cloaker/campaign/:id/sign with { target }.
+
+Display the returned signed link in a read‑only input with a “Copiar” button.
+
+================================================================================
+FIX 6 – MEDIA CAMOUFLAGE: CLICK‑TO‑REVEAL BROKEN + NO HOSTING INTEGRATION
+================================================================================
+Impact: The dual‑layer media camouflage generates an HTML page where the
+“Click to Load Content” button does nothing. The user then has to download a ZIP
+and host it manually, which is confusing and against the product’s value
+proposition. The feature must deliver a ready‑to‑use URL.
+
+Locations:
+
+server/index.js: generateClickToRevealHTML, generateEnhancedScript (retired),
+generateEnhancedScriptBody, the route POST /api/cloaker/camouflage/media
+
+src/pages/CamuflagemMidia.tsx
+
+Cloudflare R2 upload helper (cloudflareStorage.js)
+
+Required changes:
+
+6.1 Rewrite the script so it works correctly.
+The root cause is that the inline <script> tries to manipulate the DOM
+before the elements exist. Fix:
+
+Create a new function generateEnhancedScriptBody(safeUrl, revealOnClick)
+that returns only the JavaScript logic (no <script> tags).
+
+In generateClickToRevealHTML, place the script at the end of <body>
+and wrap it in DOMContentLoaded:
+
+javascript
+function generateClickToRevealHTML(dir, realPath, disguisePath, realMime, disguiseMime, safeUrl) {
+  // ... (existing copy/rename logic unchanged) ...
+  const scriptBody = generateEnhancedScriptBody(safeUrl, true);
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Content Preview</title>
+<style>
+/* ... keep existing CSS ... */
+</style>
+</head>
+<body>
+<div id="disguise">${isDisguiseVideo ? `<video src="${disguiseSrc}" autoplay muted loop playsinline></video>` : `<img src="${disguiseSrc}" alt="">`}</div>
+<div id="overlay"><button>Click to Load Content</button></div>
+<div id="real">${isRealVideo ? `<video src="${realSrc}" controls autoplay muted playsinline></video>` : `<img src="${realSrc}" alt="">`}</div>
+<noscript><meta http-equiv="refresh" content="0;url=${safeUrl || 'about:blank'}"></noscript>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+${scriptBody}
+});
+</script>
+</body>
+</html>`;
+}
+generateEnhancedScriptBody should look like this (extracted from the old
+generateEnhancedScript minus the outer wrapper):
+
+javascript
+function generateEnhancedScriptBody(safeUrl, revealOnClick) {
+  const url = JSON.stringify(safeUrl || 'about:blank');
+  return `
+  var ua = navigator.userAgent.toLowerCase();
+  var score = 0;
+  if (/bot|crawler|spider|.../i.test(ua)) score += 45;   // (keep the original full list)
+  if (navigator.webdriver) score += 35;
+  // ... all the other checks (canvas, webgl, plugins, screen, etc.) ...
+  // (copy the exact body from the existing generateEnhancedScript, omitting only the outer (function(){...})() and the <script> tags)
+
+  if (score >= 40) {
+    var u = ${url};
+    if (u !== 'about:blank') window.location.href = u;
+    document.body.innerHTML = '';
+    return;
+  }
+  ${revealOnClick ? `
+  var revealed = false;
+  function reveal() {
+    if (revealed) return;
+    revealed = true;
+    var real = document.getElementById('real');
+    var overlay = document.getElementById('overlay');
+    if (real) real.classList.add('show');
+    if (overlay) overlay.classList.add('hidden');
+  }
+  document.addEventListener('click', reveal);
+  document.addEventListener('touchstart', reveal);
+  document.addEventListener('scroll', reveal);
+  var iv = setInterval(function() {
+    if (document.body.scrollTop > 10 || document.documentElement.scrollTop > 10) { reveal(); clearInterval(iv); }
+  }, 500);
+  setTimeout(reveal, 8000);` : ''}
+`;
+}
+6.2 Remove the ZIP download and replace with automatic hosting.
+In POST /api/cloaker/camouflage/media, after generating the HTML and copying
+media files, instead of zipping, do the following:
+
+a) Create a temporary directory hostDir = join('/tmp', 'metaspy-host', randomUUID()).
+b) Move/copy the generated index.html and all media files (real/disguise) into that directory.
+c) Upload the entire directory to Cloudflare R2 using the existing uploadDirectoryToR2
+function (from cloudflareStorage.js), to a path like pages/{hostId}/.
+d) Insert a record into the existing hosted_pages table (the same table used
+by the PageVault/HostPage tool) with id = hostId, user_id, and the public
+URL of the index.html.
+e) Clean up the temporary directories.
+f) Return { url: publicUrl, hostId } instead of the ZIP.
+
+Implementation snippet:
+
+javascript
+// After generating dir, htmlPath, and copying files, do:
+const hostId = randomUUID();
+const hostDir = join('/tmp', 'metaspy-host', hostId);
+mkdirSync(hostDir, { recursive: true });
+// Copy all files from dir into hostDir
+readdirSync(dir).forEach(f => {
+  copyFileSync(join(dir, f), join(hostDir, f));
+});
+
+const { uploadDirectoryToR2 } = require('./cloudflareStorage');
+await uploadDirectoryToR2(hostDir, `pages/${hostId}`);
+
+const publicDomain = process.env.R2_PUBLIC_DOMAIN || 'https://metaspyhost.com';
+const publicUrl = `${publicDomain}/pages/${hostId}/index.html`;
+
+await run(
+  'INSERT INTO hosted_pages (id, user_id, page_url, created_at) VALUES ($1, $2, $3, $4)',
+  [hostId, req.user.id, publicUrl, new Date().toISOString()]
+);
+
+// Clean up temp dirs (both dir and hostDir)
+// Respond with { url: publicUrl, hostId, instructions: 'Use este link como URL de destino nos seus anúncios.' }
+6.3 Update the front‑end (CamuflagemMidia.tsx) to match the new response.
+
+Remove the download‑ZIP button and the “Baixar ZIP” UI.
+
+Once the API returns, display the hosted URL in a read‑only input with a
+“Copiar Link” button, and a short instruction: “Copie este link e cole como
+URL de destino no seu gerenciador de anúncios. O sistema protegerá
+automaticamente contra bots.”
+
+If the old camoResult state held downloadUrl, replace it with url
+and hostId

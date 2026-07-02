@@ -1,0 +1,47 @@
+=== TESTAR ENDPOINTS DA API ===
+
+Token admin:
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyNjg4OTUyMC1jMTgyLTRhM2EtOTg1OC1kYWQzZDgyOTcwOWEiLCJpYXQiOjE3ODI4ODA2MDAsImV4cCI6MTc4MzQ4NTQwMH0.Sn4Foh3Q0ualqakTrIn9ZQBCXF8glufelzGjdC5y_Fk
+
+Clientes:
+- contatokevinnicolas@gmail.com (gold)
+
+
+
+1) ATIVAR PLANO MANUALMENTE (se webhook falhar)
+
+curl.exe -s -X POST "https://centralspyads.netlify.app/api/admin/activate-plan" ^
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyNjg4OTUyMC1jMTgyLTRhM2EtOTg1OC1kYWQzZDgyOTcwOWEiLCJpYXQiOjE3ODI4ODA2MDAsImV4cCI6MTc4MzQ4NTQwMH0.Sn4Foh3Q0ualqakTrIn9ZQBCXF8glufelzGjdC5y_Fk" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"contatokevinnicolas@gmail.com\",\"plan\":\"gold\"}"
+
+
+
+2) VER DADOS DO USUARIO
+
+curl.exe -s "https://centralspyads.netlify.app/api/debug/user?email=contatokevinnicolas@gmail.com" ^
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyNjg4OTUyMC1jMTgyLTRhM2EtOTg1OC1kYWQzZDgyOTcwOWEiLCJpYXQiOjE3ODI4ODA2MDAsImV4cCI6MTc4MzQ4NTQwMH0.Sn4Foh3Q0ualqakTrIn9ZQBCXF8glufelzGjdC5y_Fk"
+
+
+
+3) VER ULTIMOS WEBHOOKS RECEBIDOS (debug)
+
+curl.exe -s "https://centralspyads.netlify.app/api/debug/webhooks" ^
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyNjg4OTUyMC1jMTgyLTRhM2EtOTg1OC1kYWQzZDgyOTcwOWEiLCJpYXQiOjE3ODI4ODA2MDAsImV4cCI6MTc4MzQ4NTQwMH0.Sn4Foh3Q0ualqakTrIn9ZQBCXF8glufelzGjdC5y_Fk"
+
+
+
+4) WEBHOOK URL (para colar na Kirvano)
+
+https://centralspyads.netlify.app/api/subscription/webhook
+
+
+
+5) LOGIN (para gerar novo token se expirar)
+
+curl.exe -s -X POST "https://centralspyads.netlify.app/api/auth/login" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"09santos.felipe@gmail.com\",\"password\":\"SUA_SENHA\"}"
+
+
+O token acima expira em 7 dias (gerado em 01/07/2026).

@@ -323,7 +323,8 @@ function generateEnhancedCloakerScript(campaignId, targetUrl, safeUrl) {
     window.location.href=TARGET;
   }
 })();
-</script>`
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=${safeUrl}"></noscript>`
 }
 
 // ─── URL Pool Helpers (DB-based weighted rotation) ──────────────
@@ -373,13 +374,17 @@ function stegDecrypt(payload) {
   } catch { return null }
 }
 
-function embedLSB(coverBuffer, secretBuffer) {
-  const pixels = Buffer.from(coverBuffer)
+async function embedLSB(coverImageBuffer, secretBuffer) {
+  const { default: sharp } = await import('sharp')
+  const { data: pixels, info } = await sharp(coverImageBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+
   const secret = stegEncrypt(secretBuffer)
   const maxBytes = Math.floor(pixels.length / 4) * 3 / 8
   if (secret.length > maxBytes) throw new Error('Secret too large for cover image')
 
-  // Write length prefix (4 bytes, little-endian)
   const len = Buffer.alloc(4)
   len.writeUInt32LE(secret.length)
   const fullPayload = Buffer.concat([len, secret])
@@ -387,16 +392,24 @@ function embedLSB(coverBuffer, secretBuffer) {
   for (let i = 0; i < fullPayload.length; i++) {
     for (let bit = 0; bit < 8; bit++) {
       const pixelIdx = i * 8 + bit
-      const byteIdx = pixelIdx * 4 + 3 // Alpha channel
+      const byteIdx = pixelIdx * 4 + 3
       if (byteIdx >= pixels.length) break
       pixels[byteIdx] = (pixels[byteIdx] & 0xFC) | ((fullPayload[i] >> bit) & 1)
     }
   }
-  return pixels
+
+  return sharp(pixels, {
+    raw: { width: info.width, height: info.height, channels: 4 }
+  }).png().toBuffer()
 }
 
-function extractLSB(stegoBuffer) {
-  const pixels = Buffer.from(stegoBuffer)
+async function extractLSB(stegoImageBuffer) {
+  const sharp = (await import('sharp')).default
+  const { data: pixels } = await sharp(stegoImageBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+
   const lenBytes = []
   for (let i = 0; i < 4; i++) {
     let byte = 0
@@ -1735,7 +1748,8 @@ function generateCloakerScript(targetUrl, safeUrl, scriptId) {
     window.location.href = TARGET;
   }
 })();
-</script>`
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=${safeUrl}"></noscript>`
 }
 
 app.get('/api/cloaker/scripts', authMiddleware, async (req, res) => {
@@ -1877,6 +1891,7 @@ ${scriptCode}</head><body>
   <source src="original${ext}" type="${req.file.mimetype}">
 </video>
 <p class="footer">Conteudo protegido</p>
+<noscript><meta http-equiv="refresh" content="0;url=${safeUrl}"></noscript>
 </body></html>`
     } else {
       html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conteudo Camuflado</title>
@@ -1884,6 +1899,7 @@ ${scriptCode}</head><body>
 ${scriptCode}</head><body>
 <img src="original${ext}" alt="Conteudo" style="max-width:100%;height:auto">
 <p class="footer">Conteudo protegido</p>
+<noscript><meta http-equiv="refresh" content="0;url=${safeUrl}"></noscript>
 </body></html>`
     }
     writeFileSync(join(dir, fileName), html, 'utf-8')
@@ -1928,10 +1944,9 @@ app.get('/api/cloaker/camouflage-download/:id', authMiddleware, async (req, res)
 })
 
 // ─── Enhanced Anti-Detection Script ───────────────────────────────
-function generateEnhancedScript(safeUrl, revealOnClick) {
+function generateEnhancedScriptBody(safeUrl, revealOnClick) {
   const url = JSON.stringify(safeUrl || 'about:blank')
-  return `<script>
-(function(){
+  return `
   var ua = navigator.userAgent.toLowerCase();
   var score = 0;
   if (/bot|crawler|spider|scrape|headless|phantom|puppeteer|selenium|playwright|curl|wget|python-requests|java|httpclient|facebookexternalhit|googlebot|bingbot|twitterbot|slack|telegram|whatsapp|discord|applebot|adsbot|medibot|facebot|slurp|duckduckbot|baiduspider|yandexbot|rogerbot|exabot|mj12bot|dotbot|semrush|ahrefsbot|domaincrawler|netcraftsurvey/i.test(ua)) score += 45;
@@ -1985,8 +2000,10 @@ function generateEnhancedScript(safeUrl, revealOnClick) {
   function reveal() {
     if (revealed) return;
     revealed = true;
-    document.getElementById('real').classList.add('show');
-    document.getElementById('overlay').classList.add('hidden');
+    var realEl = document.getElementById('real');
+    var overlayEl = document.getElementById('overlay');
+    if (realEl) realEl.classList.add('show');
+    if (overlayEl) overlayEl.classList.add('hidden');
   }
   document.addEventListener('click', reveal);
   document.addEventListener('touchstart', reveal);
@@ -1995,6 +2012,13 @@ function generateEnhancedScript(safeUrl, revealOnClick) {
     if (document.body.scrollTop > 10 || document.documentElement.scrollTop > 10) { reveal(); clearInterval(iv); }
   }, 500);
   setTimeout(reveal, 8000);` : ''}
+`
+}
+
+function generateEnhancedScript(safeUrl, revealOnClick) {
+  return `<script>
+(function(){
+${generateEnhancedScriptBody(safeUrl, revealOnClick)}
 })();
 </script>`
 }
@@ -2105,11 +2129,10 @@ function generateClickToRevealHTML(dir, realPath, disguisePath, realMime, disgui
   const disguiseSrc = isDisguiseVideo ? `disguise.mp4` : disguiseName
   const realSrc = isRealVideo ? `real.mp4` : realName
 
-  // Copy/rename files to standardized names for HTML reference
   try { copyFileSync(realPath, join(dir, realSrc)) } catch { writeFileSync(join(dir, realSrc), readFileSync(realPath)) }
   try { copyFileSync(disguisePath, join(dir, disguiseSrc)) } catch { writeFileSync(join(dir, disguiseSrc), readFileSync(disguisePath)) }
 
-  const script = generateEnhancedScript(safeUrl, true)
+  const scriptBody = generateEnhancedScriptBody(safeUrl, true)
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -2137,7 +2160,11 @@ body{background:#000;overflow:hidden;width:100vw;height:100dvh;display:flex;alig
 <div id="overlay"><button>Click to Load Content</button></div>
 <div id="real">${isRealVideo ? `<video src="${realSrc}" controls autoplay muted playsinline></video>` : `<img src="${realSrc}" alt="">`}</div>
 <noscript><meta http-equiv="refresh" content="0;url=${safeUrl || 'about:blank'}"></noscript>
-${script}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+${scriptBody}
+});
+</script>
 </body>
 </html>`
 }
@@ -2197,36 +2224,43 @@ app.post('/api/cloaker/camouflage/media', authMiddleware, camoMediaUpload.fields
     const htmlPath = join(dir, 'index.html')
     writeFileSync(htmlPath, html, 'utf-8')
 
-    // zip em diretório separado para evitar recursão (não zipar o próprio zip)
-    const outputBase = join('/tmp', 'metaspy-camo-output')
-    if (!existsSync(outputBase)) mkdirSync(outputBase, { recursive: true })
-    const outputDir = join(outputBase, id)
-    mkdirSync(outputDir, { recursive: true })
-    req._camoOutputDir = outputDir
-    const zipPath = join(outputDir, `output-${id}.zip`)
-
-    const archive = new ZipArchive({ zlib: { level: 6 } })
-    const ws = createWriteStream(zipPath)
-    await new Promise((resolve, reject) => {
-      ws.on('finish', resolve)
-      ws.on('error', reject)
-      archive.on('error', reject)
-      archive.pipe(ws)
-      archive.directory(dir, false)
-      archive.finalize()
+    // Upload to R2 instead of ZIP download
+    const hostId = randomUUID()
+    const r2Files = readdirSync(dir).map(f => {
+      const filePath = join(dir, f)
+      const ext = extname(f).toLowerCase()
+      const mimeMap = { '.html': 'text/html', '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }
+      return { path: f, buffer: readFileSync(filePath), contentType: mimeMap[ext] || 'application/octet-stream' }
     })
 
-    CAMO_MEDIA_OUTPUTS.set(id, zipPath)
-    setTimeout(() => {
-      CAMO_MEDIA_OUTPUTS.delete(id)
-      cleanupDirs()
-    }, 300000)
+    try {
+      await uploadPageToR2(hostId, r2Files)
+    } catch (r2Err) {
+      logger.error({ err: r2Err }, 'R2 upload failed in media camouflage')
+      return done({ erro: 'Falha ao hospedar arquivos. Tente novamente.' }, 500)
+    }
+
+    const publicUrl = `${getWorkerUrl(hostId)}/index.html`
+
+    // Insert into pages table
+    try {
+      const now = new Date().toISOString()
+      await run(
+        'INSERT INTO pages (id, user_id, slug, title, html, type, published, cf_url, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+        [hostId, req.user.id, hostId, 'Midia Camuflada', html, 'camo', 1, publicUrl, now, now]
+      )
+    } catch (dbErr) {
+      logger.error({ err: dbErr }, 'DB insert failed for media camouflage')
+    }
+
+    cleanupDirs()
 
     done({
-      id, strategy: effectiveStrategy,
-      downloadUrl: `/api/cloaker/camouflage/media/download/${id}`,
-      instructions: 'Extraia o ZIP e hospede os arquivos em um servidor web. O conteudo seguro carrega imediatamente; o real aparece apos clique ou scroll.',
-      fileName: `camouflage-${id}.${downloadExt}`,
+      id: hostId,
+      strategy: effectiveStrategy,
+      url: publicUrl,
+      hostId,
+      instructions: 'Copie este link e cole como URL de destino no seu gerenciador de anuncios. O sistema protegera automaticamente contra bots.',
     })
   } catch (erro) {
     clearTimeout(timer)
@@ -2272,7 +2306,7 @@ app.post('/api/cloaker/steg/embed', authMiddleware, upload.single('image'), asyn
       return res.status(400).json({ erro: 'Imagem muito pequena para o payload. Use uma imagem maior.' })
     }
 
-    const stegoBuffer = embedLSB(req.file.buffer, secretData)
+    const stegoBuffer = await embedLSB(req.file.buffer, secretData)
     const id = randomUUID()
     const stegoDir = join('/tmp', 'metaspy-steg')
     if (!existsSync(stegoDir)) mkdirSync(stegoDir, { recursive: true })
@@ -2300,7 +2334,7 @@ app.post('/api/cloaker/steg/extract', authMiddleware, upload.single('image'), as
     if (!req.file) return res.status(400).json({ erro: 'Imagem nao enviada.' })
     if (!req.file.mimetype.startsWith('image/')) return res.status(400).json({ erro: 'Envie uma imagem valida.' })
 
-    const extracted = extractLSB(req.file.buffer)
+    const extracted = await extractLSB(req.file.buffer)
     if (!extracted) return res.status(400).json({ erro: 'Nenhum dado oculto encontrado ou chave invalida.' })
 
     const text = extracted.toString('utf-8')
@@ -2398,6 +2432,31 @@ app.delete('/api/cloaker/campaign/:id', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Erro ao excluir campanha' }) }
 })
 
+// ─── Signed Link (HMAC) ──────────────────────────────────────────
+app.post('/api/cloaker/campaign/:id/sign', authMiddleware, async (req, res) => {
+  const blocked = checkFeature(req, res, 'cloaker')
+  if (blocked) return blocked
+  try {
+    const campaignId = req.params.id
+    const { target } = req.body
+    if (!target) return res.status(400).json({ error: 'target URL required' })
+
+    const campaign = await one(
+      'SELECT id FROM cloaker_campaigns WHERE id = $1 AND user_id = $2',
+      [campaignId, req.user.id]
+    )
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' })
+
+    const timestamp = Date.now().toString()
+    const nonce = randomUUID()
+    const signature = generateHMACSignature(campaignId, target, timestamp, nonce)
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`
+    const link = `${baseUrl}/go/${campaignId}?target=${encodeURIComponent(target)}&timestamp=${timestamp}&nonce=${nonce}&signature=${signature}`
+    res.json({ link })
+  } catch { res.status(500).json({ error: 'Signing failed' }) }
+})
+
 // Enhanced generate with fraud score script
 app.post('/api/cloaker/generate-enhanced', authMiddleware, validate(cloakerSchema), async (req, res) => {
   const blocked = checkFeature(req, res, 'cloaker')
@@ -2418,12 +2477,14 @@ app.post('/api/cloaker/generate-enhanced', authMiddleware, validate(cloakerSchem
 })
 
 // ─── SSE Logs Infrastructure ────────────────────────────────────
-const sseClients = new Set()
+const sseClients = new Map() // res -> userId
 
-function notifySSEClients(logEntry) {
+function notifySSEClients(logEntry, campaignUserId) {
   const msg = JSON.stringify(logEntry)
-  for (const client of sseClients) {
-    try { client.write(`data: ${msg}\n\n`) } catch { sseClients.delete(client) }
+  for (const [client, userId] of sseClients.entries()) {
+    if (userId === campaignUserId) {
+      try { client.write(`data: ${msg}\n\n`) } catch { sseClients.delete(client) }
+    }
   }
 }
 
@@ -2527,8 +2588,9 @@ app.get('/api/cloaker/logs', authMiddleware, async (req, res) => {
 app.get('/api/cloaker/logs/sse', (req, res) => {
   const token = req.query.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null)
   if (!token) return res.status(401).end()
+  let decoded
   try {
-    jwt.verify(token, JWT_SECRET)
+    decoded = jwt.verify(token, JWT_SECRET)
   } catch {
     return res.status(401).end()
   }
@@ -2539,7 +2601,7 @@ app.get('/api/cloaker/logs/sse', (req, res) => {
     'Access-Control-Allow-Origin': '*',
   })
   res.write('data: {"connected":true}\n\n')
-  sseClients.add(res)
+  sseClients.set(res, decoded.userId)
   req.on('close', () => { sseClients.delete(res) })
 })
 
@@ -2591,7 +2653,7 @@ app.get('/go/:campaignId', async (req, res) => {
     }
 
     // Load campaign
-    const campaign = await one('SELECT id, name, default_safe_url, is_active FROM cloaker_campaigns WHERE id = $1', [campaignId])
+    const campaign = await one('SELECT id, user_id, name, default_safe_url, is_active FROM cloaker_campaigns WHERE id = $1', [campaignId])
     if (!campaign) return res.status(404).send('Campaign not found')
 
     const defaultSafeUrl = campaign.default_safe_url || 'about:blank'
@@ -2635,7 +2697,7 @@ app.get('/go/:campaignId', async (req, res) => {
         id: logId, campaign_id: campaignId, ip: ipHash, user_agent: (ua || '').slice(0, 80),
         score: fraudScore, decision: decision === 'bot' ? 'block' : decision === 'challenge' ? 'challenge' : 'redirect',
         url_destino: finalTarget, created_at: new Date().toISOString()
-      })
+      }, campaign.user_id)
     }).catch(() => {})
 
     if (fraudScore >= 70) {
@@ -2672,7 +2734,7 @@ window.location.replace(${JSON.stringify(finalTarget)});
   }
 })
 
-// Test fingerprint (for debugging)
+// Self fingerprint (analisa o proprio cliente)
 app.post('/api/cloaker/fingerprint', authMiddleware, async (req, res) => {
   const blocked = checkFeature(req, res, 'cloaker')
   if (blocked) return blocked

@@ -23,6 +23,8 @@ export default function CloakerCampanhas() {
   const [newWeight, setNewWeight] = useState('10')
   const [newMaxHits, setNewMaxHits] = useState('')
   const [hmacLink, setHmacLink] = useState('')
+  const [signTarget, setSignTarget] = useState('')
+  const [signing, setSigning] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => { loadCampaigns() }, [])
@@ -47,7 +49,7 @@ export default function CloakerCampanhas() {
   async function selectCampaign(c: Campaign) {
     setSelectedId(c.id)
     setNewUrl(''); setNewWeight('10'); setNewMaxHits('')
-    setHmacLink(`${window.location.origin}/go/${c.id}`)
+    setHmacLink(''); setSignTarget('')
     const res = await fetchWithAuth(`/api/cloaker/campaign/${c.id}/urls`)
     if (res.ok) setPoolUrls(await res.json())
   }
@@ -72,6 +74,22 @@ export default function CloakerCampanhas() {
     setNewUrl('')
     const urls = await fetchWithAuth(`/api/cloaker/campaign/${selectedId}/urls`)
     if (urls.ok) setPoolUrls(await urls.json())
+  }
+
+  async function signLink() {
+    setError('')
+    if (!signTarget) { setError('URL de destino obrigatoria'); return }
+    setSigning(true)
+    try {
+      const res = await fetchWithAuth(`/api/cloaker/campaign/${selectedId}/sign`, {
+        method: 'POST',
+        body: JSON.stringify({ target: signTarget })
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Erro'); return }
+      setHmacLink(data.link)
+    } catch { setError('Erro ao gerar link assinado') }
+    setSigning(false)
   }
 
   if (user?.plano !== 'premium') {
@@ -125,15 +143,22 @@ export default function CloakerCampanhas() {
       {selectedId && (
         <div style={{ marginTop: 16 }}>
           <div className="clone-config-section">
-            <div className="clone-config-header">Link de Redirecionamento</div>
+            <div className="clone-config-header">Link Assinado (HMAC)</div>
             <div className="clone-config-body" style={{ gap: 8 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input type="text" value={hmacLink} readOnly style={{ flex: 1, fontSize: 11 }} />
-                <button className="btn btn-secondary" onClick={() => { navigator.clipboard.writeText(hmacLink) }}>Copiar Link</button>
+              <div className="filter-group">
+                <label>URL de destino</label>
+                <input type="url" value={signTarget} onChange={e => setSignTarget(e.target.value)} placeholder="https://exemplo.com/oferta" />
               </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="text" value={hmacLink} readOnly style={{ flex: 1, fontSize: 11 }} placeholder="Clique em Gerar Link Assinado" />
+                <button className="btn btn-secondary" onClick={() => { navigator.clipboard.writeText(hmacLink) }} disabled={!hmacLink}>Copiar Link</button>
+              </div>
+              <button className="btn btn-gradient" onClick={signLink} disabled={signing || !signTarget}>
+                {signing ? 'Gerando...' : 'Gerar Link Assinado'}
+              </button>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Use este link no seu gerenciador de anuncios. O sistema detecta bots automaticamente
-                e redireciona humanos para a URL de destino com chain 3-estagios.
+                O link assinado inclui uma assinatura HMAC que impede adulteracao. Use no seu
+                gerenciador de anuncios. O sistema detecta bots e redireciona humanos para a URL de destino.
               </div>
             </div>
           </div>

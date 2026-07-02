@@ -28,19 +28,17 @@ interface FingerprintResult {
 export default function CloakerFingerprint() {
   const { user, fetchWithAuth } = useAuth()
   const navigate = useNavigate()
-  const [url, setUrl] = useState('')
   const [result, setResult] = useState<FingerprintResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   async function testFingerprint() {
     setError('')
-    if (!url) { setError('URL obrigatoria'); return }
     setLoading(true)
     try {
       const res = await fetchWithAuth('/api/cloaker/fingerprint', {
         method: 'POST',
-        body: JSON.stringify({ url })
+        body: JSON.stringify({})
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Erro'); return }
@@ -60,20 +58,16 @@ export default function CloakerFingerprint() {
         <span className={`status ${result ? 'on' : 'off'}`}>{result ? `Score: ${result.score}/100` : 'Aguardando'}</span>
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.5 }}>
-        Analise uma URL com o motor de deteccao de 13 heuristicas. Veja se um visitante parece
-        humano ou bot antes de decidir o redirecionamento.
+        Esta ferramenta mostra seu proprio fingerprint score. O servidor analisa os headers
+        e User-Agent da sua conexao para determinar o quao suspeito voce parece para um sistema de cloaking.
       </div>
 
       <div className="clone-config-section">
-        <div className="clone-config-header">Testar URL</div>
+        <div className="clone-config-header">Seu Fingerprint</div>
         <div className="clone-config-body" style={{ gap: 10 }}>
-          <div className="filter-group">
-            <label>URL para testar</label>
-            <input type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://exemplo.com/oferta" />
-          </div>
           {error && <div className="alerta">{error}</div>}
-          <button className="btn btn-gradient" onClick={testFingerprint} disabled={loading || !url}>
-            {loading ? 'Testando...' : 'Testar Fingerprint'}
+          <button className="btn btn-gradient" onClick={testFingerprint} disabled={loading}>
+            {loading ? 'Analisando...' : 'Analisar Meu Fingerprint'}
           </button>
         </div>
       </div>

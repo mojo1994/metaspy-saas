@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { IconVideo, IconImage, IconDownload } from '../components/Icons'
+import { IconVideo, IconImage } from '../components/Icons'
 
 export default function CamuflagemMidia() {
   const { fetchWithAuth } = useAuth()
@@ -13,6 +13,7 @@ export default function CamuflagemMidia() {
   const [camoLoading, setCamoLoading] = useState(false)
   const [camoResult, setCamoResult] = useState<any>(null)
   const [camoError, setCamoError] = useState('')
+  const [copiadoCamo, setCopiadoCamo] = useState(false)
   const [realPreview, setRealPreview] = useState<string | null>(null)
   const [disguisePreview, setDisguisePreview] = useState<string | null>(null)
 
@@ -92,19 +93,10 @@ export default function CamuflagemMidia() {
     }
   }
 
-  async function handleCamoDownload() {
-    if (!camoResult?.downloadUrl) return
-    try {
-      const res = await fetchWithAuth(camoResult.downloadUrl)
-      if (!res.ok) return
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = camoResult.fileName || 'camouflage-output.mp4'
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch { /* silent */ }
+  function handleCopiarCamoLink() {
+    if (!camoResult?.url) return
+    navigator.clipboard.writeText(camoResult.url)
+    setCopiadoCamo(true); setTimeout(() => setCopiadoCamo(false), 3000)
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -262,13 +254,14 @@ export default function CamuflagemMidia() {
 
           {camoResult && (
             <div className="clone-config-section" style={{ marginTop: 8 }}>
-              <div className="clone-config-header">Download e Instrucoes</div>
+              <div className="clone-config-header">Link Hospedado</div>
               <div className="clone-config-body" style={{ gap: 8 }}>
-                <button className="btn btn-primary" onClick={handleCamoDownload} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <IconDownload size={18} /> Baixar ZIP
-                </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="text" value={camoResult.url || ''} readOnly style={{ flex: 1, fontSize: 11 }} />
+                  <button className="btn btn-secondary" onClick={handleCopiarCamoLink}>{copiadoCamo ? 'Copiado!' : 'Copiar Link'}</button>
+                </div>
                 <div style={{ padding: 12, background: 'var(--bg-primary)', borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                  {camoResult.instructions}
+                  {camoResult.instructions || 'Copie este link e cole como URL de destino no seu gerenciador de anuncios.'}
                 </div>
               </div>
             </div>

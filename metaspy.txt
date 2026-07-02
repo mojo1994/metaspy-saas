@@ -1,0 +1,174 @@
+╔══════════════════════════════════════════════════════════════╗
+║               METASPY SAAS — MAPA COMPLETO                  ║
+║               v3.0.0 (React + Express + Cloudflare)         ║
+╚══════════════════════════════════════════════════════════════╝
+
+====================================================================
+ 1. CONFIGURAÇÕES RAIZ (FRONT-END)
+====================================================================
+
+  package.json           (711 bytes)   Deps: React 18, Vite 5, Zustand 5,
+                                        React Router, Phosphor/Lucide icons
+  package-lock.json      (70981 bytes) Lockfile npm
+  tsconfig.json          (557 bytes)   TypeScript config (ES2020, ESNext mod)
+  tsconfig.tsbuildinfo   (1019 bytes)  Build info TS
+  vite.config.ts         (289 bytes)   Vite: React plugin, proxy /api -> :3001
+  index.html             (1084 bytes)  HTML entry point
+  netlify.toml           (169 bytes)   Deploy Netlify: build dist, proxy /api
+  wrangler.toml          (263 bytes)   Cloudflare Worker "metaspy-host"
+  render.yaml            (349 bytes)   Deploy Render: server service
+  metaspy.bat            (999 bytes)   Script de inicialização local
+  cloudflare-worker.js   (7774 bytes)  Cloudflare Worker (browser rendering +
+                                        R2 storage proxy)
+
+====================================================================
+ 2. SRC — FRONT-END REACT
+====================================================================
+
+  --- Entry Point ---
+
+  src/main.tsx           (529 bytes)   Bootstrap: BrowserRouter,
+                                        ThemeProvider, AuthProvider
+  src/App.tsx            (3114 bytes)  Rotas: 25+ rotas com ProtectedRoute
+  src/index.css          (112227 bytes) Estilos globais (CSS)
+  src/vite-env.d.ts      (38 bytes)    Tipos Vite
+
+  --- Contexts ---
+
+  src/contexts/AuthContext.tsx    (5782 bytes)  Autenticação JWT (login,
+                                                 signup, token management)
+  src/contexts/ThemeContext.tsx   (1850 bytes)  Tema dark/light
+
+  --- Pages (23 arquivos) ---
+
+  src/pages/Landing.tsx               (8576 bytes)   Landing page
+  src/pages/Login.tsx                 (2228 bytes)   Login
+  src/pages/Signup.tsx                (4059 bytes)   Cadastro
+  src/pages/ForgotPassword.tsx        (4539 bytes)   Recuperar senha
+  src/pages/Planos.tsx                (17828 bytes)  Planos/assinatura
+  src/pages/Ajuda.tsx                 (40751 bytes)  Central de ajuda
+  src/pages/Dashboard.tsx             (10732 bytes)  Layout do dashboard
+  src/pages/DashboardHome.tsx         (3226 bytes)   Home do dashboard
+  src/pages/MetaSpyTool.tsx           (46693 bytes)  Ferramenta principal
+                                                      MetaSpy
+  src/pages/PageVaultTool.tsx         (20579 bytes)  Page Vault (clone pages)
+  src/pages/CloackerTool.tsx          (8615 bytes)   Cloacker geral
+  src/pages/CloakDetector.tsx         (5231 bytes)   Detector de cloaking
+  src/pages/CamuflagemTexto.tsx       (4017 bytes)   Camuflagem de texto
+  src/pages/CamuflagemMidia.tsx       (18894 bytes)  Camuflagem de mídia
+  src/pages/CloakerEnhanced.tsx       (5978 bytes)   Cloaker avançado
+  src/pages/CloakerCampanhas.tsx      (8953 bytes)   Gerenciar campanhas
+  src/pages/CloakerSteganografia.tsx  (5395 bytes)   Esteganografia
+  src/pages/CloakerFingerprint.tsx    (5528 bytes)   Fingerprint detection
+  src/pages/CloakerLogs.tsx           (6669 bytes)   Logs do cloaker
+  src/pages/HostPage.tsx              (19753 bytes)  Hospedar página clonada
+  src/pages/MetadataCleaner.tsx       (8386 bytes)   Limpar metadados
+  src/pages/Profile.tsx               (7389 bytes)   Perfil do usuário
+  src/pages/Settings.tsx              (3901 bytes)   Configurações
+  src/pages/Admin.tsx                 (8410 bytes)   Admin (painel interno)
+
+  --- Components ---
+
+  src/components/HelpTooltip.tsx      (1795 bytes)  Tooltip de ajuda
+  src/components/Icons.tsx            (3183 bytes)  Ícones customizados
+  src/components/PageEditor.tsx       (30126 bytes) Editor de página visual
+
+  --- Types ---
+
+  src/types/index.ts        (1694 bytes)  Tipos TypeScript compartilhados
+
+  --- Bypass Engine (multi-linguagem) ---
+
+  src/bypass/engine.js      (3903 bytes)  Bypass engine JS
+  src/bypass/engine.php     (4304 bytes)  Bypass engine PHP
+  src/bypass/engine.py      (3530 bytes)  Bypass engine Python
+  src/bypass/engine.ts      (4526 bytes)  Bypass engine TypeScript
+
+====================================================================
+ 3. SERVER — BACK-END EXPRESS
+====================================================================
+
+  server/package.json           (956 bytes)    Deps: Express, Puppeteer,
+                                                BullMQ, ffmpeg, S3, Redis,
+                                                PostgreSQL, Zod, etc.
+  server/package-lock.json      (145714 bytes) Lockfile npm server
+  server/.env                   (1802 bytes)   Variáveis de ambiente
+  server/.nvmrc                 (2 bytes)      Node version (v20)
+  server/index.js               (154104 bytes) Servidor Express principal
+                                                (rotas, auth, etc.)
+  server/clone.js               (19928 bytes)  Engine de clonagem de páginas
+  server/db.js                  (7168 bytes)   Banco SQLite (melhorias:
+                                                migração para PostgreSQL)
+  server/email.js               (17152 bytes)  Envio de email (Kirvano/
+                                                transacionais)
+  server/redis.js               (978 bytes)    Conexão Redis (BullMQ)
+  server/cloudflareStorage.js   (3778 bytes)   Upload/download R2 Cloudflare
+  server/thumbnailQueue.js      (3861 bytes)   Fila de thumbnails (BullMQ)
+  server/metaspy.db             (24576 bytes)  Banco SQLite
+  server/metaspy.db-shm         (32768 bytes)  SQLite shared memory
+  server/metaspy.db-wal         (20632 bytes)  SQLite WAL
+
+====================================================================
+ 4. ARQUIVOS DE DOCUMENTAÇÃO / NOTAS
+====================================================================
+
+  PRD.txt                (34837 bytes)  Product Requirements Document
+  codigofonte.txt        (752275 bytes) Dump do código fonte
+  cloacker.txt           (88031 bytes)  Documentação do Cloacker
+  quiz.txt               (92377 bytes)  Documentação do Quiz
+  features.txt           (10421 bytes)  Lista de funcionalidades
+  security.txt           (3256 bytes)   Auditoria de segurança
+  resumo.txt             (7039 bytes)   Resumo do projeto
+  logs.txt               (5167 bytes)   Logs de desenvolvimento
+  update2.txt            (6766 bytes)   Atualizações v2
+  upd2.txt               (46906 bytes)  Atualizações v2 (detalhado)
+  debugapi.txt           (1842 bytes)   Debug da API
+  apify.txt              (1060 bytes)   Integração Apify
+  REDIS.txt              (599 bytes)    Config Redis
+  tokens.txt             (208 bytes)    Tokens de acesso
+  LINK KIRVANO.txt       (206 bytes)    Link Kirvano (pagamentos)
+  links de pagamentos kirvano.txt (263 bytes) Links de pagamento
+  kirvano.txt            (50 bytes)     Nota Kirvano
+  cli.txt                (53 bytes)     CLI note
+  rotas.txt              (132 bytes)    Rotas da API
+  s.txt                  (131 bytes)    Nota curta
+  teste.txt              (137 bytes)    Anotações de teste
+  f12.txt.txt            (192 bytes)    F12 devtools note
+  suporte.txt            (19 bytes)     Contato suporte
+  upd.txt                (52 bytes)     Nota de update
+  vsl youtube.txt        (48 bytes)     Link VSL YouTube
+
+====================================================================
+ 5. PUBLIC
+====================================================================
+
+  public/_redirects      (206 bytes)    Redirects Netlify SPA
+
+====================================================================
+ 6. CLONES / DEPOIMENTOS (pastas ignoradas)
+====================================================================
+
+  clones/                          Páginas clonadas (4 sites)
+  depoimentos/                     Depoimentos
+
+====================================================================
+ RESUMO DA ARQUITETURA
+====================================================================
+
+  Front-end:  React 18 + TypeScript + Vite 5 + Zustand + React Router
+              Deployment: Netlify (static)
+
+  Back-end:   Express.js + Puppeteer + BullMQ + Redis + SQLite/PostgreSQL
+              Deployment: Render
+
+  Cloudflare: Worker "metaspy-host" (Browser Rendering + R2 bucket)
+              wrangler.toml configura binding BROWSER + METASPY_BUCKET
+
+  Pages clonadas:    Armazenadas no R2 (metaspy-pages)
+  Autenticação:      JWT (bcryptjs)
+  Pagamentos:        Kirvano (webhook)
+  Filas:             BullMQ (Redis) para thumbnails
+  Bypass engine:     4 linguagens (JS/TS/PHP/Python)
+  Total de arquivos: ~85 (excluindo node_modules, .wrangler, dist)
+
+====================================================================
