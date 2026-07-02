@@ -217,6 +217,7 @@ export default function Planos() {
   const { isAuthenticated, fetchWithAuth } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const pageRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -272,14 +273,21 @@ export default function Planos() {
   async function handleCheckout(plan: string) {
     if (!isAuthenticated) { navigate('/signup?redirect=planos'); return }
     setLoading(plan)
+    setError(null)
     try {
       const resp = await fetchWithAuth('/api/subscription/create-checkout', {
         method: 'POST',
         body: JSON.stringify({ plan })
       })
       const data = await resp.json()
-      if (data.checkoutUrl) window.location.href = data.checkoutUrl
-    } catch {}
+      if (resp.ok && data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+        return
+      }
+      setError(data.error || 'Erro ao criar checkout. Tente novamente.')
+    } catch (e) {
+      setError('Erro de conexão. Verifique sua internet.')
+    }
     setLoading(null)
   }
 
@@ -329,6 +337,12 @@ export default function Planos() {
         </div>
       </section>
 
+      {error && (
+        <div className="planos-error" data-reveal style={revealStyle(100)}>
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)}>&times;</button>
+        </div>
+      )}
       <section className="planos-cards" data-reveal style={revealStyle(120)}>
         {PLAN_CARD_DATA.map((plan, index) => (
           <article
@@ -396,6 +410,7 @@ export default function Planos() {
         <div className="planos-table-shell">
           <div className="planos-table" role="table" aria-label="Comparativo completo dos planos">
             <div className="planos-table-row planos-table-header" role="row">
+              <div className="planos-table-cell planos-table-plan-col planos-table-header-filler" role="columnheader" />
               <div className="planos-table-cell planos-table-plan-col" role="columnheader">
                 <span className="planos-plan-name">Básico</span>
               </div>
