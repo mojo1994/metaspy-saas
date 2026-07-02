@@ -424,9 +424,9 @@ export default function Planos() {
       </section>
 
       <div className="planos-trust" data-reveal style={revealStyle(160)}>
-        <div className="planos-trust-item"><span className="planos-trust-icon">🔒</span> Pagamento seguro</div>
-        <div className="planos-trust-item"><span className="planos-trust-icon">⚡</span> Liberação imediata após confirmação</div>
-        <div className="planos-trust-item"><span className="planos-trust-icon">💳</span> Cancele quando quiser</div>
+        <div className="planos-trust-item"><svg className="planos-trust-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Pagamento seguro</div>
+        <div className="planos-trust-item"><svg className="planos-trust-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Liberação imediata após confirmação</div>
+        <div className="planos-trust-item"><svg className="planos-trust-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Cancele quando quiser</div>
       </div>
 
       <div className="planos-help-btn" data-reveal style={revealStyle(160)}>
