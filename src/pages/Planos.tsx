@@ -21,18 +21,7 @@ const FEATURES_PREMIUM = [
   { label: 'Minerador de Anúncios', ok: true },
   { label: 'Clonador', ok: true },
   { label: 'Hospedar 50 páginas/mês', ok: true },
-  { label: 'Cloacker Premium', ok: true },
-  { label: '  • Gerador de Scripts', ok: true },
-  { label: '  • Script Avançado', ok: true },
-  { label: '  • Detector de Cloacking', ok: true },
-  { label: '  • Camuflagem de Texto', ok: true },
-  { label: '  • Camuflagem de Mídia', ok: true },
-  { label: '  • Campanhas', ok: true },
-  { label: '  • Links Assinados', ok: true },
-  { label: '  • Esteganografia', ok: true },
-  { label: '  • Fingerprint', ok: true },
-  { label: '  • Logs em Tempo Real', ok: true },
-  { label: '  • Bypass Engines', ok: true },
+  { label: 'Cloacker Premium (11 ferramentas)', ok: true },
   { label: 'Removedor de Metadados', ok: true },
   { label: 'Suporte Prioritário 24/7', ok: true },
 ]
@@ -65,25 +54,25 @@ const PLAN_CARD_DATA = [
     highlighted: false,
   },
   {
-    key: 'gold',
-    title: 'Gold',
-    description: 'O pacote completo para máquinas de guerra',
-    original: null,
-    current: 'R$ 97,00',
-    button: 'Assinar Agora',
-    features: FEATURES_GOLD,
-    className: 'plan-card-gold',
-    highlighted: true,
-  },
-  {
     key: 'premium',
     title: 'Premium',
     description: 'Todas as ferramentas sem limites',
     original: 'R$ 397',
-    current: 'R$ 197,00',
+    current: 'R$ 97,00',
     button: 'Assinar Agora',
     features: FEATURES_PREMIUM,
     className: 'plan-card-premium',
+    highlighted: true,
+  },
+  {
+    key: 'gold',
+    title: 'Gold',
+    description: 'O pacote completo para máquinas de guerra',
+    original: null,
+    current: 'R$ 57,90',
+    button: 'Assinar Agora',
+    features: FEATURES_GOLD,
+    className: 'plan-card-gold',
     highlighted: false,
   },
 ] as const
@@ -335,7 +324,7 @@ export default function Planos() {
                 <h2>{plan.title}</h2>
                 {plan.highlighted && (
                   <div className="planos-card-badge planos-card-badge-animated">
-                    MELHOR VALOR
+                    RECOMENDADO
                   </div>
                 )}
               </div>
@@ -389,16 +378,15 @@ export default function Planos() {
         <div className="planos-table-shell">
           <div className="planos-table" role="table" aria-label="Comparativo completo dos planos">
             <div className="planos-table-row planos-table-header" role="row">
-              <div className="planos-table-cell planos-table-feature" role="columnheader">Funcionalidade</div>
-              <div className="planos-table-cell planos-plan-col" role="columnheader">
+              <div className="planos-table-cell planos-table-plan-col" role="columnheader">
                 <span className="planos-plan-name">Básico</span>
               </div>
               <div className="planos-table-cell planos-plan-col planos-plan-col-highlight" role="columnheader">
-                <span className="planos-plan-name">Gold</span>
-                <span className="planos-plan-badge">MELHOR VALOR</span>
+                <span className="planos-plan-name">Premium</span>
+                <span className="planos-plan-badge">RECOMENDADO</span>
               </div>
               <div className="planos-table-cell planos-plan-col" role="columnheader">
-                <span className="planos-plan-name">Premium</span>
+                <span className="planos-plan-name">Gold</span>
               </div>
             </div>
 
@@ -422,10 +410,10 @@ export default function Planos() {
                     {basic ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
                   </div>
                   <div className="planos-table-cell planos-table-flag planos-table-flag-highlight" role="cell">
-                    {gold ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
+                    {premium ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
                   </div>
                   <div className="planos-table-cell planos-table-flag" role="cell">
-                    {premium ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
+                    {gold ? <Check size={16} weight="bold" /> : <Minus size={16} weight="bold" />}
                   </div>
                 </div>
               )

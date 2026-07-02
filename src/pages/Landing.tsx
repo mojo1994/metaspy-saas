@@ -64,22 +64,9 @@ const PRICE_ROWS = [
     highlighted: false,
   },
   {
-    title: 'Gold',
-    original: 'R$ 197',
-    current: 'R$ 97,00',
-    features: [
-      ['Minerador de Anúncios', true],
-      ['Clonador', true],
-      ['Hospedar 10 páginas/mês', true],
-      ['Detector de Cloacking', true],
-      ['Removedor de Metadados', true],
-    ],
-    highlighted: true,
-  },
-  {
     title: 'Premium',
     original: 'R$ 397',
-    current: 'R$ 197,00',
+    current: 'R$ 97,00',
     features: [
       ['Minerador de Anúncios', true],
       ['Clonador', true],
@@ -87,6 +74,18 @@ const PRICE_ROWS = [
       ['Cloacker Premium (11 ferramentas)', true],
       ['Removedor de Metadados', true],
       ['Suporte Prioritário 24/7', true],
+    ],
+    highlighted: true,
+  },
+  {
+    title: 'Gold',
+    original: 'R$ 197',
+    current: 'R$ 57,00',
+    features: [
+      ['Minerador de Anúncios', true],
+      ['Hospedar Páginas', true],
+      ['Cloacker', false],
+      ['Removedor de Metadados', true],
     ],
     highlighted: false,
   },
@@ -195,7 +194,7 @@ export default function Landing() {
                   <h3>{plan.title}</h3>
                   {plan.highlighted && (
                     <div className="planos-card-badge planos-card-badge-animated">
-                      MELHOR VALOR
+                      RECOMENDADO
                     </div>
                   )}
                 </div>
