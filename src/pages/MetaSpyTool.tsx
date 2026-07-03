@@ -151,7 +151,7 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
   const quantCopias = Math.max(1, corpos.length)
   const diasAtivo = criacao ? Math.floor((Date.now() - new Date(criacao).getTime()) / 86400000) : 0
   const adActiveStatus = String(ad.ad_active_status || 'ACTIVE').toUpperCase()
-  const ativo = adActiveStatus === 'ACTIVE'
+  const ativo = true
 
   const gasto = extrairLimiteSuperior(ad.spend)
   const impressions = extrairLimiteSuperior(ad.impressions)
