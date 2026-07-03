@@ -12,7 +12,7 @@ const CAMPOS_API_PRINCIPAL = [
   'ad_creative_link_descriptions', 'ad_creative_link_titles', 'ad_delivery_start_time',
   'ad_delivery_stop_time', 'ad_snapshot_url', 'ad_active_status',
   'ad_creative_thumbnail_url', 'page_id', 'page_name', 'publisher_platforms',
-  'ad_creative_link_url', 'object_story_spec'
+  'ad_creative_link_url', 'object_story_spec', 'spend', 'impressions'
 ].join(',')
 const CAMPOS_API_FALLBACK = [
   'id', 'ad_creation_time', 'ad_creative_bodies', 'ad_delivery_start_time',
@@ -148,10 +148,24 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
   const pageName = String(ad.page_name || '').trim()
   const quantCopias = Math.max(1, corpos.length)
   const diasAtivo = criacao ? Math.floor((Date.now() - new Date(criacao).getTime()) / 86400000) : 0
-  const ativo = true
+  const adActiveStatus = String(ad.ad_active_status || 'ACTIVE').toUpperCase()
+  const ativo = adActiveStatus === 'ACTIVE'
+
+  const gasto = extrairLimiteSuperior(ad.spend)
+  const impressions = extrairLimiteSuperior(ad.impressions)
+
+  const storySpec = ad.object_story_spec as Record<string, unknown> | undefined
+  let tipoMidia = 'imagem'
+  if (storySpec) {
+    if (storySpec.video_data) {
+      tipoMidia = 'video'
+    } else if (storySpec.link_data && (storySpec.link_data as Record<string, unknown>)?.child_attachments) {
+      tipoMidia = 'carrossel'
+    }
+  }
 
   const score = calcularScoreEscala({
-    diasAtivo, impressionsMax: 0, spendMax: 0,
+    diasAtivo, impressionsMax: impressions, spendMax: gasto,
     variacoesAtivas: quantCopias, audienceMax: 0,
     dataFimISO: null, plataformas
   })
@@ -166,7 +180,7 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
     tituloOferta: titulos?.[0] || pageName || '',
     texto: textoCompleto.slice(0, 280),
     textoCompleto,
-    midias: thumbnail ? [{ url: thumbnail, tipo: 'imagem' }] : [],
+    midias: thumbnail ? [{ url: thumbnail, tipo: tipoMidia }] : [],
     dataInicioISO: criacao || null,
     dataFimISO: null,
     dataUltimaAtualizacaoISO: null,
@@ -175,12 +189,12 @@ function normalizarAnuncioApi(ad: Record<string, unknown>): Anuncio | null {
     urlBiblioteca: snapshot,
     objectStorySpec: ad.object_story_spec,
     cta: 'Saiba mais',
-    adActiveStatus: 'ACTIVE',
-    statusTexto: 'Ativo',
+    adActiveStatus,
+    statusTexto: ativo ? 'Ativo' : 'Inativo',
     ativo,
     diasAtivo,
-    spendMax: 0,
-    impressionsMax: 0,
+    spendMax: gasto,
+    impressionsMax: impressions,
     audienceMax: 0,
     variacoesAtivasEstimadas: quantCopias,
     variacoesAtivas: quantCopias,
@@ -399,7 +413,11 @@ export default function MetaSpyTool() {
       lista = lista.filter(a => (a.scoreEscala || 0) >= filtros.scoreMin)
     }
     if (filtros.diasMin > 0) {
-      lista = lista.filter(a => (a.diasAtivo || 0) >= filtros.diasMin || (a.diasAtivo || 0) === 0)
+      lista = lista.filter(a => {
+        if ((a.diasAtivo || 0) >= filtros.diasMin) return true
+        if (!a.dataInicioISO) return true
+        return false
+      })
     }
     if (filtros.statusApi === 'ACTIVE') {
       lista = lista.filter(a => statusAnuncio(a) === 'Ativo')
