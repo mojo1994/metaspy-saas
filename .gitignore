@@ -20,3 +20,5 @@ s.txt
 depoimentos/
 
 pf.txt
+# Local Netlify folder
+.netlify

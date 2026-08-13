@@ -1,12 +1,49 @@
 services:
   - type: web
-    name: metaspy-server
-    env: node
-    buildCommand: npm install --include=dev && npm run build
-    startCommand: npm start
-    workingDirectory: ./
+    name: metaspy-saas
+    runtime: node
+    rootDir: server
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: node index.js
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-      # ATENCAO: Defina APIFY_TOKEN no dashboard do Render!
-      # Pegue o token em apify.txt (nao commitado)
+      # Segredos - preenchidos no dashboard do Render (nao commitados):
+      - key: FB_TOKEN
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: KIRVANO_API_KEY
+        sync: false
+      - key: KIRVANO_WEBHOOK_SECRET
+        sync: false
+      - key: KIRVANO_SUCCESS_URL
+        sync: false
+      - key: KIRVANO_CANCEL_URL
+        sync: false
+      - key: MAILEROO_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: CLOUDFLARE_R2_BUCKET
+        sync: false
+      - key: PAGES_WORKER_HOST
+        sync: false
+      - key: CF_WORKER_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: APIFY_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
