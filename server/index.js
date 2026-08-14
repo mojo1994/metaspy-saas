@@ -48,6 +48,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3001
 const JWT_SECRET = process.env.JWT_SECRET
 const FB_TOKEN = process.env.FB_TOKEN
+
+// ── Bloqueio temporario da integracao com o Facebook Ads ──────────
+// SEM API: mantenha FB_BLOCKED = true. Quando a API voltar, troque para false.
+const FB_BLOCKED = true
+const FB_BLOCKED_MSG = 'O Facebook Ads esta temporariamente indisponivel. A integracao esta em manutencao - tente novamente em breve.'
 const PERFECTPAY_API_KEY = process.env.PERFECTPAY_API_KEY || ''
 const PERFECTPAY_WEBHOOK_SECRET = process.env.PERFECTPAY_WEBHOOK_SECRET || ''
 const PERFECTPAY_SUCCESS_URL = process.env.PERFECTPAY_SUCCESS_URL || 'https://centralspyads.netlify.app/dashboard'
@@ -993,7 +998,7 @@ app.get('/api/ad-extract-image', async (req, res) => {
     } catch (e) { logger.warn({ err: e?.message }, 'Estrat0: objectStorySpec parse falhou') }
   }
 
-  if (id) {
+  if (id && !FB_BLOCKED) {
     try {
       const fields = encodeURIComponent('ad_creative_thumbnail_url,ad_snapshot_url,ad_creative_bodies,object_story_spec,page_id,creative{id,thumbnail_url,image_hash}')
       const apiUrl = `https://graph.facebook.com/v22.0/${id}?fields=${fields}&access_token=${FB_TOKEN}`
@@ -1239,7 +1244,7 @@ app.get('/api/page-picture/:pageId', async (req, res) => {
 // ─── Page profile picture fallback ─────────────────────────────
 async function getPageProfilePic(pageId, adId) {
   const pid = pageId || adId?.split('_')?.[0]
-  if (!pid || !FB_TOKEN) return null
+  if (!pid || !FB_TOKEN || FB_BLOCKED) return null
   try {
     const url = `https://graph.facebook.com/v22.0/${pid}/picture?type=large&redirect=false&access_token=${FB_TOKEN}`
     const resp = await fetchWithTimeout(url, {}, 5000)
@@ -1506,6 +1511,10 @@ app.get('/api/ad-snapshot-image', async (req, res) => {
 
 // ─── Ads Archive (Facebook Graph API proxy) ──────────────────────
 app.get('/api/ads-archive', async (req, res) => {
+  if (FB_BLOCKED) {
+    logger.warn({ path: '/api/ads-archive' }, 'Facebook Ads bloqueado temporariamente')
+    return res.status(503).json({ error: FB_BLOCKED_MSG, blocked: true })
+  }
   try {
     const params = new URLSearchParams()
     for (const [key, val] of Object.entries(req.query)) {
@@ -3296,6 +3305,7 @@ app.listen(PORT, async () => {
         CF_WORKER_URL: process.env.CF_WORKER_URL || 'https://metaspy-host.09santos-felipe.workers.dev',
         PORT,
         FB_TOKEN,
+        FB_BLOCKED,
       })
       logger.info('[redis] conectado e worker iniciado')
     } catch (err) {

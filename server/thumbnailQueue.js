@@ -66,8 +66,8 @@ export function startWorker(env) {
       } catch (e) { console.error(`[thumbnail] Puppeteer local falhou ${adId}:`, e?.message || e) }
     }
 
-    // Fallback: Graph API direct
-    if (!imageUrl && adId && env.FB_TOKEN) {
+    // Fallback: Graph API direct (bloqueado enquanto FB_BLOCKED)
+    if (!imageUrl && adId && env.FB_TOKEN && !env.FB_BLOCKED) {
       try {
         const params = new URLSearchParams({ access_token: env.FB_TOKEN, fields: 'ad_creative_thumbnail_url' })
         const resp = await fetch(`https://graph.facebook.com/v22.0/${adId}?${params.toString()}`, {
