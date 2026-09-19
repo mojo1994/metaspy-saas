@@ -53,10 +53,10 @@ const FB_TOKEN = process.env.FB_TOKEN
 // SEM API: mantenha FB_BLOCKED = true. Quando a API voltar, troque para false.
 const FB_BLOCKED = true
 const FB_BLOCKED_MSG = 'O Facebook Ads esta temporariamente indisponivel. A integracao esta em manutencao - tente novamente em breve.'
-const PERFECTPAY_API_KEY = process.env.PERFECTPAY_API_KEY || ''
-const PERFECTPAY_WEBHOOK_SECRET = process.env.PERFECTPAY_WEBHOOK_SECRET || ''
-const PERFECTPAY_SUCCESS_URL = process.env.PERFECTPAY_SUCCESS_URL || 'https://centralspyads.netlify.app/dashboard'
-const PERFECTPAY_CANCEL_URL = process.env.PERFECTPAY_CANCEL_URL || 'https://centralspyads.netlify.app/planos'
+const KIRVANO_API_KEY = process.env.KIRVANO_API_KEY || ''
+const KIRVANO_WEBHOOK_SECRET = process.env.KIRVANO_WEBHOOK_SECRET || ''
+const KIRVANO_SUCCESS_URL = process.env.KIRVANO_SUCCESS_URL || 'https://centralspyads.netlify.app/dashboard'
+const KIRVANO_CANCEL_URL = process.env.KIRVANO_CANCEL_URL || 'https://centralspyads.netlify.app/planos'
 const HMAC_SECRET = process.env.HMAC_SECRET || JWT_SECRET
 const IS_RENDER = !!process.env.RENDER || process.env.NODE_ENV === 'production'
 const DATABASE_URL = process.env.DATABASE_URL
@@ -121,14 +121,11 @@ const PLAN_CONFIG = {
   premium: { price: 97.00, days: 30 },
 }
 
-const PERFECTPAY_PRODUCT_MAP = {
-  'basico': 'PPU38CQDO4S',
-  'gold': 'PPU38CQDO5K',
-  'premium': 'PPU38CQDO5L',
+const KIRVANO_PRODUCT_REVERSE = {
+  '41844816-4723-4582-890b-43d8f5cba641': 'basico',
+  'fc09b294-8956-460d-9970-0c576b7a7f01': 'gold',
+  '0ed31f92-dfa3-4cb5-86b6-47869ebe285e': 'premium',
 }
-const PERFECTPAY_PRODUCT_REVERSE = Object.fromEntries(
-  Object.entries(PERFECTPAY_PRODUCT_MAP).map(([k, v]) => [v, k])
-)
 
 const PLAN_FEATURES = {
   nenhum: { clone: false, minerador: false, cloaker: false, pagevault: true, analise: false, cleaner: false, bypass: false },
@@ -1540,11 +1537,11 @@ app.get('/api/ads-archive', async (req, res) => {
   }
 })
 
-// ─── Subscription Routes (PerfectPay) ─────────────────────────────
-const PERFECTPAY_STATIC_LINKS = {
-  basico: 'https://go.perfectpay.com.br/PPU38CQDO4S',
-  gold: 'https://go.perfectpay.com.br/PPU38CQDO5K',
-  premium: 'https://go.perfectpay.com.br/PPU38CQDO5L',
+// ─── Subscription Routes (Kirvano) ─────────────────────────────────
+const KIRVANO_STATIC_LINKS = {
+  basico: 'https://pay.kirvano.com/41844816-4723-4582-890b-43d8f5cba641',
+  gold: 'https://pay.kirvano.com/fc09b294-8956-460d-9970-0c576b7a7f01',
+  premium: 'https://pay.kirvano.com/0ed31f92-dfa3-4cb5-86b6-47869ebe285e',
 }
 
 app.post('/api/subscription/create-checkout', authMiddleware, validate(checkoutSchema), async (req, res) => {
@@ -1552,7 +1549,7 @@ app.post('/api/subscription/create-checkout', authMiddleware, validate(checkoutS
     const { plan } = req.body
     const config = PLAN_CONFIG[plan]
     if (!config) return res.status(400).json({ error: 'Plano invalido' })
-    const checkoutUrl = PERFECTPAY_STATIC_LINKS[plan]
+    const checkoutUrl = KIRVANO_STATIC_LINKS[plan]
     if (!checkoutUrl) return res.status(500).json({ error: 'Link nao configurado' })
     await run('UPDATE users SET pending_plan = $1 WHERE id = $2', [plan, req.user.id])
 
@@ -1572,35 +1569,39 @@ app.post('/api/subscription/create-checkout', authMiddleware, validate(checkoutS
   }
 })
 
-app.post('/api/subscription/webhook', async (req, res) => {
+const KIRVANO_APPROVED_EVENTS = ['payment.approved', 'subscription.approved', 'payment.confirmed', 'sale.created', 'sale.approved', 'payment_paid', 'recurrence_payment_success', 'aprovado', 'approved', 'confirmado', 'completed', 'paid', 'pix_paid']
+const KIRVANO_CANCELED_EVENTS = ['subscription.canceled', 'subscription.cancelled', 'payment.refunded', 'payment.refund', 'payment.declined', 'payment.canceled', 'payment.cancelled', 'chargeback.confirmed', 'chargeback', 'recurrence_payment_canceled', 'cancelado', 'canceled', 'reembolsado', 'refunded', 'rejeitado', 'rejected']
+
+async function handleKirvanoWebhook(req, res) {
   try {
     const body = req.body || {}
+    const event = body.event && typeof body.event === 'object' ? body.event : body
 
-    // ── Validacao: PerfectPay envia TOKEN no body ──
-    const receivedToken = body.TOKEN || body.token || req.headers['x-perfectpay-token'] || ''
-    if (receivedToken !== PERFECTPAY_WEBHOOK_SECRET) {
-      logger.warn({ receivedToken }, 'Webhook: token invalido')
+    // ── Validacao: rejeita apenas se a Kirvano enviar um token diferente de KIRVANO_WEBHOOK_SECRET ──
+    const receivedToken = body.token || body.TOKEN || event.token || req.headers['x-webhook-token'] || req.headers['x-kirvano-token'] || req.headers['x-access-token'] || ''
+    if (KIRVANO_WEBHOOK_SECRET && receivedToken && receivedToken !== KIRVANO_WEBHOOK_SECRET) {
+      logger.warn({ receivedToken }, 'Webhook Kirvano: token invalido')
       return res.status(401).json({ error: 'Invalid token' })
     }
 
-    const eventId = body.transacao || body.id || randomUUID()
-    const eventType = body.statusPagamento || body.status || ''
-    const customerEmail = (body.clienteEmail || body.email || '').toLowerCase().trim()
-    const customerName = body.clienteNome || body.nome || ''
-    const amount = parseFloat(body.valor || body.valorTransacao || '0')
-    const codProduto = body.codProduto || body.produto || ''
-    const planFromProduct = PERFECTPAY_PRODUCT_REVERSE[codProduto]
+    const eventName = String(event.event || event.type || event.status || event.statusPagamento || body.statusPagamento || body.status || '').toLowerCase()
+    const eventId = String(event.id || event.transaction_id || event.payment_id || event.subscription_id || event.id_transacao || body.id || body.transacao || randomUUID())
+    const customerEmail = (event.customer?.email || event.buyer?.email || event.email || body.clienteEmail || body.email || '').toLowerCase().trim()
+    const customerName = event.customer?.name || event.buyer?.name || event.name || body.clienteNome || body.nome || ''
+    const amount = parseFloat(event.amount || event.total || event.valor || event.valorTransacao || body.valor || '0')
+    const codProduto = String(event.product?.uuid || event.product?.id || event.product_id || event.productExternalId || event.codProduto || '')
+    const planFromProduct = KIRVANO_PRODUCT_REVERSE[codProduto] || KIRVANO_PRODUCT_REVERSE[codProduto.split('/').pop()]
 
     // Log webhook for debug inspection (keep last 50)
-    const logEntry = { id: eventId?.slice(0, 20), event: eventType, time: new Date().toISOString(), email: customerEmail, produto: codProduto }
+    const logEntry = { id: eventId.slice(0, 20), event: eventName, time: new Date().toISOString(), email: customerEmail, produto: codProduto }
     WEBHOOK_LOG.unshift(logEntry)
     if (WEBHOOK_LOG.length > 50) WEBHOOK_LOG.length = 50
 
     // Idempotency: deduplicate webhook events
-    const idempotencyKey = createHash('sha256').update(`webhook:${eventId}:${eventType}`).digest('hex')
+    const idempotencyKey = createHash('sha256').update(`webhook:${eventId}:${eventName}`).digest('hex')
     const existing = await one('SELECT key FROM idempotency_keys WHERE key = $1', [idempotencyKey])
     if (existing) {
-      logger.info({ eventId, event: eventType }, 'Webhook duplicado ignorado (idempotency)')
+      logger.info({ eventId, event: eventName }, 'Webhook duplicado ignorado (idempotency)')
       return res.json({ received: true, dedup: true })
     }
     const now = new Date()
@@ -1608,74 +1609,69 @@ app.post('/api/subscription/webhook', async (req, res) => {
     await run('INSERT INTO idempotency_keys (key, expires_at, created_at) VALUES ($1, $2, $3)',
       [idempotencyKey, expiresAt.toISOString(), now.toISOString()]).catch(() => {})
 
-    logger.info({ event: eventType, eventId: eventId?.slice(0, 20), email: customerEmail }, 'Webhook PerfectPay recebido')
+    logger.info({ event: eventName, eventId: eventId.slice(0, 20), email: customerEmail }, 'Webhook Kirvano recebido')
 
-    const isApproved = ['aprovado', 'approved', 'confirmado', 'completed', 'paid'].includes(eventType.toLowerCase())
-    const isCanceled = ['cancelado', 'canceled', 'reembolsado', 'refunded', 'rejeitado', 'rejected', 'chargeback'].includes(eventType.toLowerCase())
+    const isApproved = KIRVANO_APPROVED_EVENTS.some((k) => eventName.includes(k))
+    const isCanceled = KIRVANO_CANCELED_EVENTS.some((k) => eventName.includes(k))
 
-    // ── Find user by email ──
-    async function findUserFromWebhook() {
-      if (!customerEmail) return null
-      const u = await one('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [customerEmail])
-      if (u) return { userId: u.id, source: 'email' }
-      logger.warn({ email: customerEmail }, 'Webhook PerfectPay: email nao encontrado no banco')
-      return null
-    }
+    if (isApproved || isCanceled) {
+      // ── Identifica o usuario: metadata.user_id > email do cliente ──
+      const metadata = event.metadata || body.metadata || {}
+      let userId = metadata.user_id || metadata.userId || body.user_id || ''
+      let source = 'metadata'
+      if (!userId && customerEmail) {
+        const u = await one('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [customerEmail])
+        if (u) {
+          userId = u.id
+          source = 'email'
+        }
+      }
 
-    if (isApproved) {
-      const found = await findUserFromWebhook()
-      if (found) {
-        const { userId, source } = found
-        logger.info({ userId, source, eventId: eventId?.slice(0, 20) }, 'Webhook PerfectPay: usuario identificado')
-        const user = await one('SELECT id, name, email, pending_plan FROM users WHERE id = $1', [userId])
+      if (userId) {
+        if (isApproved) {
+          logger.info({ userId, source, eventId: eventId.slice(0, 20) }, 'Webhook Kirvano: usuario identificado')
+          const user = await one('SELECT id, name, email, pending_plan FROM users WHERE id = $1', [userId])
 
-        // Prioridade: pending_plan > plano mapeado pelo codProduto > 'nenhum'
-        let plan = user?.pending_plan || planFromProduct || 'nenhum'
-        const config = PLAN_CONFIG[plan]
-        if (config) {
-          const expiry = new Date(now.getTime() + config.days * 24 * 60 * 60 * 1000)
-          const expiryStr = expiry.toISOString().replace('T', ' ').slice(0, 19)
-          await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4, pending_plan = NULL WHERE id = $5',
-            ['active', eventId, expiryStr, plan, userId])
+          // Prioridade: pending_plan > plano mapeado pelo produto > 'nenhum'
+          let plan = user?.pending_plan || planFromProduct || 'nenhum'
+          const config = PLAN_CONFIG[plan]
+          if (config) {
+            const expiry = new Date(now.getTime() + config.days * 24 * 60 * 60 * 1000)
+            const expiryStr = expiry.toISOString().replace('T', ' ').slice(0, 19)
+            await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4, pending_plan = NULL WHERE id = $5',
+              ['active', eventId, expiryStr, plan, userId])
 
-          if (user?.email) {
-            try {
-              await sendEmail({
-                to: user.email,
-                subject: 'MetaSpy - Pagamento confirmado!',
-                html: purchaseConfirmationEmailHtml({ name: user.name || user.email, plan, days: config.days }),
-              })
-            } catch (emailErr) {
-              logger.error({ err: emailErr }, 'Erro ao enviar email de confirmacao')
+            if (user?.email) {
+              try {
+                await sendEmail({
+                  to: user.email,
+                  subject: 'MetaSpy - Pagamento confirmado!',
+                  html: purchaseConfirmationEmailHtml({ name: user.name || user.email, plan, days: config.days }),
+                })
+              } catch (emailErr) {
+                logger.error({ err: emailErr }, 'Erro ao enviar email de confirmacao')
+              }
             }
-          }
 
-          logger.info({ userId, plan, expiry: expiryStr }, 'Webhook PerfectPay: plano ativado com sucesso')
-        } else {
-          logger.warn({ userId, plan }, 'Webhook PerfectPay: plano invalido')
+            logger.info({ userId, plan, expiry: expiryStr }, 'Webhook Kirvano: plano ativado com sucesso')
+          } else {
+            logger.warn({ userId, plan }, 'Webhook Kirvano: plano invalido')
+          }
+        } else if (isCanceled) {
+          await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4 WHERE id = $5',
+            ['canceled', '', null, 'nenhum', userId])
+          logger.info({ userId, source, event: eventName }, 'Webhook Kirvano: assinatura cancelada')
         }
       } else {
-        logger.error({ eventType, eventId: eventId?.slice(0, 20), email: customerEmail }, 'Webhook PerfectPay: nao foi possivel identificar usuario')
-        try {
-          await run('INSERT INTO webhook_failures (id, submission_id, attempt_count, last_error, created_at) VALUES ($1, $2, $3, $4, $5)',
-            [randomUUID(), eventId || 'unknown', 1, 'Usuario nao identificado: email=' + customerEmail, new Date().toISOString()])
-        } catch {}
-      }
-    }
-
-    if (isCanceled) {
-      const found = await findUserFromWebhook()
-      if (found) {
-        const { userId } = found
-        await run('UPDATE users SET subscription_status = $1, subscription_id = $2, subscription_expiry = $3, plan = $4 WHERE id = $5',
-          ['canceled', '', null, 'nenhum', userId])
-        logger.info({ userId, eventType }, 'Webhook PerfectPay: assinatura cancelada')
+        logger.warn({ event: eventName, email: customerEmail }, 'Webhook Kirvano: nao foi possivel identificar usuario')
+        await run('INSERT INTO webhook_failures (id, submission_id, attempt_count, last_error, created_at) VALUES ($1, $2, $3, $4, $5)',
+          [randomUUID(), String(eventId || 'unknown').slice(0, 50), 1, 'Usuario nao identificado: email=' + (customerEmail || 'n/a'), new Date().toISOString()]).catch(() => {})
       }
     }
 
     res.json({ received: true })
   } catch (err) {
-    logger.error({ err }, 'Erro no webhook PerfectPay')
+    logger.error({ err }, 'Erro no webhook Kirvano')
     try {
       const safe = JSON.stringify(req?.body).slice(0, 500) || 'unknown'
       await run('INSERT INTO webhook_failures (id, submission_id, attempt_count, last_error, created_at) VALUES ($1, $2, $3, $4, $5)',
@@ -1683,7 +1679,10 @@ app.post('/api/subscription/webhook', async (req, res) => {
     } catch {}
     res.json({ received: true })
   }
-})
+}
+
+app.post('/api/subscription/webhook', handleKirvanoWebhook)
+app.post('/api/kirvano-webhook', handleKirvanoWebhook)
 
 app.get('/api/subscription/status', authMiddleware, async (req, res) => {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
@@ -3312,7 +3311,7 @@ app.listen(PORT, async () => {
       logger.warn({ err: err.message }, '[redis] falha ao conectar')
     }
   }
-  logger.info({ port: PORT, frontend: process.env.FRONTEND_URL || '*', perfectpay: !!PERFECTPAY_API_KEY, facebook: !!FB_TOKEN, db: 'PostgreSQL', env: IS_RENDER ? 'Render' : 'dev', redis: !!redisClient }, 'MetaSpy Server iniciado')
+  logger.info({ port: PORT, frontend: process.env.FRONTEND_URL || '*', kirvano: !!KIRVANO_API_KEY, facebook: !!FB_TOKEN, db: 'PostgreSQL', env: IS_RENDER ? 'Render' : 'dev', redis: !!redisClient }, 'MetaSpy Server iniciado')
 })
 
 // Keep-Alive: ping a cada 60s para evitar cold start no Render
