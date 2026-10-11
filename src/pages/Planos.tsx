@@ -35,8 +35,8 @@ const DEPO_IMAGENS = [
 
 const PLAN_CARD_DATA = [
   { key: 'basico', current: 'R$ 39,90', features: FEATURE_KEYS.basico, className: 'plan-card-basic', highlighted: false },
-  { key: 'premium', current: 'R$ 97,00', original: 'R$ 397', features: FEATURE_KEYS.premium, className: 'plan-card-premium', highlighted: true },
-  { key: 'gold', current: 'R$ 57,90', features: FEATURE_KEYS.gold, className: 'plan-card-gold', highlighted: false },
+  { key: 'gold', current: 'R$ 57,90', features: FEATURE_KEYS.gold, className: 'plan-card-gold', highlighted: true },
+  { key: 'premium', current: 'R$ 197,00', original: 'R$ 397', features: FEATURE_KEYS.premium, className: 'plan-card-premium', highlighted: false },
 ] as const
 
 function revealStyle(delayMs: number): CSSProperties {
@@ -339,10 +339,10 @@ export default function Planos() {
                 <span className="planos-plan-name">{t('planos.plan.basicoTitle')}</span>
               </div>
               <div className="planos-table-cell planos-plan-col planos-plan-col-highlight" role="columnheader">
-                <span className="planos-plan-name">{t('planos.plan.premiumTitle')}</span>
-              </div>
-              <div className="planos-table-cell planos-plan-col" role="columnheader">
                 <span className="planos-plan-name">{t('planos.plan.goldTitle')}</span>
+              </div>
+              <div className="planos-table-cell planos-table-plan-col" role="columnheader">
+                <span className="planos-plan-name">{t('planos.plan.premiumTitle')}</span>
               </div>
             </div>
 
@@ -366,10 +366,10 @@ export default function Planos() {
                     {basic ? <SealCheck size={16} weight="fill" /> : <Minus size={16} weight="bold" />}
                   </div>
                   <div className="planos-table-cell planos-table-flag planos-table-flag-highlight" role="cell">
-                    {premium ? <SealCheck size={16} weight="fill" /> : <Minus size={16} weight="bold" />}
+                    {gold ? <SealCheck size={16} weight="fill" /> : <Minus size={16} weight="bold" />}
                   </div>
                   <div className="planos-table-cell planos-table-flag" role="cell">
-                    {gold ? <SealCheck size={16} weight="fill" /> : <Minus size={16} weight="bold" />}
+                    {premium ? <SealCheck size={16} weight="fill" /> : <Minus size={16} weight="bold" />}
                   </div>
                 </div>
               )
