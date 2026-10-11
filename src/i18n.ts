@@ -50,7 +50,6 @@ i18n
     },
     fallbackLng: 'pt-BR',
     supportedLngs: ['pt-BR', 'en', 'es', 'fr', 'de', 'it'],
-    nonExplicitSupportedLngs: true,
     load: 'currentOnly',
     detection: {
       order: ['localStorage', 'navigator'],
