@@ -343,4 +343,20 @@ export async function initSchema() {
     ]
   ).catch(() => {})
 
+  // ── Front 5: jobs de clone profundo (TTL 7 dias) ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS clone_jobs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      url TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running',
+      output_path TEXT,
+      size_bytes BIGINT DEFAULT 0,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_clone_jobs_user ON clone_jobs(user_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_clone_jobs_expires ON clone_jobs(status, expires_at)`).catch(() => {})
+
 }

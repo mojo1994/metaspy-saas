@@ -5,10 +5,10 @@ import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import multer from 'multer'
 import { randomUUID, createHash, createHmac, createCipheriv, createDecipheriv, timingSafeEqual, randomInt } from 'node:crypto'
-import { join, dirname, extname } from 'node:path'
+import { join, dirname, extname, resolve, sep } from 'node:path'
 import { freemem } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync, rmSync } from 'node:fs'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
@@ -40,6 +40,7 @@ async function getFFmpeg() {
 }
 import { initDb, initSchema, one, query, run } from './db.js'
 import { uploadPageToR2, downloadPageFromR2, deletePageFromR2, getPageContentFromR2, getWorkerUrl } from './cloudflareStorage.js'
+import { validateExternalUrl } from './clone.js'
 
 const USE_CF_STORAGE = !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN)
 
@@ -971,18 +972,39 @@ app.post('/api/auth/verify-code', authMiddleware, async (req, res) => {
 })
 
 // ─── Clone Routes ────────────────────────────────────────────────
+// ─── Concorrencia por usuario + helpers ──────────────────────────
+const MAX_JOBS_PER_USER = 2
+const activeJobs = new Map()
+function acquireJobSlot(userId) {
+  const n = activeJobs.get(userId) || 0
+  if (n >= MAX_JOBS_PER_USER) return false
+  activeJobs.set(userId, n + 1)
+  return true
+}
+function releaseJobSlot(userId) {
+  const n = activeJobs.get(userId) || 0
+  if (n <= 1) activeJobs.delete(userId)
+  else activeJobs.set(userId, n - 1)
+}
+
 app.post('/api/clone', authMiddleware, uploadLimiter, validate(cloneSchema), async (req, res) => {
   const { url } = req.body
-  if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
+  if (!url) return res.status(400).json({ error: 'URL nao fornecida', code: 'MISSING_URL' })
   const features = PLAN_FEATURES[req.user.plan]
-  if (!features?.clone) return res.status(403).json({ error: 'Assinatura necessaria' })
+  if (!features?.clone) return res.status(403).json({ error: 'Assinatura necessaria', code: 'NO_PLAN' })
+  const check = await validateExternalUrl(url)
+  if (!check.ok) return res.status(400).json({ error: check.message, code: check.code })
+  if (!acquireJobSlot(req.user.id)) return res.status(429).json({ error: 'Voce ja tem clones em andamento. Aguarde finalizar.', code: 'TOO_MANY_JOBS' })
   try {
     const { default: clonePage } = await import('./clone.js')
-    const result = await clonePage(url, { fbToken: FB_TOKEN, userId: req.user.id })
+    const result = await clonePage(check.url, { fbToken: FB_TOKEN, userId: req.user.id })
     await run('UPDATE users SET clones_used = clones_used + 1 WHERE id = $1', [req.user.id])
     res.json(result)
   } catch (err) {
-    res.status(500).json({ error: 'Erro ao clonar pagina' })
+    logger.error({ err }, 'clone error')
+    res.status(err.code ? 400 : 500).json({ error: err.code ? err.message : 'Erro ao clonar pagina', code: err.code || 'CLONE_ERROR' })
+  } finally {
+    releaseJobSlot(req.user.id)
   }
 })
 
@@ -998,18 +1020,41 @@ function checkFeature(req, res, feature) {
 const CLONE_ZIPS_DIR = join(CLONES_DIR, '_zips')
 if (!existsSync(CLONE_ZIPS_DIR)) mkdirSync(CLONE_ZIPS_DIR, { recursive: true })
 const CLONE_ZIP_CACHE = new Map()
+const CLONE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+function dirSizeBytes(dir) {
+  let total = 0
+  try {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name)
+      const st = statSync(full)
+      if (st.isDirectory()) total += dirSizeBytes(full)
+      else total += st.size
+    }
+  } catch {}
+  return total
+}
 
 app.post('/api/clone/deep', authMiddleware, uploadLimiter, async (req, res) => {
   const blocked = checkFeature(req, res, 'bypass')
   if (blocked) return blocked
+  const { url } = req.body
+  if (!url) return res.status(400).json({ error: 'URL nao fornecida', code: 'MISSING_URL' })
+  const check = await validateExternalUrl(url)
+  if (!check.ok) return res.status(400).json({ error: check.message, code: check.code })
+  if (!acquireJobSlot(req.user.id)) return res.status(429).json({ error: 'Voce ja tem clones em andamento. Aguarde finalizar.', code: 'TOO_MANY_JOBS' })
+
+  const id = randomUUID()
+  const dir = join(CLONES_DIR, id)
+  const nowIso = new Date().toISOString().replace('T', ' ').slice(0, 19)
+  const expiresIso = new Date(Date.now() + CLONE_TTL_MS).toISOString().replace('T', ' ').slice(0, 19)
   try {
-    const { url } = req.body
-    if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
-    const id = randomUUID()
-    const dir = join(CLONES_DIR, id)
     mkdirSync(dir, { recursive: true })
+    await run('INSERT INTO clone_jobs (id, user_id, url, status, output_path, size_bytes, created_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, req.user.id, check.url, 'running', dir, 0, nowIso, expiresIso]).catch(() => {})
+
     const { downloadSite, buildFileTree } = await import('./clone.js')
-    await downloadSite(url, { outputDir: dir, fbToken: FB_TOKEN, deep: true })
+    await downloadSite(check.url, { outputDir: dir, fbToken: FB_TOKEN, deep: true })
     const files = buildFileTree(dir)
 
     const zipPath = join(CLONE_ZIPS_DIR, `${id}.zip`)
@@ -1026,10 +1071,16 @@ app.post('/api/clone/deep', authMiddleware, uploadLimiter, async (req, res) => {
     CLONE_ZIP_CACHE.set(id, zipPath)
     setTimeout(() => CLONE_ZIP_CACHE.delete(id), 300_000)
 
-    res.json({ id, cloneId: id, path: dir, files, downloadUrl: `/api/clone/deep/download/${id}` })
+    const size = dirSizeBytes(dir)
+    await run(`UPDATE clone_jobs SET status = 'done', size_bytes = $1 WHERE id = $2`, [size, id]).catch(() => {})
+
+    res.json({ id, cloneId: id, path: dir, files, sizeBytes: size, downloadUrl: `/api/clone/deep/download/${id}` })
   } catch (err) {
     logger.error({ err }, 'clone-deep POST error')
-    res.status(500).json({ error: 'Erro ao clonar site' })
+    await run(`UPDATE clone_jobs SET status = 'error' WHERE id = $1`, [id]).catch(() => {})
+    res.status(err.code ? 400 : 500).json({ error: err.code ? err.message : 'Erro ao clonar site', code: err.code || 'CLONE_ERROR' })
+  } finally {
+    releaseJobSlot(req.user.id)
   }
 })
 
@@ -1078,13 +1129,42 @@ app.get('/api/clone/deep/download/:id', authMiddleware, async (req, res) => {
   }
 })
 
+// ─── Limpeza de clones expirados (TTL 7 dias) ────────────────────
+async function cleanupExpiredClones() {
+  try {
+    const nowIso = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    const expired = await query(
+      `SELECT id, output_path FROM clone_jobs WHERE status != 'deleted' AND expires_at <= $1`,
+      [nowIso]
+    )
+    for (const job of expired) {
+      try {
+        if (job.output_path && existsSync(job.output_path)) rmSync(job.output_path, { recursive: true, force: true })
+        const zip = join(CLONE_ZIPS_DIR, `${job.id}.zip`)
+        if (existsSync(zip)) unlinkSync(zip)
+        CLONE_ZIP_CACHE.delete(job.id)
+      } catch (err) {
+        logger.warn({ err, cloneId: job.id }, 'cleanupExpiredClones: falha ao remover')
+      }
+      await run(`UPDATE clone_jobs SET status = 'deleted' WHERE id = $1`, [job.id]).catch(() => {})
+    }
+    if (expired.length) logger.info({ count: expired.length }, 'cleanupExpiredClones: removidos')
+  } catch (err) {
+    logger.warn({ err }, 'cleanupExpiredClones error')
+  }
+}
+setTimeout(cleanupExpiredClones, 20000)
+setInterval(cleanupExpiredClones, 6 * 60 * 60 * 1000)
+
 // ─── Page Fetch (CORS bypass) ────────────────────────────────────
 app.get('/api/page-fetch', authMiddleware, async (req, res) => {
   if (req.user.plan === 'nenhum') return res.status(403).json({ error: 'Assinatura necessaria' })
   const { url } = req.query
   if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
+  const check = await validateExternalUrl(url.toString())
+  if (!check.ok) return res.status(400).json({ error: check.message, code: check.code })
   try {
-    const resp = await fetchWithTimeout(url.toString(), { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' } }, 30000)
+    const resp = await fetchWithTimeout(check.url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' } }, 30000)
     if (!resp.ok) return res.status(resp.status).json({ error: `HTTP ${resp.status}` })
     const html = await resp.text()
     res.type('text/html; charset=utf-8').send(html)
@@ -2695,6 +2775,23 @@ app.get('/api/health', (req, res) => {
 const CLEANER_DIR = process.env.TEMP_UPLOAD_DIR || '/tmp/metaspy_cleaner'
 if (!existsSync(CLEANER_DIR)) mkdirSync(CLEANER_DIR, { recursive: true })
 
+const CLEANER_TTL_MS = 6 * 60 * 60 * 1000
+
+function cleanOldFiles() {
+  try {
+    const now = Date.now()
+    for (const name of readdirSync(CLEANER_DIR)) {
+      const full = join(CLEANER_DIR, name)
+      try {
+        const st = statSync(full)
+        if (st.isFile() && now - st.mtimeMs > CLEANER_TTL_MS) unlinkSync(full)
+      } catch {}
+    }
+  } catch {}
+}
+setTimeout(cleanOldFiles, 10000)
+setInterval(cleanOldFiles, 3 * 60 * 60 * 1000)
+
 const cleanerStorage = multer.diskStorage({
   destination: CLEANER_DIR,
   filename: (req, file, cb) => {
@@ -2720,20 +2817,37 @@ async function cleanMetadata(filePath, mimeType) {
 
   const originalMeta = await exiftool.read(filePath).catch(() => ({}))
 
-  if (isVideo) {
-    await exiftool.write(filePath, { All: '', overwrite_original: true })
-    try { renameSync(filePath, outputPath) } catch { copyFileSync(filePath, outputPath) }
-  } else {
-    await exiftool.write(filePath, {
-      All: '', overwrite_original: true,
-      GPS: '', EXIF: '', IPTC: '', XMP: '',
-      Comment: '', Artist: '', Copyright: ''
-    })
-    try { renameSync(filePath, outputPath) } catch { copyFileSync(filePath, outputPath) }
+  const cleanArgs = isVideo
+    ? { All: '', overwrite_original: true }
+    : { All: '', overwrite_original: true, GPS: '', EXIF: '', IPTC: '', XMP: '', Comment: '', Artist: '', Copyright: '' }
+
+  try {
+    await exiftool.write(filePath, cleanArgs)
+  } catch (err) {
+    logger.error({ err }, 'exiftool write falhou')
+    throw Object.assign(new Error('Falha ao remover metadados do arquivo.'), { code: 'EXIFTOOL_FAIL' })
   }
 
-  const remainingMeta = await exiftool.read(outputPath).catch(() => ({}))
-  return { cleanedPath: outputPath, originalMeta, remainingMeta, tagsRemoved: Object.keys(originalMeta).length - Object.keys(remainingMeta).length }
+  const geoRe = /gps|location|latitude|longitude/i
+  let remainingMeta = await exiftool.read(filePath).catch(() => ({}))
+  let hasGeo = Object.keys(remainingMeta).some((k) => geoRe.test(k))
+
+  // Segunda passada focada em geolocalizacao
+  if (hasGeo) {
+    try { await exiftool.write(filePath, { All: '', overwrite_original: true }) } catch {}
+    remainingMeta = await exiftool.read(filePath).catch(() => ({}))
+    hasGeo = Object.keys(remainingMeta).some((k) => geoRe.test(k))
+  }
+
+  try { renameSync(filePath, outputPath) } catch { copyFileSync(filePath, outputPath) }
+
+  return {
+    cleanedPath: outputPath,
+    originalMeta,
+    remainingMeta,
+    tagsRemoved: Math.max(0, Object.keys(originalMeta).length - Object.keys(remainingMeta).length),
+    hasGeo,
+  }
 }
 
 app.post('/api/cleaner/upload', authMiddleware, uploadLimiter, async (req, res) => {
@@ -2754,11 +2868,25 @@ app.post('/api/cleaner/upload', authMiddleware, uploadLimiter, async (req, res) 
         return res.status(413).json({ error: `Arquivo excede o limite. ${isVideo ? 'Video' : 'Imagem'} max: ${maxSize / (1024*1024)} MB.` })
       }
 
+      if (!acquireJobSlot(req.user.id)) {
+        try { unlinkSync(file.path) } catch {}
+        return res.status(429).json({ error: 'Muitos processamentos simultaneos. Aguarde finalizar.', code: 'TOO_MANY_JOBS' })
+      }
+
+      cleanOldFiles()
+      let cleanedPath = null
       try {
-        const { cleanedPath, originalMeta, remainingMeta, tagsRemoved } = await cleanMetadata(file.path, file.mimetype)
+        const result = await cleanMetadata(file.path, file.mimetype)
+        cleanedPath = result.cleanedPath
+
+        if (result.hasGeo) {
+          try { unlinkSync(cleanedPath) } catch {}
+          return res.status(422).json({ error: 'Nao foi possivel remover todos os dados de localizacao. Arquivo rejeitado por seguranca.' })
+        }
+
         const assetId = randomUUID()
         await run(`INSERT INTO cleaned_assets (id, user_id, original_name, file_size_bytes, mime_type, cleaned_file_path, metadata_before, metadata_after, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [assetId, req.user.id, file.originalname, file.size, file.mimetype, cleanedPath, JSON.stringify(originalMeta), JSON.stringify(remainingMeta), new Date().toISOString()])
+          [assetId, req.user.id, file.originalname, file.size, file.mimetype, cleanedPath, JSON.stringify(result.originalMeta), JSON.stringify(result.remainingMeta), new Date().toISOString()])
 
         const stat = statSync(cleanedPath)
         res.json({
@@ -2766,11 +2894,18 @@ app.post('/api/cleaner/upload', authMiddleware, uploadLimiter, async (req, res) 
           originalName: file.originalname,
           cleanedSize: stat.size,
           downloadUrl: `/api/cleaner/download/${assetId}`,
-          metadataRemoved: tagsRemoved
+          metadataRemoved: result.tagsRemoved,
+          expiresAt: new Date(Date.now() + CLEANER_TTL_MS).toISOString(),
         })
       } catch (cleanErr) {
         logger.error({ err: cleanErr }, 'Clean error')
+        if (cleanErr.code === 'EXIFTOOL_FAIL') {
+          return res.status(422).json({ error: cleanErr.message, code: 'EXIFTOOL_FAIL' })
+        }
         res.status(500).json({ error: 'Erro ao limpar metadados.' })
+      } finally {
+        try { if (existsSync(file.path)) unlinkSync(file.path) } catch {}
+        releaseJobSlot(req.user.id)
       }
     })
   } catch (error) {
@@ -2836,6 +2971,38 @@ async function createPageRecord(userId, title, customSlug, cfUrl) {
   return { id, slug }
 }
 
+const MAX_PAGE_FILES = 2000
+const MAX_PAGE_UNCOMPRESSED = 500 * 1024 * 1024
+const MAX_PAGE_RATIO = 100
+
+function safeJoin(baseDir, entryPath) {
+  const base = resolve(baseDir)
+  const target = resolve(base, entryPath)
+  if (target !== base && !target.startsWith(base + sep)) {
+    throw Object.assign(new Error('Entrada invalida no pacote (path traversal).'), { code: 'ZIP_SLIP' })
+  }
+  return target
+}
+
+function detectMimeFromMagic(buf) {
+  if (!buf || buf.length < 4) return null
+  const hex = buf.slice(0, 8).toString('hex')
+  if (hex.startsWith('89504e47')) return 'image/png'
+  if (hex.startsWith('ffd8ff')) return 'image/jpeg'
+  if (hex.startsWith('47494638')) return 'image/gif'
+  if (buf.slice(0, 4).toString('ascii') === 'RIFF' && buf.slice(8, 12).toString('ascii') === 'WEBP') return 'image/webp'
+  if (hex.startsWith('25504446')) return 'application/pdf'
+  if (hex.startsWith('504b0304')) return 'application/zip'
+  if (hex.startsWith('774f4646')) return 'font/woff'
+  if (hex.startsWith('774f4632')) return 'font/woff2'
+  if (hex.startsWith('00010000')) return 'font/ttf'
+  if (hex.startsWith('4f54544f')) return 'font/otf'
+  const head = buf.slice(0, 1024).toString('utf-8').trimStart().toLowerCase()
+  if (head.startsWith('<!doctype html') || head.startsWith('<html')) return 'text/html'
+  if (head.startsWith('<?xml') || head.startsWith('<svg')) return 'image/svg+xml'
+  return null
+}
+
 app.post('/api/pages/upload', authMiddleware, uploadLimiter, async (req, res, next) => {
   const blocked = checkFeature(req, res, 'pagevault')
   if (blocked) return blocked
@@ -2865,6 +3032,23 @@ app.post('/api/pages/upload', authMiddleware, uploadLimiter, async (req, res, ne
     if (files.length === 1 && files[0].originalname.endsWith('.zip')) {
       const zip = new AdmZip(files[0].buffer)
       entries = zip.getEntries().filter(e => !e.isDirectory)
+      if (entries.length > MAX_PAGE_FILES) {
+        return res.status(400).json({ error: `O ZIP contem arquivos demais (maximo ${MAX_PAGE_FILES}).` })
+      }
+      let totalUncompressed = 0
+      let totalCompressed = 0
+      for (const e of entries) {
+        const us = Number(e.header?.size ?? 0)
+        const cs = Number(e.header?.compressedSize ?? 0)
+        totalUncompressed += us
+        totalCompressed += cs
+      }
+      if (totalUncompressed > MAX_PAGE_UNCOMPRESSED) {
+        return res.status(400).json({ error: 'ZIP muito grande apos descompactar (maximo 500MB).' })
+      }
+      if (totalCompressed > 0 && totalUncompressed > 10 * 1024 * 1024 && totalUncompressed / totalCompressed > MAX_PAGE_RATIO) {
+        return res.status(400).json({ error: 'ZIP suspeito (taxa de compressao anormal).' })
+      }
       const hasIndex = entries.some(e => e.entryName === 'index.html' || e.entryName.endsWith('/index.html'))
       if (!hasIndex) return res.status(400).json({ error: 'O ZIP deve conter um arquivo index.html na raiz.' })
       title = req.body.title || files[0].originalname.replace(/\.zip$/i, '') || 'Pagina hospedada'
@@ -2886,7 +3070,7 @@ app.post('/api/pages/upload', authMiddleware, uploadLimiter, async (req, res, ne
     let indexHtml = ''
     for (const entry of entries) {
       const entryPath = entry.entryName
-      const filePath = join(pageDir, entryPath)
+      const filePath = safeJoin(pageDir, entryPath)
       mkdirSync(dirname(filePath), { recursive: true })
       const data = entry.getData()
       writeFileSync(filePath, data)
@@ -2985,30 +3169,42 @@ app.delete('/api/pages/:id', authMiddleware, async (req, res) => {
 })
 
 async function servePage(slug, fileName, res) {
-  const mimeType = mime.lookup(fileName) || 'application/octet-stream'
+  const baseDir = join(PAGES_DIR, slug)
+  let filePath
+  try {
+    filePath = safeJoin(baseDir, fileName)
+  } catch {
+    return false
+  }
+  const extMime = mime.lookup(fileName) || 'application/octet-stream'
+
+  const sendBuffer = (data) => {
+    const sniffed = detectMimeFromMagic(Buffer.isBuffer(data) ? data : Buffer.from(data))
+    const mimeType = sniffed || extMime
+    res.set('Content-Type', mimeType)
+    res.set('X-Content-Type-Options', 'nosniff')
+    res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
+    res.send(data)
+  }
+
   // Try R2 first
   if (USE_CF_STORAGE) {
     try {
       const r2Data = await getPageContentFromR2(slug, fileName)
       if (r2Data) {
-        res.set('Content-Type', mimeType)
-        res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
         res.set('X-Cache', 'R2-HIT')
-        res.send(r2Data)
+        sendBuffer(r2Data)
         return true
       }
     } catch {}
   }
   // Filesystem fallback
-  const filePath = join(PAGES_DIR, slug, fileName)
   if (existsSync(filePath)) {
     try {
       const stat = statSync(filePath)
       if (stat.isFile()) {
         const data = readFileSync(filePath)
-        res.set('Content-Type', mimeType)
-        res.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600')
-        res.send(data)
+        sendBuffer(data)
         return true
       }
     } catch {}

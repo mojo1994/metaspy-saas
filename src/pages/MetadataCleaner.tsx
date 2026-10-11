@@ -210,6 +210,9 @@ export default function MetadataCleaner() {
               Novo Arquivo
             </button>
           </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
+            O link de download e temporario e expira em 6 horas. Baixe seu arquivo agora.
+          </p>
         </div>
       )}
     </div>

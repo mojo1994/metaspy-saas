@@ -2,10 +2,101 @@ import { createWriteStream, mkdirSync, existsSync, writeFileSync, readFileSync, 
 import { join, dirname, extname, basename } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { lookup } from 'node:dns/promises'
 import { parseHTML } from 'linkedom'
 
 const FETCH_TIMEOUT = 30000
 const MAX_CONCURRENT = 8
+const ALLOWED_PORTS = [80, 443]
+
+const delay = (ms) => new Promise((r) => setTimeout(r, ms))
+
+function isPrivateIp(ip) {
+  if (!ip) return true
+  if (ip.includes(':')) {
+    const low = ip.toLowerCase()
+    if (low === '::1' || low === '::') return true
+    if (low.startsWith('::ffff:')) {
+      const rest = low.slice(7)
+      if (rest.includes('.')) return isPrivateIp(rest)
+      const groups = rest.split(':')
+      if (groups.length === 2) {
+        const hi = parseInt(groups[0], 16)
+        const lo = parseInt(groups[1], 16)
+        if (!Number.isNaN(hi) && !Number.isNaN(lo)) {
+          return isPrivateIp(`${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`)
+        }
+      }
+      return true
+    }
+    if (low.startsWith('fc') || low.startsWith('fd') || low.startsWith('fe80')) return true
+    return false
+  }
+  const parts = ip.split('.').map(Number)
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true
+  const [a, b] = parts
+  if (a === 0 || a === 10 || a === 127) return true
+  if (a === 169 && b === 254) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a === 100 && b >= 64 && b <= 127) return true
+  if (a >= 224) return true
+  return false
+}
+
+// Protecao contra SSRF: valida protocolo, porta e destino (DNS + faixas privadas/loopback/link-local)
+async function validateExternalUrl(rawUrl, { allowPorts = ALLOWED_PORTS } = {}) {
+  let parsed
+  try {
+    parsed = new URL(String(rawUrl))
+  } catch {
+    return { ok: false, code: 'INVALID_URL', message: 'URL invalida.' }
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { ok: false, code: 'INVALID_PROTOCOL', message: 'Apenas http:// ou https:// sao permitidos.' }
+  }
+  const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80
+  if (!allowPorts.includes(port)) {
+    return { ok: false, code: 'INVALID_PORT', message: `Porta nao permitida (${port}). Use 80 ou 443.` }
+  }
+  const host = parsed.hostname.replace(/^\[/, '').replace(/\]$/, '')
+  const isIpLiteral = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':')
+  if (isIpLiteral) {
+    if (isPrivateIp(host)) return { ok: false, code: 'BLOCKED_HOST', message: 'Destino nao permitido.' }
+    return { ok: true, url: parsed.href }
+  }
+  try {
+    const records = await lookup(host, { all: true })
+    if (!records || records.length === 0) {
+      return { ok: false, code: 'DNS_FAIL', message: 'Host nao encontrado.' }
+    }
+    for (const record of records) {
+      if (isPrivateIp(record.address)) {
+        return { ok: false, code: 'BLOCKED_HOST', message: 'Destino nao permitido.' }
+      }
+    }
+  } catch {
+    return { ok: false, code: 'DNS_FAIL', message: 'Host nao encontrado.' }
+  }
+  return { ok: true, url: parsed.href }
+}
+
+async function readBodyWithCharset(resp) {
+  const buffer = Buffer.from(await resp.arrayBuffer())
+  const contentType = resp.headers.get('content-type') || ''
+  let charset = (contentType.match(/charset=([^;]+)/i) || [])[1]
+  if (charset) charset = charset.trim().replace(/["']/g, '')
+  if (!charset) {
+    const head = buffer.subarray(0, 4096).toString('latin1')
+    charset = (head.match(/charset=["']?([\w-]+)/i) || [])[1]
+  }
+  charset = (charset || 'utf-8').toLowerCase()
+  try {
+    return new TextDecoder(charset).decode(buffer)
+  } catch {
+    return buffer.toString('utf-8')
+  }
+}
 
 const CSS_URL_RE = /url\(\s*(['"]?)([^'")\s]+)\1\s*\)/gi
 const CSS_IMPORT_RE = /@import\s+(?:url\(\s*)?['"]([^'"]+)['"](?:\s*\))?\s*;?/gi
@@ -129,6 +220,24 @@ async function fetchWithTimeout(url, options = {}) {
   } finally {
     clearTimeout(timer)
   }
+}
+
+// Retry unico com backoff em falha de rede; nao repete em 4xx
+async function fetchWithRetry(url, options = {}) {
+  const { retries = 1, ...rest } = options
+  let lastErr
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const resp = await fetchWithTimeout(url, rest)
+      if (resp.status >= 400 && resp.status < 500) return resp
+      if (resp.ok) return resp
+      lastErr = new Error(`Falha ao baixar pagina: ${resp.status}`)
+    } catch (err) {
+      lastErr = err
+    }
+    if (attempt < retries) await delay(500 * (attempt + 1))
+  }
+  throw lastErr
 }
 
 function extractUrlsFromCssText(cssText, baseUrl) {
@@ -287,9 +396,11 @@ async function downloadFile(url, outputPath) {
   try {
     const parsed = new URL(url)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    const check = await validateExternalUrl(url)
+    if (!check.ok) return false
     const dir = dirname(outputPath)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-    const resp = await fetchWithTimeout(url)
+    const resp = await fetchWithRetry(url, { retries: 0 })
     if (!resp.ok) return false
     const body = Readable.fromWeb(resp.body)
     const writeStream = createWriteStream(outputPath)
@@ -440,6 +551,13 @@ function rewriteHtmlPaths(document, fileMap, baseUrl) {
 }
 
 async function downloadSite(url, { outputDir, fbToken, deep = false } = {}) {
+  const check = await validateExternalUrl(url)
+  if (!check.ok) {
+    const err = new Error(check.message)
+    err.code = check.code
+    throw err
+  }
+
   const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url
 
   if (!existsSync(outputDir)) mkdirSync(outputDir, { recursive: true })
@@ -451,10 +569,10 @@ async function downloadSite(url, { outputDir, fbToken, deep = false } = {}) {
   }
   if (fbToken) headers['Authorization'] = `Bearer ${fbToken}`
 
-  const resp = await fetchWithTimeout(url, { headers })
+  const resp = await fetchWithRetry(url, { headers })
   if (!resp.ok) throw new Error(`Falha ao baixar pagina: ${resp.status}`)
 
-  const html = await resp.text()
+  const html = await readBodyWithCharset(resp)
 
   const { document } = parseHTML(html)
 
@@ -538,16 +656,23 @@ function buildFileTree(dirPath, basePath = '') {
 }
 
 async function clonePage(url, { fbToken, userId } = {}) {
+  const check = await validateExternalUrl(url)
+  if (!check.ok) {
+    const err = new Error(check.message)
+    err.code = check.code
+    throw err
+  }
+
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   }
   if (fbToken) headers['Authorization'] = `Bearer ${fbToken}`
 
-  const resp = await fetchWithTimeout(url, { headers })
+  const resp = await fetchWithRetry(url, { headers })
   if (!resp.ok) throw new Error(`Falha ao baixar pagina: ${resp.status}`)
 
-  const html = await resp.text()
+  const html = await readBodyWithCharset(resp)
 
   return {
     html,
@@ -558,4 +683,4 @@ async function clonePage(url, { fbToken, userId } = {}) {
 }
 
 export { clonePage as default }
-export { downloadSite, clonePage, buildFileTree }
+export { downloadSite, clonePage, buildFileTree, validateExternalUrl }
