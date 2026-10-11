@@ -1,6 +1,11 @@
 import { useState } from 'react'
+import ReleaseNotesTimeline from '../components/ReleaseNotesTimeline'
 
 const PAGES: Record<string, { titulo: string; conteudo: string }> = {
+  updates: {
+    titulo: 'Histórico de Atualizações',
+    conteudo: ''
+  },
   about: {
     titulo: 'Sobre o MetaSpy',
     conteudo: `O MetaSpy e uma plataforma completa de inteligencia de anuncios e clonagem de paginas web.
@@ -88,9 +93,13 @@ export default function Settings() {
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: 'var(--text-primary)' }}>
               {PAGES[page].titulo}
             </h3>
-            <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>
-              {PAGES[page].conteudo}
-            </div>
+            {page === 'updates' ? (
+              <ReleaseNotesTimeline />
+            ) : (
+              <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>
+                {PAGES[page].conteudo}
+              </div>
+            )}
           </div>
         </div>
       </div>

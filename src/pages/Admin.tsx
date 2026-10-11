@@ -12,12 +12,29 @@ interface AdminUser {
   created_at: string
 }
 
+const inputStyle: React.CSSProperties = {
+  padding: '8px 10px',
+  borderRadius: 8,
+  border: '1px solid rgba(255,255,255,0.12)',
+  background: 'rgba(255,255,255,0.04)',
+  color: 'var(--text-primary)',
+  fontSize: 13,
+}
+
 export default function Admin() {
   const { fetchWithAuth, user } = useAuth()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [clock, setClock] = useState(new Date())
   const [setPlanLoading, setSetPlanLoading] = useState<string | null>(null)
+
+  const [rnVersion, setRnVersion] = useState('')
+  const [rnTitle, setRnTitle] = useState('')
+  const [rnDate, setRnDate] = useState(new Date().toISOString().slice(0, 10))
+  const [rnCategory, setRnCategory] = useState('melhoria')
+  const [rnChanges, setRnChanges] = useState('')
+  const [rnStatus, setRnStatus] = useState<string | null>(null)
+  const [rnSaving, setRnSaving] = useState(false)
 
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date()), 1000)
@@ -48,6 +65,57 @@ export default function Admin() {
       if (res.ok) await loadUsers()
     } catch {}
     setSetPlanLoading(null)
+  }
+
+  async function publishRelease() {
+    setRnSaving(true)
+    setRnStatus(null)
+    try {
+      const validTypes = ['novo', 'correcao', 'melhoria', 'seguranca']
+      const changes = rnChanges
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean)
+        .map(line => {
+          const [first, ...rest] = line.split(':')
+          const maybeType = first.trim().toLowerCase()
+          if (rest.length && validTypes.includes(maybeType)) {
+            return { type: maybeType, description: rest.join(':').trim() }
+          }
+          return { type: rnCategory, description: line }
+        })
+        .filter(c => c.description)
+
+      if (!rnVersion.trim() || !rnTitle.trim() || !changes.length) {
+        setRnStatus('Preencha versão, título e ao menos uma mudança.')
+        setRnSaving(false)
+        return
+      }
+
+      const res = await fetchWithAuth('/api/admin/release-notes', {
+        method: 'POST',
+        body: JSON.stringify({
+          version: rnVersion.trim(),
+          title: rnTitle.trim(),
+          release_date: rnDate,
+          category: rnCategory,
+          changes,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setRnStatus(data.error || 'Erro ao publicar')
+        setRnSaving(false)
+        return
+      }
+      setRnStatus('Atualização publicada com sucesso!')
+      setRnVersion('')
+      setRnTitle('')
+      setRnChanges('')
+    } catch {
+      setRnStatus('Erro de conexão')
+    }
+    setRnSaving(false)
   }
 
   const activeUsers = users.filter(u => u.subscription_status === 'active')
@@ -198,6 +266,37 @@ export default function Admin() {
 
       <div className="admin-wh-label">
         <span>Webhooks recebidos: <a href="/api/debug/webhooks" target="_blank" rel="noopener noreferrer" onClick={e => { e.preventDefault(); fetchWithAuth('/api/debug/webhooks').then(r => r.json()).then(d => alert(JSON.stringify(d, null, 2))).catch(() => alert('Erro ao carregar webhooks')) }}>/api/debug/webhooks</a></span>
+      </div>
+
+      <div className="admin-users-section" style={{ marginTop: 24 }}>
+        <div className="admin-table-header">
+          <h3>Publicar Atualização</h3>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input style={inputStyle} placeholder="Versão (ex: 3.1.1)" value={rnVersion} onChange={e => setRnVersion(e.target.value)} />
+            <input style={{ ...inputStyle, flex: 1, minWidth: 200 }} placeholder="Título" value={rnTitle} onChange={e => setRnTitle(e.target.value)} />
+            <input style={inputStyle} type="date" value={rnDate} onChange={e => setRnDate(e.target.value)} />
+            <select style={inputStyle} value={rnCategory} onChange={e => setRnCategory(e.target.value)}>
+              <option value="seguranca">Segurança</option>
+              <option value="novo">Novo</option>
+              <option value="correcao">Correção</option>
+              <option value="melhoria">Melhoria</option>
+            </select>
+          </div>
+          <textarea
+            style={{ ...inputStyle, width: '100%', minHeight: 120, whiteSpace: 'pre-wrap' }}
+            placeholder={'Uma mudança por linha. Opcionalmente prefixe com o tipo:\nnovo: ...\ncorrecao: ...\nseguranca: ...'}
+            value={rnChanges}
+            onChange={e => setRnChanges(e.target.value)}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button type="button" className="btn btn-ativo" onClick={publishRelease} disabled={rnSaving}>
+              {rnSaving ? 'Publicando...' : 'Publicar'}
+            </button>
+            {rnStatus && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{rnStatus}</span>}
+          </div>
+        </div>
       </div>
     </div>
   )

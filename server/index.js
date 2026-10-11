@@ -2910,6 +2910,77 @@ app.post('/api/admin/activate-plan', adminMiddleware, async (req, res) => {
   }
 })
 
+// ─── Release Notes (Historico de Atualizacoes) ───────────────────
+const releaseNoteSchema = z.object({
+  version: z.string().min(1).max(20),
+  title: z.string().min(1).max(200),
+  release_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar no formato YYYY-MM-DD'),
+  category: z.enum(['seguranca', 'novo', 'correcao', 'melhoria']),
+  changes: z.array(z.object({
+    type: z.enum(['novo', 'correcao', 'melhoria', 'seguranca']),
+    description: z.string().min(1).max(1000),
+  })).min(1),
+}).strict()
+
+app.get('/api/release-notes', async (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20))
+    const offset = Math.max(0, parseInt(req.query.offset) || 0)
+    const notes = await query(
+      `SELECT id, version, title, release_date::text AS release_date, category, changes, created_at
+       FROM release_notes ORDER BY release_date DESC, created_at DESC LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    )
+    const totalRow = await one('SELECT COUNT(*)::int AS total FROM release_notes')
+    res.json({ notes, total: totalRow?.total || 0, limit, offset })
+  } catch (err) {
+    logger.error({ err }, 'Erro ao listar release notes')
+    res.status(500).json({ error: 'Erro ao carregar historico' })
+  }
+})
+
+app.post('/api/admin/release-notes', adminMiddleware, validate(releaseNoteSchema), async (req, res) => {
+  try {
+    const { version, title, release_date, category, changes } = req.body
+    const id = randomUUID()
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    await run(
+      'INSERT INTO release_notes (id, version, title, release_date, category, changes, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [id, version, title, release_date, category, JSON.stringify(changes), now]
+    )
+    res.status(201).json({ ok: true, id })
+  } catch (err) {
+    logger.error({ err }, 'Erro ao criar release note')
+    res.status(500).json({ error: 'Erro ao criar atualizacao' })
+  }
+})
+
+app.put('/api/admin/release-notes/:id', adminMiddleware, validate(releaseNoteSchema), async (req, res) => {
+  try {
+    const { version, title, release_date, category, changes } = req.body
+    const r = await run(
+      'UPDATE release_notes SET version=$1, title=$2, release_date=$3, category=$4, changes=$5 WHERE id=$6',
+      [version, title, release_date, category, JSON.stringify(changes), req.params.id]
+    )
+    if (!r.changes) return res.status(404).json({ error: 'Atualizacao nao encontrada' })
+    res.json({ ok: true })
+  } catch (err) {
+    logger.error({ err }, 'Erro ao editar release note')
+    res.status(500).json({ error: 'Erro ao editar atualizacao' })
+  }
+})
+
+app.delete('/api/admin/release-notes/:id', adminMiddleware, async (req, res) => {
+  try {
+    const r = await run('DELETE FROM release_notes WHERE id=$1', [req.params.id])
+    if (!r.changes) return res.status(404).json({ error: 'Atualizacao nao encontrada' })
+    res.json({ ok: true })
+  } catch (err) {
+    logger.error({ err }, 'Erro ao remover release note')
+    res.status(500).json({ error: 'Erro ao remover atualizacao' })
+  }
+})
+
 // ─── Debug (protegido — apenas admin) ─────────────────────────────
 const WEBHOOK_LOG = []
 

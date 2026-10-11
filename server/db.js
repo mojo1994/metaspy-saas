@@ -223,4 +223,33 @@ export async function initSchema() {
     )
   `).catch(() => {})
 
+  // Historico de Atualizacoes (release notes)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS release_notes (
+      id TEXT PRIMARY KEY,
+      version TEXT NOT NULL,
+      title TEXT NOT NULL,
+      release_date DATE NOT NULL,
+      category TEXT NOT NULL,
+      changes JSONB NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_release_notes_date ON release_notes(release_date DESC)`).catch(() => {})
+
+  const seedNow = new Date().toISOString().replace('T', ' ').slice(0, 19)
+  const seedChanges = JSON.stringify([
+    { type: 'novo', description: 'Tela de Historico de Atualizacoes dentro de Configuracoes.' },
+    { type: 'seguranca', description: 'Seguranca em 7 camadas, rate limiting e hardening anti-DDoS/pentest.' },
+    { type: 'novo', description: 'Paginas legais: Privacidade, Cookies, Exclusao de Conta e Redefinir Senha.' },
+    { type: 'melhoria', description: 'Extensao MetaSpy substitui o minerador interno; o atalho passa a apontar para o download.' },
+    { type: 'correcao', description: 'Auditoria e hardening do Clonador, Hospedar Pagina e Remover Metadados.' },
+    { type: 'novo', description: 'Seletor de idioma com 6 idiomas e i18n completo.' },
+  ])
+  await pool.query(
+    `INSERT INTO release_notes (id, version, title, release_date, category, changes, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING`,
+    ['rel-3.1.0', '3.1.0', 'Atualizacao 11/10/2026', '2026-10-11', 'melhoria', seedChanges, seedNow]
+  ).catch(() => {})
+
 }

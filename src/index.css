@@ -4287,3 +4287,71 @@ select:-webkit-autofill {
   }
 }
 
+/* ── Histórico de Atualizações (release notes) ── */
+.release-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.release-card {
+  background: var(--card-bg, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.release-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.release-version {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.release-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+.release-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 4px 0 10px;
+}
+
+.release-changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.release-change {
+  display: flex;
+  align-items: flex-start;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.release-change .badge {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.skeleton-card {
+  pointer-events: none;
+}
+
