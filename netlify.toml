@@ -7,4 +7,12 @@
   to = "https://metaspy-saas.onrender.com/api/:splat"
   status = 200
 
+[[redirects]]
+  from = "/p/*"
+  to = "https://metaspy-saas.onrender.com/api/page/:splat"
+  status = 200
 
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
