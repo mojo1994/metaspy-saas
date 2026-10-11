@@ -252,4 +252,64 @@ export async function initSchema() {
     ['rel-3.1.0', '3.1.0', 'Atualizacao 11/10/2026', '2026-10-11', 'melhoria', seedChanges, seedNow]
   ).catch(() => {})
 
+  // ── Security (Camada 3/5/6): lockout, roles, idioma ──
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0`).catch(() => {})
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TEXT`).catch(() => {})
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`).catch(() => {})
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_language TEXT DEFAULT 'pt-BR'`).catch(() => {})
+
+  // ── Security (Camada 5): rotacao de refresh token + deteccao de reuso ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      jti TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      family_id TEXT NOT NULL,
+      used INTEGER NOT NULL DEFAULT 0,
+      revoked INTEGER NOT NULL DEFAULT 0,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id)`).catch(() => {})
+
+  // ── Security (Camada 7): log de auditoria ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      action TEXT NOT NULL,
+      ip TEXT,
+      user_agent TEXT,
+      metadata JSONB,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC)`).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)`).catch(() => {})
+
+  // ── Front 3: exclusao de conta (janela de arrependimento) ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS account_deletion_requests (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      requested_at TEXT NOT NULL,
+      scheduled_for TEXT NOT NULL,
+      completed_at TEXT
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_account_deletion_status ON account_deletion_requests(status, scheduled_for)`).catch(() => {})
+
+  // ── Front 3: consentimento de cookies ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cookie_consents (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      anonymous_id TEXT,
+      choice TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+
 }

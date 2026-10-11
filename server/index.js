@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync, statSync, renameSync, copyFileSync } from 'node:fs'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { ZipArchive } from 'archiver'
 import { exiftool } from 'exiftool-vendored'
 import mime from 'mime-types'
@@ -71,8 +71,23 @@ if (!DATABASE_URL) {
   process.exit(1)
 }
 
-if (!JWT_SECRET || JWT_SECRET.length < 64) {
-  logger.warn('JWT_SECRET fraca ou nao definida. Gere uma chave de 64+ caracteres aleatorios.')
+// ─── Camada 6: checklist de variaveis de ambiente obrigatorias ───
+const ENV_CHECKLIST = [
+  { key: 'JWT_SECRET', critical: true, hint: 'Gere uma chave de 64+ caracteres aleatorios.' },
+  { key: 'KIRVANO_WEBHOOK_SECRET', critical: false, hint: 'Webhook do Kirvano fica sem validacao de assinatura HMAC.' },
+  { key: 'MAILEROO_API_KEY', critical: false, hint: 'E-mails transacionais (verificacao/recuperacao) nao serao enviados.' },
+]
+for (const { key, critical, hint } of ENV_CHECKLIST) {
+  const val = process.env[key]
+  if (!val) {
+    if (critical && process.env.NODE_ENV === 'production') {
+      logger.fatal({ env: key, hint }, 'Variavel de ambiente obrigatoria ausente. Encerrando.')
+      process.exit(1)
+    }
+    logger.warn({ env: key, hint }, 'Variavel de ambiente ausente.')
+  } else if (key === 'JWT_SECRET' && val.length < 64) {
+    logger.warn({ env: key }, 'JWT_SECRET fraca (< 64 caracteres). Gere uma chave mais forte.')
+  }
 }
 
 // ─── Database ───────────────────────────────────────────────────
@@ -85,6 +100,8 @@ initDb(DATABASE_URL)
 async function ensureSchema(attempt = 1) {
   try {
     await initSchema()
+    const adminEmail = (process.env.ADMIN_EMAIL || '09santos.felipe@gmail.com').toLowerCase().trim()
+    await run('UPDATE users SET role = $1 WHERE email = $2', ['admin', adminEmail]).catch(() => {})
     logger.info('Schema do banco verificado com sucesso.')
   } catch (err) {
     const delay = Math.min(30000, 2000 * attempt)
@@ -459,12 +476,19 @@ async function extractLSB(stegoImageBuffer) {
   return stegDecrypt(secretBuf)
 }
 
+const BCRYPT_ROUNDS = 12
+const ACCESS_TOKEN_TTL = '15m'
+const REFRESH_TOKEN_TTL = '30d'
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
 function generateToken(userId) {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' })
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL })
 }
 
-function generateRefreshToken(userId) {
-  return jwt.sign({ userId, type: 'refresh' }, JWT_SECRET, { expiresIn: '30d' })
+function generateRefreshToken(userId, familyId = randomUUID()) {
+  const jti = randomUUID()
+  const token = jwt.sign({ userId, type: 'refresh', jti, family: familyId }, JWT_SECRET, { expiresIn: REFRESH_TOKEN_TTL })
+  return { token, jti, familyId }
 }
 
 const COOKIE_OPTIONS = {
@@ -481,6 +505,63 @@ function setRefreshCookie(res, token) {
 
 function clearRefreshCookie(res) {
   res.clearCookie('refreshToken', { ...COOKIE_OPTIONS, maxAge: 0 })
+}
+
+// Emite e persiste um refresh token (rotacao). Reutiliza a familia p/ detectar reuso.
+async function issueRefreshToken(res, userId, familyId) {
+  const { token, jti, familyId: fam } = generateRefreshToken(userId, familyId)
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString()
+  await run('INSERT INTO refresh_tokens (jti, user_id, family_id, used, revoked, expires_at, created_at) VALUES ($1,$2,$3,0,0,$4,$5)',
+    [jti, userId, fam, expiresAt, now]).catch(err => logger.warn({ err: err.message }, 'Falha ao persistir refresh token'))
+  setRefreshCookie(res, token)
+  return token
+}
+
+// Revoga todos os refresh tokens ativos de um usuario (ex: troca de senha / exclusao).
+async function revokeUserTokens(userId) {
+  await run('UPDATE refresh_tokens SET revoked = 1 WHERE user_id = $1 AND revoked = 0', [userId]).catch(() => {})
+}
+
+// Revoga toda a familia de tokens (deteccao de reuso de refresh token).
+async function revokeTokenFamily(familyId) {
+  await run('UPDATE refresh_tokens SET revoked = 1 WHERE family_id = $1', [familyId]).catch(() => {})
+}
+
+// ─── Camada 7: auditoria + alerta ao admin ───────────────────────
+async function audit(action, { userId = null, ip = null, userAgent = null, metadata = null } = {}) {
+  try {
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    await run('INSERT INTO audit_log (id, user_id, action, ip, user_agent, metadata, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [randomUUID(), userId, action, ip, userAgent, metadata ? JSON.stringify(metadata) : null, now])
+  } catch (err) {
+    logger.warn({ err: err.message, action }, 'Falha ao gravar audit_log')
+  }
+  logger.info({ action, userId, ip }, 'audit')
+}
+
+async function notificarAdmin(subject, text) {
+  try {
+    await sendEmail({ to: ADMIN_EMAIL, subject: `MetaSpy - ${subject}`, html: `<p>${text}</p>` })
+  } catch (err) {
+    logger.warn({ err: err.message }, 'Falha ao enviar alerta ao admin')
+  }
+}
+
+const loginFailuresByIp = new Map()
+const LOGIN_ALERT_WINDOW_MS = 5 * 60 * 1000
+const LOGIN_ALERT_THRESHOLD = 10
+let lastLoginAlertAt = 0
+function trackLoginFailure(ip) {
+  const now = Date.now()
+  const entry = loginFailuresByIp.get(ip) || { count: 0, first: now }
+  if (now - entry.first > LOGIN_ALERT_WINDOW_MS) { entry.count = 0; entry.first = now }
+  entry.count += 1
+  loginFailuresByIp.set(ip, entry)
+  if (entry.count >= LOGIN_ALERT_THRESHOLD && now - lastLoginAlertAt > LOGIN_ALERT_WINDOW_MS) {
+    lastLoginAlertAt = now
+    notificarAdmin('Alerta de seguranca: muitas falhas de login', `IP ${ip} acumulou ${entry.count} falhas de login nos ultimos 5 minutos.`).catch(() => {})
+  }
 }
 
 async function authMiddleware(req, res, next) {
@@ -528,8 +609,33 @@ app.use(helmet({
 app.use(cookieParser())
 app.use(express.json({ limit: '10mb' }))
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: process.env.NODE_ENV === 'production' ? 20 : 100, message: { error: 'Muitas tentativas. Tente novamente mais tarde.' } })
-const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, message: { error: 'Muitas requisicoes. Tente novamente mais tarde.' } })
+const isProd = process.env.NODE_ENV === 'production'
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: isProd ? 20 : 100, standardHeaders: true, legacyHeaders: false, message: { error: 'Muitas tentativas. Tente novamente mais tarde.' } })
+const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false, message: { error: 'Muitas requisicoes. Tente novamente mais tarde.' } })
+const strictAuthLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: isProd ? 5 : 100, standardHeaders: true, legacyHeaders: false, message: { error: 'Muitas tentativas. Tente novamente mais tarde.' } })
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isProd ? 5 : 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${String(req.body?.email || '').toLowerCase().trim()}`,
+  message: { error: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
+})
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isProd ? 10 : 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip),
+  message: { error: 'Limite de uploads atingido. Aguarde um minuto.' },
+})
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isProd ? 60 : 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisicoes.' },
+})
 app.use('/api/auth', authLimiter)
 app.use('/api', apiLimiter)
 
@@ -572,18 +678,18 @@ function sanitizeHtmlStrict(dirty) {
 const IDEMPOTENCY_TTL = 5 * 60 * 1000
 
 // ─── Zod Schemas ────────────────────────────────────────────────
-const signupSchema = z.object({ email: z.string().email().max(255), name: z.string().min(1).max(100), password: z.string().min(6).max(128) })
-const loginSchema = z.object({ email: z.string().email().max(255), password: z.string().min(1).max(128) })
-const verifyCodeSchema = z.object({ email: z.string().email().max(255), code: z.string().length(6) }).or(z.object({ code: z.string().length(6) }))
-const forgotPasswordSchema = z.object({ email: z.string().email().max(255) })
-const resetPasswordSchema = z.object({ email: z.string().email().max(255), code: z.string().length(6).optional(), new_password: z.string().min(6).max(128) })
-const profileSchema = z.object({ name: z.string().min(1).max(100), email: z.string().email().max(255) })
-const passwordSchema = z.object({ current_password: z.string().min(1), new_password: z.string().min(6).max(128) })
-const cloneSchema = z.object({ url: z.string().url().max(2000) })
-const cloakerSchema = z.object({ target_url: z.string().url().max(2000), safe_url: z.string().url().max(2000) })
-const camouflageSchema = z.object({ texto_original: z.string().min(1).max(50000), url_destino: z.string().url().max(2000), palavras_sensiveis: z.array(z.string()).optional() })
-const detectSchema = z.object({ url: z.string().url().max(2000) })
-const checkoutSchema = z.object({ plan: z.enum(['basico', 'gold', 'premium']) })
+const signupSchema = z.object({ email: z.string().email().max(255), name: z.string().min(1).max(100), password: z.string().min(6).max(128) }).strict()
+const loginSchema = z.object({ email: z.string().email().max(255), password: z.string().min(1).max(128) }).strict()
+const verifyCodeSchema = z.object({ email: z.string().email().max(255).optional(), code: z.string().length(6) }).strict()
+const forgotPasswordSchema = z.object({ email: z.string().email().max(255) }).strict()
+const resetPasswordSchema = z.object({ email: z.string().email().max(255), code: z.string().length(6), new_password: z.string().min(6).max(128) }).strict()
+const profileSchema = z.object({ name: z.string().min(1).max(100), email: z.string().email().max(255), preferred_language: z.enum(['pt-BR', 'en', 'es', 'fr', 'de', 'it']).optional() }).strict()
+const passwordSchema = z.object({ current_password: z.string().min(1), new_password: z.string().min(6).max(128) }).strict()
+const cloneSchema = z.object({ url: z.string().url().max(2000) }).strict()
+const cloakerSchema = z.object({ target_url: z.string().url().max(2000), safe_url: z.string().url().max(2000) }).strict()
+const camouflageSchema = z.object({ texto_original: z.string().min(1).max(50000), url_destino: z.string().url().max(2000), palavras_sensiveis: z.array(z.string()).optional() }).strict()
+const detectSchema = z.object({ url: z.string().url().max(2000) }).strict()
+const checkoutSchema = z.object({ plan: z.enum(['basico', 'gold', 'premium']) }).strict()
 
 function validate(schema) {
   return (req, res, next) => {
@@ -635,7 +741,7 @@ app.post('/api/auth/signup', validate(signupSchema), async (req, res) => {
     const existing = await one('SELECT id FROM users WHERE email = $1', [emailLower])
     if (existing) return res.status(409).json({ error: 'Email ja cadastrado' })
 
-    const hash = await bcrypt.hash(password, 10)
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS)
     const id = randomUUID()
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
     await run('INSERT INTO users (id, name, email, password_hash, plan, subscription_status, email_verified, clones_used, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
@@ -643,8 +749,8 @@ app.post('/api/auth/signup', validate(signupSchema), async (req, res) => {
 
     const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [id])
     const accessToken = generateToken(id)
-    const refToken = generateRefreshToken(id)
-    setRefreshCookie(res, refToken)
+    await issueRefreshToken(res, id)
+    await audit('signup', { userId: id, ip: req.ip, userAgent: req.headers['user-agent'] })
     res.json({ user, accessToken })
   } catch (err) {
     logger.error({ err }, 'Erro signup')
@@ -671,8 +777,8 @@ app.post('/api/auth/verify-signup', validate(verifyCodeSchema), async (req, res)
 
     const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [id])
     const accessToken = generateToken(id)
-    const refToken = generateRefreshToken(id)
-    setRefreshCookie(res, refToken)
+    await issueRefreshToken(res, id)
+    await audit('signup_verified', { userId: id, ip: req.ip, userAgent: req.headers['user-agent'] })
     res.json({ user, accessToken })
   } catch (err) {
     logger.error({ err }, 'Erro verify-signup')
@@ -692,36 +798,68 @@ app.post('/api/auth/check-email', async (req, res) => {
   }
 })
 
-app.post('/api/auth/login', validate(loginSchema), async (req, res) => {
+app.post('/api/auth/login', loginLimiter, validate(loginSchema), async (req, res) => {
+  const email = String(req.body?.email || '').toLowerCase().trim()
+  const ip = req.ip
+  const ua = req.headers['user-agent']
   try {
-    const { email, password } = req.body
+    const { password } = req.body
     if (!email || !password) return res.status(400).json({ error: 'Preencha todos os campos' })
-    const user = await one('SELECT * FROM users WHERE email = $1', [email.toLowerCase().trim()])
-    if (!user) return res.status(401).json({ error: 'Credenciais invalidas' })
-    const valid = await bcrypt.compare(password, user.password_hash)
-    if (!valid) return res.status(401).json({ error: 'Credenciais invalidas' })
+    const user = await one('SELECT * FROM users WHERE email = $1', [email])
+
+    const nowIso = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    if (user?.locked_until && user.locked_until > nowIso) {
+      await audit('login_locked', { userId: user.id, ip, userAgent: ua })
+      return res.status(429).json({ error: 'Conta temporariamente bloqueada por tentativas incorretas. Tente novamente mais tarde.' })
+    }
+
+    const valid = user ? await bcrypt.compare(password, user.password_hash) : false
+    if (!valid) {
+      trackLoginFailure(ip)
+      if (user) {
+        const attempts = (user.failed_login_attempts || 0) + 1
+        const lockMs = attempts >= 15 ? 24 * 60 * 60 * 1000 : attempts >= 10 ? 60 * 60 * 1000 : attempts >= 5 ? 15 * 60 * 1000 : 0
+        const lockedUntil = lockMs ? new Date(Date.now() + lockMs).toISOString().replace('T', ' ').slice(0, 19) : null
+        await run('UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3', [attempts, lockedUntil, user.id]).catch(() => {})
+      }
+      await audit('login_failed', { userId: user?.id || null, ip, userAgent: ua })
+      return res.status(401).json({ error: 'Credenciais invalidas' })
+    }
+
+    await run('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1', [user.id]).catch(() => {})
     const accessToken = generateToken(user.id)
-    const refToken = generateRefreshToken(user.id)
-    setRefreshCookie(res, refToken)
-    const { password_hash, ...safe } = user
+    await issueRefreshToken(res, user.id)
+    await audit('login', { userId: user.id, ip, userAgent: ua })
+    const { password_hash, failed_login_attempts, locked_until, ...safe } = user
     res.json({ user: safe, accessToken })
   } catch {
     res.status(500).json({ error: 'Erro ao fazer login' })
   }
 })
 
-const refreshLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: { error: 'Muitas requisicoes de refresh. Aguarde.' } })
+const refreshLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: { error: 'Muitas requisicoes de refresh. Aguarde.' } })
 app.post('/api/auth/refresh', refreshLimiter, async (req, res) => {
   const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken
   if (!refreshToken) return res.status(401).json({ error: 'Refresh token nao fornecido' })
   try {
     const decoded = jwt.verify(refreshToken, JWT_SECRET)
     if (decoded.type !== 'refresh') return res.status(401).json({ error: 'Token invalido' })
+
+    const record = decoded.jti ? await one('SELECT * FROM refresh_tokens WHERE jti = $1', [decoded.jti]) : null
+    if (record && (record.used || record.revoked)) {
+      await revokeTokenFamily(record.family_id)
+      await audit('refresh_reuse_detected', { userId: decoded.userId, ip: req.ip, userAgent: req.headers['user-agent'] })
+      clearRefreshCookie(res)
+      return res.status(401).json({ error: 'Sessao expirada. Faca login novamente.' })
+    }
+    if (record) {
+      await run('UPDATE refresh_tokens SET used = 1 WHERE jti = $1', [record.jti]).catch(() => {})
+    }
+
     const user = await one('SELECT id FROM users WHERE id = $1', [decoded.userId])
     if (!user) return res.status(401).json({ error: 'Usuario nao encontrado' })
     const newAccessToken = generateToken(user.id)
-    const newRefToken = generateRefreshToken(user.id)
-    setRefreshCookie(res, newRefToken)
+    await issueRefreshToken(res, user.id, record?.family_id || decoded.family)
     res.json({ accessToken: newAccessToken })
   } catch {
     res.status(401).json({ error: 'Refresh token invalido' })
@@ -738,47 +876,52 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 })
 
 // ─── Email / Recovery Routes ──────────────────────────────────────
-import { sendEmail, verificationEmailHtml, purchaseConfirmationEmailHtml, pendingCheckoutEmailHtml } from './email.js'
+import { sendEmail, verificationEmailHtml, recoveryEmailHtml, purchaseConfirmationEmailHtml, pendingCheckoutEmailHtml } from './email.js'
 
 function generateCode() {
   return String(randomInt(100000, 999999))
 }
 
-app.post('/api/auth/forgot-password', validate(forgotPasswordSchema), async (req, res) => {
+app.post('/api/auth/forgot-password', strictAuthLimiter, validate(forgotPasswordSchema), async (req, res) => {
   try {
     const { email } = req.body
     if (!email) return res.status(400).json({ error: 'Email obrigatorio.' })
     const emailLower = email.toLowerCase().trim()
     const user = await one('SELECT id, email FROM users WHERE email = $1', [emailLower])
-    if (!user) return res.status(404).json({ error: 'Email nao encontrado.' })
+    // Resposta generica para nao revelar a existencia da conta.
+    if (user) {
+      await run('UPDATE email_codes SET used = 1 WHERE user_id = $1 AND type = $2 AND used = 0', [user.id, 'recovery'])
+      const code = generateCode()
+      const now = new Date()
+      const expires = new Date(now.getTime() + 5 * 60 * 1000)
+      await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [randomUUID(), user.id, emailLower, code, 'recovery', expires.toISOString(), now.toISOString()])
+      const emailResult = await sendEmail({ to: user.email, subject: 'MetaSpy - Codigo de Recuperacao', html: recoveryEmailHtml(code) })
+      if (emailResult.error) logger.error({ emailError: emailResult.error }, 'Falha ao enviar codigo de recuperacao')
+    }
     res.json({ ok: true })
   } catch (err) {
     logger.error({ err }, 'Erro forgot-password')
-    res.status(500).json({ error: 'Erro ao verificar email.' })
+    res.status(500).json({ error: 'Erro ao processar solicitacao.' })
   }
 })
 
-app.post('/api/auth/reset-password', validate(resetPasswordSchema), async (req, res) => {
+app.post('/api/auth/reset-password', strictAuthLimiter, validate(resetPasswordSchema), async (req, res) => {
   try {
     const { email, code, new_password } = req.body
-    if (!email || !new_password) return res.status(400).json({ error: 'Preencha todos os campos.' })
-    if (new_password.length < 6) return res.status(400).json({ error: 'Senha deve ter ao menos 6 caracteres.' })
+    if (!email || !code || !new_password) return res.status(400).json({ error: 'Preencha todos os campos.' })
 
     const emailLower = email.toLowerCase().trim()
+    const record = await one('SELECT * FROM email_codes WHERE email = $1 AND code = $2 AND type = $3 AND used = 0 AND expires_at > $4',
+      [emailLower, code.toString(), 'recovery', new Date().toISOString()])
+    if (!record) return res.status(400).json({ error: 'Codigo invalido ou expirado.' })
 
-    if (code) {
-      const record = await one('SELECT * FROM email_codes WHERE email = $1 AND code = $2 AND type = $3 AND used = 0 AND expires_at > $4',
-        [emailLower, code.toString(), 'recovery', new Date().toISOString()])
-      if (!record) return res.status(400).json({ error: 'Codigo invalido ou expirado.' })
-      const hash = await bcrypt.hash(new_password, 10)
-      await run('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, record.user_id])
-      await run('UPDATE email_codes SET used = 1 WHERE id = $1', [record.id])
-    } else {
-      const user = await one('SELECT id FROM users WHERE email = $1', [emailLower])
-      if (!user) return res.status(404).json({ error: 'Email nao encontrado.' })
-      const hash = await bcrypt.hash(new_password, 10)
-      await run('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, user.id])
-    }
+    const hash = await bcrypt.hash(new_password, BCRYPT_ROUNDS)
+    await run('UPDATE users SET password_hash = $1, failed_login_attempts = 0, locked_until = NULL WHERE id = $2', [hash, record.user_id])
+    await run('UPDATE email_codes SET used = 1 WHERE id = $1', [record.id])
+    // Forca logout em todos os dispositivos.
+    await revokeUserTokens(record.user_id)
+    await audit('password_reset', { userId: record.user_id, ip: req.ip, userAgent: req.headers['user-agent'] })
     res.json({ ok: true, message: 'Senha redefinida com sucesso.' })
   } catch (err) {
     logger.error({ err }, 'Erro reset-password')
@@ -829,7 +972,7 @@ app.post('/api/auth/verify-code', authMiddleware, async (req, res) => {
 })
 
 // ─── Clone Routes ────────────────────────────────────────────────
-app.post('/api/clone', authMiddleware, validate(cloneSchema), async (req, res) => {
+app.post('/api/clone', authMiddleware, uploadLimiter, validate(cloneSchema), async (req, res) => {
   const { url } = req.body
   if (!url) return res.status(400).json({ error: 'URL nao fornecida' })
   const features = PLAN_FEATURES[req.user.plan]
@@ -857,7 +1000,7 @@ const CLONE_ZIPS_DIR = join(CLONES_DIR, '_zips')
 if (!existsSync(CLONE_ZIPS_DIR)) mkdirSync(CLONE_ZIPS_DIR, { recursive: true })
 const CLONE_ZIP_CACHE = new Map()
 
-app.post('/api/clone/deep', authMiddleware, async (req, res) => {
+app.post('/api/clone/deep', authMiddleware, uploadLimiter, async (req, res) => {
   const blocked = checkFeature(req, res, 'bypass')
   if (blocked) return blocked
   try {
@@ -1589,11 +1732,25 @@ async function handleKirvanoWebhook(req, res) {
     const body = req.body || {}
     const event = body.event && typeof body.event === 'object' ? body.event : body
 
-    // ── Validacao: rejeita apenas se a Kirvano enviar um token diferente de KIRVANO_WEBHOOK_SECRET ──
+    // ── Validacao: token/assinatura + (opcional) allowlist de IP de origem ──
     const receivedToken = body.token || body.TOKEN || event.token || req.headers['x-webhook-token'] || req.headers['x-kirvano-token'] || req.headers['x-access-token'] || ''
+    const clientIp = req.ip
+    const ipAllowlist = (process.env.KIRVANO_WEBHOOK_IPS || '').split(',').map(s => s.trim()).filter(Boolean)
+    if (ipAllowlist.length && !ipAllowlist.some(ip => clientIp === ip)) {
+      logger.warn({ clientIp }, 'Webhook Kirvano: IP de origem nao permitido')
+      await audit('webhook_ip_blocked', { ip: clientIp, userAgent: req.headers['user-agent'] })
+      return res.status(403).json({ error: 'Forbidden' })
+    }
     if (KIRVANO_WEBHOOK_SECRET && receivedToken && receivedToken !== KIRVANO_WEBHOOK_SECRET) {
       logger.warn({ receivedToken }, 'Webhook Kirvano: token invalido')
+      await audit('webhook_invalid_signature', { ip: clientIp, userAgent: req.headers['user-agent'] })
+      notificarAdmin('Alerta: webhook Kirvano com assinatura invalida', `Recebida requisicao de webhook com token invalido. IP: ${clientIp}`).catch(() => {})
       return res.status(401).json({ error: 'Invalid token' })
+    }
+    if (KIRVANO_WEBHOOK_SECRET && !receivedToken) {
+      logger.warn({ clientIp }, 'Webhook Kirvano: assinatura ausente')
+      await audit('webhook_missing_signature', { ip: clientIp, userAgent: req.headers['user-agent'] })
+      notificarAdmin('Alerta: webhook Kirvano sem assinatura', `Webhook recebido sem token de assinatura. IP: ${clientIp}`).catch(() => {})
     }
 
     const eventName = String(event.event || event.type || event.status || event.statusPagamento || body.statusPagamento || body.status || '').toLowerCase()
@@ -1693,8 +1850,8 @@ async function handleKirvanoWebhook(req, res) {
   }
 }
 
-app.post('/api/subscription/webhook', handleKirvanoWebhook)
-app.post('/api/kirvano-webhook', handleKirvanoWebhook)
+app.post('/api/subscription/webhook', webhookLimiter, handleKirvanoWebhook)
+app.post('/api/kirvano-webhook', webhookLimiter, handleKirvanoWebhook)
 
 app.get('/api/subscription/status', authMiddleware, async (req, res) => {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
@@ -2813,11 +2970,20 @@ app.get('/api/user/profile', authMiddleware, (req, res) => {
 })
 
 app.put('/api/user/profile', authMiddleware, validate(profileSchema), async (req, res) => {
-  const { name, email } = req.body
-  if (!name || !email) return res.status(400).json({ error: 'Nome e email sao obrigatorios' })
-  await run('UPDATE users SET name = $1, email = $2 WHERE id = $3', [name.trim(), email.toLowerCase().trim(), req.user.id])
-  const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, created_at FROM users WHERE id = $1', [req.user.id])
-  res.json({ user })
+  try {
+    const { name, email, preferred_language } = req.body
+    if (!name || !email) return res.status(400).json({ error: 'Nome e email sao obrigatorios' })
+    const emailLower = email.toLowerCase().trim()
+    if (preferred_language) {
+      await run('UPDATE users SET name = $1, email = $2, preferred_language = $3 WHERE id = $4', [name.trim(), emailLower, preferred_language, req.user.id])
+    } else {
+      await run('UPDATE users SET name = $1, email = $2 WHERE id = $3', [name.trim(), emailLower, req.user.id])
+    }
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, preferred_language FROM users WHERE id = $1', [req.user.id])
+    res.json({ user })
+  } catch {
+    res.status(500).json({ error: 'Erro ao atualizar perfil' })
+  }
 })
 
 app.put('/api/user/password', authMiddleware, validate(passwordSchema), async (req, res) => {
@@ -2827,8 +2993,10 @@ app.put('/api/user/password', authMiddleware, validate(passwordSchema), async (r
     const user = await one('SELECT * FROM users WHERE id = $1', [req.user.id])
     const valid = await bcrypt.compare(current_password, user.password_hash)
     if (!valid) return res.status(401).json({ error: 'Senha atual incorreta' })
-    const hash = await bcrypt.hash(new_password, 10)
+    const hash = await bcrypt.hash(new_password, BCRYPT_ROUNDS)
     await run('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.id])
+    await revokeUserTokens(req.user.id)
+    await audit('password_changed', { userId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] })
     res.json({ ok: true })
   } catch {
     res.status(500).json({ error: 'Erro ao alterar senha' })
@@ -2836,15 +3004,16 @@ app.put('/api/user/password', authMiddleware, validate(passwordSchema), async (r
 })
 
 // ─── Admin ────────────────────────────────────────────────────────
-const ADMIN_EMAIL = '09santos.felipe@gmail.com'
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '09santos.felipe@gmail.com').toLowerCase().trim()
 
 async function adminMiddleware(req, res, next) {
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token nao fornecido' })
   try {
     const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET)
-    const user = await one('SELECT email FROM users WHERE id = $1', [decoded.userId])
-    if (!user || user.email !== ADMIN_EMAIL) return res.status(403).json({ error: 'Acesso negado' })
+    const user = await one('SELECT id, email, role FROM users WHERE id = $1', [decoded.userId])
+    const isAdmin = user && (user.role === 'admin' || user.email === ADMIN_EMAIL)
+    if (!isAdmin) return res.status(403).json({ error: 'Acesso negado' })
     req.adminUser = user
     next()
   } catch { return res.status(401).json({ error: 'Token invalido' }) }
@@ -2868,6 +3037,7 @@ app.put('/api/admin/users/:id/plan', adminMiddleware, async (req, res) => {
     const expiryStr = expiry ? expiry.toISOString().replace('T', ' ').slice(0, 19) : null
     await run('UPDATE users SET plan = $1, subscription_status = $2, subscription_expiry = $3 WHERE id = $4',
       [plan, plan === 'nenhum' ? 'inactive' : 'active', expiryStr, req.params.id])
+    await audit('admin_plan_change', { userId: req.adminUser?.id || null, ip: req.ip, userAgent: req.headers['user-agent'], metadata: { targetUserId: req.params.id, plan } })
     res.json({ ok: true })
   } catch { res.status(500).json({ error: 'Erro ao atualizar plano' }) }
 })
@@ -2892,6 +3062,7 @@ app.post('/api/admin/activate-plan', adminMiddleware, async (req, res) => {
       [plan, plan === 'nenhum' ? 'inactive' : 'active', expiryStr, user.id])
 
     logger.info({ userId: user.id, email: user.email, plan, expiry: expiryStr, admin: req.adminUser?.email }, 'Admin: plano ativado manualmente')
+    await audit('admin_plan_activate', { userId: req.adminUser?.id, ip: req.ip, userAgent: req.headers['user-agent'], metadata: { targetUserId: user.id, email: user.email, plan, days: planDays } })
 
     try {
       await sendEmail({
@@ -3056,7 +3227,7 @@ async function cleanMetadata(filePath, mimeType) {
   return { cleanedPath: outputPath, originalMeta, remainingMeta, tagsRemoved: Object.keys(originalMeta).length - Object.keys(remainingMeta).length }
 }
 
-app.post('/api/cleaner/upload', authMiddleware, async (req, res) => {
+app.post('/api/cleaner/upload', authMiddleware, uploadLimiter, async (req, res) => {
   try {
     const features = PLAN_FEATURES[req.user.plan]
     if (!features?.cleaner) return res.status(403).json({ error: 'Disponivel apenas no plano Premium.' })
@@ -3156,7 +3327,7 @@ async function createPageRecord(userId, title, customSlug, cfUrl) {
   return { id, slug }
 }
 
-app.post('/api/pages/upload', authMiddleware, async (req, res, next) => {
+app.post('/api/pages/upload', authMiddleware, uploadLimiter, async (req, res, next) => {
   const blocked = checkFeature(req, res, 'pagevault')
   if (blocked) return blocked
   if (req.user.plan === 'nenhum') {
