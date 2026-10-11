@@ -876,7 +876,7 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 })
 
 // ─── Email / Recovery Routes ──────────────────────────────────────
-import { sendEmail, verificationEmailHtml, recoveryEmailHtml, purchaseConfirmationEmailHtml, pendingCheckoutEmailHtml } from './email.js'
+import { sendEmail, verificationEmailHtml, recoveryEmailHtml, accountDeletionEmailHtml, purchaseConfirmationEmailHtml, pendingCheckoutEmailHtml } from './email.js'
 
 function generateCode() {
   return String(randomInt(100000, 999999))
@@ -3002,6 +3002,94 @@ app.put('/api/user/password', authMiddleware, validate(passwordSchema), async (r
     res.status(500).json({ error: 'Erro ao alterar senha' })
   }
 })
+
+// ─── Conta / LGPD (exclusao) + consentimento de cookies ──────────
+const accountDeletionSchema = z.object({ password: z.string().min(1).max(128) }).strict()
+const cookieConsentSchema = z.object({ choice: z.enum(['all', 'essential']), anonymousId: z.string().max(100).optional() }).strict()
+
+app.post('/api/cookies/consent', async (req, res) => {
+  try {
+    const parsed = cookieConsentSchema.safeParse(req.body || {})
+    if (!parsed.success) return res.status(400).json({ error: 'Dados invalidos' })
+    const { choice, anonymousId } = parsed.data
+    let userId = null
+    const authHeader = req.headers.authorization
+    if (authHeader?.startsWith('Bearer ')) {
+      try { userId = jwt.verify(authHeader.slice(7), JWT_SECRET).userId } catch { /* ignora */ }
+    }
+    await run('INSERT INTO cookie_consents (id, user_id, anonymous_id, choice, created_at) VALUES ($1,$2,$3,$4,$5)',
+      [randomUUID(), userId, anonymousId || null, choice, new Date().toISOString().replace('T', ' ').slice(0, 19)])
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'Erro ao registrar consentimento' }) }
+})
+
+app.get('/api/account/deletion-status', authMiddleware, async (req, res) => {
+  try {
+    const request = await one(`SELECT id, status, requested_at, scheduled_for FROM account_deletion_requests WHERE user_id = $1 AND status = 'pending' ORDER BY requested_at DESC LIMIT 1`, [req.user.id])
+    res.json({ request: request || null })
+  } catch { res.status(500).json({ error: 'Erro ao consultar solicitacao' }) }
+})
+
+app.post('/api/account/deletion-request', authMiddleware, validate(accountDeletionSchema), async (req, res) => {
+  try {
+    const user = await one('SELECT * FROM users WHERE id = $1', [req.user.id])
+    if (!user) return res.status(404).json({ error: 'Usuario nao encontrado' })
+    const valid = await bcrypt.compare(req.body.password, user.password_hash)
+    if (!valid) return res.status(401).json({ error: 'Senha incorreta' })
+    const now = new Date()
+    const scheduled = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const nowIso = now.toISOString().replace('T', ' ').slice(0, 19)
+    const scheduledIso = scheduled.toISOString().replace('T', ' ').slice(0, 19)
+    await run(`UPDATE account_deletion_requests SET status = 'cancelled' WHERE user_id = $1 AND status = 'pending'`, [user.id]).catch(() => {})
+    await run('INSERT INTO account_deletion_requests (id, user_id, status, requested_at, scheduled_for) VALUES ($1,$2,$3,$4,$5)',
+      [randomUUID(), user.id, 'pending', nowIso, scheduledIso])
+    await audit('account_deletion_requested', { userId: user.id, ip: req.ip, userAgent: req.headers['user-agent'], metadata: { scheduledFor: scheduledIso } })
+    sendEmail({ to: user.email, subject: 'MetaSpy - Solicitacao de exclusao de conta', html: accountDeletionEmailHtml(scheduledIso) }).catch(() => {})
+    res.json({ ok: true, scheduledFor: scheduledIso })
+  } catch (err) {
+    logger.error({ err }, 'Erro deletion-request')
+    res.status(500).json({ error: 'Erro ao solicitar exclusao' })
+  }
+})
+
+app.post('/api/account/deletion-cancel', authMiddleware, async (req, res) => {
+  try {
+    const { changes } = await run(`UPDATE account_deletion_requests SET status = 'cancelled' WHERE user_id = $1 AND status = 'pending'`, [req.user.id])
+    await audit('account_deletion_cancelled', { userId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] })
+    res.json({ ok: true, cancelled: changes })
+  } catch { res.status(500).json({ error: 'Erro ao cancelar' }) }
+})
+
+async function processDueAccountDeletions() {
+  try {
+    const nowIso = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    const due = await query(`SELECT * FROM account_deletion_requests WHERE status = 'pending' AND scheduled_for <= $1`, [nowIso])
+    for (const req of due) {
+      try {
+        await run('DELETE FROM email_codes WHERE user_id = $1', [req.user_id]).catch(() => {})
+        await run('DELETE FROM refresh_tokens WHERE user_id = $1', [req.user_id]).catch(() => {})
+        await run('DELETE FROM pages WHERE user_id = $1', [req.user_id]).catch(() => {})
+        await run('DELETE FROM cleaned_assets WHERE user_id = $1', [req.user_id]).catch(() => {})
+        await run('DELETE FROM cloaker_scripts WHERE user_id = $1', [req.user_id]).catch(() => {})
+        await run('DELETE FROM camouflage_scripts WHERE user_id = $1', [req.user_id]).catch(() => {})
+        await run('DELETE FROM cloak_detections WHERE user_id = $1', [req.user_id]).catch(() => {})
+        await run('DELETE FROM media_assets WHERE user_id = $1', [req.user_id]).catch(() => {})
+        await run('DELETE FROM users WHERE id = $1', [req.user_id])
+        await run(`UPDATE account_deletion_requests SET status = 'completed', completed_at = $1 WHERE id = $2`, [nowIso, req.id])
+        await audit('account_deleted', { userId: req.user_id, metadata: { requestId: req.id } })
+      } catch (err) {
+        logger.error({ err: err.message, requestId: req.id }, 'Falha ao processar exclusao de conta')
+      }
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, 'Falha ao processar exclusoes devidas')
+  }
+}
+
+
+
+setTimeout(processDueAccountDeletions, 15000)
+setInterval(processDueAccountDeletions, 6 * 60 * 60 * 1000)
 
 // ─── Admin ────────────────────────────────────────────────────────
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '09santos.felipe@gmail.com').toLowerCase().trim()

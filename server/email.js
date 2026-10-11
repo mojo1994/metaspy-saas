@@ -237,6 +237,42 @@ export function recoveryEmailHtml(code) {
   })
 }
 
+export function accountDeletionEmailHtml(scheduledDate) {
+  return emailLayout(`
+    <tr><td height="16"></td></tr>
+    <tr>
+      <td align="center" style="padding-bottom:24px">
+        <table role="presentation" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="width:52px;height:52px;background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:14px;font-size:26px;line-height:52px;color:#fff;font-weight:700">M</td>
+            <td style="padding-left:12px;font-size:22px;font-weight:700;color:#fff;letter-spacing:-0.5px">MetaSpy</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#12121e;border:1px solid #1e1e32;border-radius:16px;padding:36px 32px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr><td align="center" style="font-size:20px;font-weight:700;color:#fff;padding-bottom:10px">Exclusao de conta solicitada</td></tr>
+          <tr><td align="center" style="font-size:14px;color:#8484a0;line-height:1.6;padding-bottom:20px">
+            Recebemos sua solicitacao de exclusao de conta.<br>
+            Ela sera processada em <strong style="color:#c084fc">${scheduledDate}</strong>.
+          </td></tr>
+          <tr><td align="center" style="font-size:13px;color:#6c6c88;line-height:1.6">
+            Se voce mudou de ideia, ainda pode cancelar a exclusao antes dessa data acessando a pagina
+            <a href="https://centralspyads.netlify.app/excluir-conta" style="color:#a855f7;text-decoration:none;font-weight:600">Exclusao de Conta</a>.
+          </td></tr>
+        </table>
+      </td></tr>
+    <tr>
+      <td style="padding:24px 16px 0;text-align:center;font-size:11px;color:#42425a">
+        MetaSpy &mdash; Todos os direitos reservados<br>
+        Se nao solicitou esta acao, entre em contato com o suporte imediatamente.
+      </td>
+    </tr>
+  `)
+}
+
 export function purchaseConfirmationEmailHtml({ name, plan, days }) {
   const planLabel = { basico: 'Basico', gold: 'Gold', premium: 'Premium' }[plan] || 'Premium'
   return emailLayout(`

@@ -1,10 +1,29 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import ReleaseNotesTimeline from '../components/ReleaseNotesTimeline'
+
+const LEGAL_ROUTES: Record<string, string> = {
+  legal_privacy: '/privacidade',
+  legal_cookies: '/cookies',
+  legal_deletion: '/excluir-conta',
+}
 
 const PAGES: Record<string, { titulo: string; conteudo: string }> = {
   updates: {
     titulo: 'Histórico de Atualizações',
     conteudo: ''
+  },
+  legal_privacy: {
+    titulo: 'Privacidade (LGPD)',
+    conteudo: 'Consulte a Política de Privacidade completa, com dados coletados, finalidades, retenção e seus direitos como titular.'
+  },
+  legal_cookies: {
+    titulo: 'Política de Cookies',
+    conteudo: 'Veja quais cookies e armazenamentos locais usamos e como gerenciar seu consentimento.'
+  },
+  legal_deletion: {
+    titulo: 'Exclusão de Conta',
+    conteudo: 'Solicite a exclusão definitiva da sua conta (janela de 7 dias) e saiba o que é removido.'
   },
   about: {
     titulo: 'Sobre o MetaSpy',
@@ -96,8 +115,15 @@ export default function Settings() {
             {page === 'updates' ? (
               <ReleaseNotesTimeline />
             ) : (
-              <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>
-                {PAGES[page].conteudo}
+              <div>
+                <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>
+                  {PAGES[page].conteudo}
+                </div>
+                {LEGAL_ROUTES[page] && (
+                  <Link to={LEGAL_ROUTES[page]} style={{ display: 'inline-block', marginTop: 16, fontSize: 13, color: 'var(--purple-400)' }}>
+                    Abrir página completa →
+                  </Link>
+                )}
               </div>
             )}
           </div>

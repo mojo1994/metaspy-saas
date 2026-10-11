@@ -250,6 +250,12 @@ export default function Landing() {
 
       <footer className="landing-footer">
         <p>MetaSpy © 2026 — Inteligência de Ofertas em Escala. Todos os direitos reservados.</p>
+        <nav className="legal-footer-links" aria-label="Links legais">
+          <Link to="/privacidade">Privacidade</Link>
+          <Link to="/cookies">Cookies</Link>
+          <Link to="/excluir-conta">Exclusão de Conta</Link>
+          <Link to="/redefinir-senha">Redefinir Senha</Link>
+        </nav>
       </footer>
     </div>
   )

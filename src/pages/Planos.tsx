@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { CheckCircle, Minus, SealCheck, Star } from '@phosphor-icons/react'
 
@@ -507,6 +507,12 @@ export default function Planos() {
 
       <footer className="planos-footer">
         <p>MetaSpy © 2026 — Inteligência de Ofertas em Escala. Todos os direitos reservados.</p>
+        <nav className="legal-links-footer">
+          <Link to="/privacidade">Privacidade</Link>
+          <Link to="/cookies">Cookies</Link>
+          <Link to="/excluir-conta">Excluir Conta</Link>
+          <Link to="/redefinir-senha">Redefinir Senha</Link>
+        </nav>
       </footer>
     </div>
   )

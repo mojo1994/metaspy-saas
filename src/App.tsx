@@ -22,6 +22,10 @@ import MetadataCleaner from './pages/MetadataCleaner'
 import Profile from './pages/Profile'
 import Settings from './pages/Settings'
 import Admin from './pages/Admin'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import CookiePolicy from './pages/CookiePolicy'
+import AccountDeletion from './pages/AccountDeletion'
+import CookieConsentBanner from './components/CookieConsentBanner'
 import { useAuth } from './contexts/AuthContext'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -38,6 +42,10 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/esqueci-senha" element={<ForgotPassword />} />
+      <Route path="/redefinir-senha" element={<ForgotPassword />} />
+      <Route path="/privacidade" element={<PrivacyPolicy />} />
+      <Route path="/cookies" element={<CookiePolicy />} />
+      <Route path="/excluir-conta" element={<AccountDeletion />} />
       <Route path="/planos" element={<Planos />} />
       <Route path="/ajuda" element={<Ajuda />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}>
@@ -61,6 +69,7 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    <CookieConsentBanner />
     </>
   )
 }

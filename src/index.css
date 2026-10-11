@@ -4355,3 +4355,62 @@ select:-webkit-autofill {
   pointer-events: none;
 }
 
+/* ── Banner de consentimento de cookies ── */
+.cookie-consent {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  padding: 12px 16px;
+  background: var(--bg-elevated, #12121e);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.cookie-consent-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cookie-consent-inner p {
+  flex: 1;
+  min-width: 240px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.cookie-consent-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.legal-links-footer,
+.landing-footer nav {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.legal-links-footer a,
+.landing-footer nav a {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.legal-links-footer a:hover,
+.landing-footer nav a:hover {
+  color: var(--purple-400);
+  text-decoration: underline;
+}
+
