@@ -312,4 +312,35 @@ export async function initSchema() {
     )
   `).catch(() => {})
 
+  // ── Front 4: releases da extensao MetaSpy ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS extension_releases (
+      id TEXT PRIMARY KEY,
+      version TEXT NOT NULL,
+      release_date TEXT NOT NULL,
+      download_url TEXT,
+      notes JSONB,
+      min_browser_version TEXT,
+      created_at TEXT NOT NULL
+    )
+  `).catch(() => {})
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_extension_releases_date ON extension_releases(release_date DESC)`).catch(() => {})
+  await pool.query(
+    `INSERT INTO extension_releases (id, version, release_date, download_url, notes, min_browser_version, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING`,
+    [
+      'ext-1.0.0',
+      '1.0.0',
+      '2026-10-11',
+      null,
+      JSON.stringify([
+        { type: 'novo', description: 'Minerador de anuncios do Facebook direto no navegador.' },
+        { type: 'novo', description: 'Score de escala e deteccao de estrategias sem sair do Meta Ads.' },
+        { type: 'melhoria', description: 'Extracao de criativos e links das paginas em um clique.' },
+      ]),
+      '120',
+      new Date().toISOString().replace('T', ' ').slice(0, 19),
+    ]
+  ).catch(() => {})
+
 }

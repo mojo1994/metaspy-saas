@@ -184,7 +184,7 @@ const CATEGORIAS: CategoriaProps[] = [
       },
       {
         pergunta: 'Como escolher o melhor plano para mim?',
-        resposta: 'Analise as ferramentas que voce precisa: o plano Basico (R$ 39,90/mes) inclui Minerador de Anuncios e Removedor de Metadados. O Gold (R$ 57,90/mes) adiciona Hospedar Paginas. O Premium (R$ 97/mes) libera todas as ferramentas incluindo Cloacker profissional com 15 sub-ferramentas, Bypass Engines e suporte prioritario.',
+        resposta: 'Analise as ferramentas que voce precisa: o plano Basico (R$ 39,90/mes) inclui a extensao MetaSpy (Minerador de Anuncios) e o Removedor de Metadados. O Gold (R$ 57,90/mes) adiciona Hospedar Paginas. O Premium (R$ 97/mes) libera todas as ferramentas incluindo Cloacker profissional com 15 sub-ferramentas, Bypass Engines e suporte prioritario.',
       },
       {
         pergunta: 'Como assinar um plano?',
@@ -197,32 +197,28 @@ const CATEGORIAS: CategoriaProps[] = [
     icone: 'search',
     itens: [
       {
-        pergunta: 'Como buscar anuncios na Biblioteca do Meta?',
-        resposta: 'No MetaSpy Tool, digite uma palavra-chave, URL ou nome de pagina no campo de busca. Use o botao "Buscar" para iniciar. Os resultados serao exibidos com anunciante, texto, plataformas, score, escala e outras metricas.',
+        pergunta: 'Onde baixo a extensao MetaSpy?',
+        resposta: 'Acesse o Dashboard e clique em "MetaSpy" no menu lateral. Na pagina da extensao, clique em "Baixar Extensao" e siga o passo a passo de instalacao. O download esta disponivel nos planos Basico, Gold e Premium.',
       },
       {
-        pergunta: 'Quais filtros estao disponiveis?',
-        resposta: 'Filtre por pais, plataforma (Facebook/Instagram), status, tipo de midia, score minimo, dias ativo, segmento (Nutra/Info) e palavras negativas. Use combinacoes de filtros para refinar sua busca.',
+        pergunta: 'Como instalar a extensao no Chrome?',
+        resposta: 'Baixe o arquivo .zip e descompacte. Acesse chrome://extensions, ative o "Modo do desenvolvedor", clique em "Carregar sem compactacao" e selecione a pasta descompactada. O icone do MetaSpy aparecera na barra de extensoes.',
+      },
+      {
+        pergunta: 'Como minerar anuncios com a extensao?',
+        resposta: 'Com a extensao instalada, abra a Biblioteca de Anuncios do Meta, pesquise o nicho ou anunciante desejado e acione a extensao MetaSpy. Ela exibe anunciante, texto, plataformas, score, escala e outras metricas direto na pagina.',
       },
       {
         pergunta: 'Como interpretar o score e as metricas?',
         resposta: 'O score indica a relevancia do anuncio baseado em tempo de atividade, engajamento e variacoes criativas. A escala mostra o volume estimado de gasto. Quanto maior o score e a escala, mais promissora a oferta.',
       },
       {
-        pergunta: 'Como exportar resultados para CSV?',
-        resposta: 'Apos realizar uma busca, clique no botao "Exportar CSV" no topo da tabela de resultados. O arquivo sera baixado automaticamente com todos os dados da busca atual, perfeito para analises externas.',
+        pergunta: 'Quais navegadores sao suportados?',
+        resposta: 'A extensao funciona em navegadores baseados em Chromium: Chrome, Edge e Brave. Recomendamos manter o navegador atualizado para a versao mais recente.',
       },
       {
-        pergunta: 'O que sao palavras negativas?',
-        resposta: 'Palavras negativas sao termos que voce pode adicionar para excluir anuncios irrelevantes dos resultados. Por exemplo, ao buscar "emagrecedor", adicione "detox" como negativa se quiser evitar anuncios de detox.',
-      },
-      {
-        pergunta: 'Erro na API do Facebook: como resolver?',
-        resposta: 'O MetaSpy utiliza a Graph API do Facebook. Se ocorrer erro na API, pode ser devido a limite de requisicoes ou instabilidade temporaria. Aguarde alguns minutos e tente novamente.',
-      },
-      {
-        pergunta: 'Resultados de busca nao aparecem',
-        resposta: 'Verifique se os filtros nao estao muito restritivos. Tente ampliar o periodo de busca ou remover filtros. Se o problema persistir, a Biblioteca de Anuncios do Meta pode estar temporariamente indisponivel.',
+        pergunta: 'A extensao nao aparece ou nao carrega',
+        resposta: 'Confirme que o "Modo do desenvolvedor" esta ativo em chrome://extensions e que a pasta correta foi selecionada. Se persistir, remova a extensao, baixe a versao mais recente na pagina da extensao e reinstale.',
       },
     ],
   },

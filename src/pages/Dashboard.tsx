@@ -63,7 +63,7 @@ export default function Dashboard() {
 
         <div className="sidebar-section-label">Ferramentas</div>
         <nav className="sidebar-nav">
-          <NavLink to="/dashboard" end onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/dashboard/extensao" onClick={redirectIfFree} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span>MetaSpy</span>
             {isFree && <IconLocked size={14} />}
           </NavLink>

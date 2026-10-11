@@ -31,7 +31,7 @@ const PAGES: Record<string, { titulo: string; conteudo: string }> = {
 
 Fundado com o objetivo de oferecer ferramentas profissionais para analise de concorrencia e arquivamento de paginas, o MetaSpy combina:
 
-- MetaSpy Ads: Inteligencia de anuncios do Facebook com analise de score de escala, deteccao de destino e entregavel.
+- Extensao MetaSpy: minerador de anuncios que roda direto no navegador, com score de escala e deteccao de estrategias.
 - Clonador: Clonagem offline de paginas web com suporte a sites complexos e bypass de seguranca.
 - Cloacker: Geracao de scripts de cloaking para protecao de campanhas.
 

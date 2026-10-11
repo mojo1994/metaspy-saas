@@ -35,12 +35,12 @@ export default function DashboardHome() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <div
           className={`feature-card${user?.plano === 'nenhum' ? ' locked' : ''}`}
-          onClick={() => user?.plano === 'nenhum' ? navigate('/planos') : navigate('/dashboard/metaspy')}
+          onClick={() => user?.plano === 'nenhum' ? navigate('/planos') : navigate('/dashboard/extensao')}
           style={{ cursor: 'pointer', '--i': 0 } as React.CSSProperties}
         >
           <div className="feature-icon">{user?.plano === 'nenhum' ? <IconLocked size={24} /> : <IconTarget size={24} />}</div>
           <h3>MetaSpy Ads</h3>
-          <p>Análise anúncios do Facebook com score de escala e detecção de estratégias.</p>
+          <p>Baixe a extensão MetaSpy e minere ofertas direto no navegador.</p>
           <div className="feature-action">
             {user?.plano === 'nenhum' ? 'Desbloquear →' : 'Acessar →'}
           </div>

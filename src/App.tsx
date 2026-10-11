@@ -6,7 +6,7 @@ import Planos from './pages/Planos'
 import Ajuda from './pages/Ajuda'
 import Dashboard from './pages/Dashboard'
 import DashboardHome from './pages/DashboardHome'
-import MetaSpyTool from './pages/MetaSpyTool'
+import ExtensionDownload from './pages/ExtensionDownload'
 import PageVaultTool from './pages/PageVaultTool'
 import CloackerTool from './pages/CloackerTool'
 import CloakDetector from './pages/CloakDetector'
@@ -50,7 +50,7 @@ export default function App() {
       <Route path="/ajuda" element={<Ajuda />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}>
         <Route index element={<DashboardHome />} />
-        <Route path="metaspy" element={<MetaSpyTool />} />
+        <Route path="extensao" element={<ExtensionDownload />} />
         <Route path="pagevault" element={<PageVaultTool />} />
         <Route path="cloacker" element={<CloackerTool />} />
         <Route path="cloacker/detector" element={<CloakDetector />} />
