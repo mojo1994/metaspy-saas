@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
+import i18n, { normalizeLanguage } from '../i18n'
 
 interface User {
   id: string
@@ -9,6 +10,7 @@ interface User {
   subscription_expiry: string | null
   clones_used: number
   email_verified: number
+  preferred_language?: string
 }
 
 interface AuthContextType {
@@ -32,8 +34,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedAccess = localStorage.getItem('metaspy_access_token')
     if (stored && storedAccess) {
       try {
-        setUser(JSON.parse(stored))
+        const parsed = JSON.parse(stored)
+        setUser(parsed)
         setAccessToken(storedAccess)
+        if (parsed.preferred_language) i18n.changeLanguage(normalizeLanguage(parsed.preferred_language))
       } catch {
         localStorage.removeItem('metaspy_session')
         localStorage.removeItem('metaspy_access_token')
@@ -62,12 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         subscription_status: data.user.subscription_status || 'inactive',
         subscription_expiry: data.user.subscription_expiry || null,
         clones_used: data.user.clones_used || 0,
-        email_verified: data.user.email_verified || 0
+        email_verified: data.user.email_verified || 0,
+        preferred_language: data.user.preferred_language || undefined
       }
       setUser(u)
       setAccessToken(data.accessToken)
       localStorage.setItem('metaspy_session', JSON.stringify(u))
       localStorage.setItem('metaspy_access_token', data.accessToken)
+      if (u.preferred_language) i18n.changeLanguage(normalizeLanguage(u.preferred_language))
       return null
     } catch {
       return 'Erro de conexão com o servidor'
@@ -95,12 +101,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         subscription_status: data.user.subscription_status || 'inactive',
         subscription_expiry: data.user.subscription_expiry || null,
         clones_used: data.user.clones_used || 0,
-        email_verified: data.user.email_verified || 0
+        email_verified: data.user.email_verified || 0,
+        preferred_language: data.user.preferred_language || undefined
       }
       setUser(u)
       setAccessToken(data.accessToken)
       localStorage.setItem('metaspy_session', JSON.stringify(u))
       localStorage.setItem('metaspy_access_token', data.accessToken)
+      if (u.preferred_language) i18n.changeLanguage(normalizeLanguage(u.preferred_language))
       return null
     } catch {
       return 'Erro de conexão com o servidor'

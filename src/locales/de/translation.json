@@ -1,0 +1,247 @@
+{
+  "common": {
+    "appName": "MetaSpy",
+    "login": "Anmelden",
+    "signup": "Konto erstellen",
+    "back": "Zurück",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "loading": "Wird geladen...",
+    "dashboard": "Zum Dashboard",
+    "help": "Hilfe"
+  },
+  "language": {
+    "label": "Sprache",
+    "select": "Sprache auswählen"
+  },
+  "landing": {
+    "hero": {
+      "title": "Angebots-Intelligenz in großem Maßstab",
+      "subtitle": "Identifiziere, analysiere und klone die besten Angebote aus der Meta-Anzeigenbibliothek mit erweiterten Filtern und visueller Hervorhebung in Echtzeit.",
+      "start": "JETZT STARTEN",
+      "dashboard": "Zum Dashboard",
+      "login": "Anmelden"
+    },
+    "features": {
+      "adintelligence": {
+        "title": "MetaSpy Ad Intelligence",
+        "description": "Durchsuche die Facebook-Anzeigenbibliothek in Echtzeit. Entdecke skalierte Angebote nach Score, Aktivitätsdauer, kreativen Varianten und vielem mehr."
+      },
+      "cloner": {
+        "title": "Kloner",
+        "description": "Klone komplette Webseiten auf deinen Computer. Unterstützung für komplexe Seiten, Inlead-Quizzes und mehrschichtiges Sicherheits-Bypassing."
+      },
+      "cloaker": {
+        "title": "Cloaker",
+        "description": "Erstelle professionelle Cloaking-Skripte zum Schutz deiner Kampagnen. Bot-Erkennung, Fingerprinting und IP-Blockierung mit einem Klick."
+      },
+      "analytics": {
+        "title": "Erweiterte Analyse",
+        "description": "Vollständiges Dashboard mit Score-Statistiken, Segmentverteilung, Nischen-Wettbewerbsfähigkeit und Top-Angeboten."
+      },
+      "filters": {
+        "title": "Intelligente Filter",
+        "description": "Filtere nach Land, Plattform, Status, Medientyp, Mindest-Score, aktiven Tagen, Segment (Nutra/Info), negativen Keywords und vielem mehr."
+      },
+      "csv": {
+        "title": "CSV-Export",
+        "description": "Exportiere alle Ergebnisse mit einem Klick als CSV. Perfekt für externe Analysen und individuelle Berichte."
+      },
+      "bypass": {
+        "title": "Bypass Engine",
+        "description": "Bypass-Engine in JS, Python, Node und PHP. Unterstützt Cloudflare, SSL, interaktive Quizzes und Websites mit erweitertem Schutz."
+      }
+    },
+    "plans": {
+      "title": "Wähle den idealen Plan zum Skalieren",
+      "subtitle": "Kein Gratisplan. Kein Schnickschnack. Ergebnisse ab dem ersten Tag.",
+      "comparison": "Vollständigen Vergleich ansehen",
+      "period": "/Monat",
+      "badge": "EMPFOHLEN",
+      "start": "Jetzt Starten",
+      "basico": {
+        "title": "Basis",
+        "desc": "Für alle, die jetzt skalieren wollen",
+        "price": { "original": "R$ 97", "current": "R$ 39,90" },
+        "features": ["Anzeigen-Miner", "Metadaten-Entferner"]
+      },
+      "gold": {
+        "title": "Gold",
+        "desc": "Das komplette Paket für Kriegsmaschinen",
+        "price": { "original": "R$ 197", "current": "R$ 57,00" },
+        "features": ["Anzeigen-Miner", "Seiten hosten", "Metadaten-Entferner"]
+      },
+      "premium": {
+        "title": "Premium",
+        "desc": "Alle Tools ohne Limits",
+        "price": { "original": "R$ 397", "current": "R$ 97,00" },
+        "features": [
+          "Anzeigen-Miner",
+          "Kloner",
+          "50 Seiten/Monat hosten",
+          "Cloaker Premium",
+          "Script-Generator",
+          "Erweitertes Script",
+          "Cloaking-Detektor",
+          "Text-Tarnung",
+          "Medien-Tarnung",
+          "Kampagnen",
+          "Signierte Links",
+          "Steganografie",
+          "Echtzeit-Logs",
+          "Bypass Engines",
+          "Metadaten-Entferner",
+          "Priority Support 24/7"
+        ]
+      }
+    },
+    "footer": {
+      "copyright": "MetaSpy © 2026 — Angebots-Intelligenz in großem Maßstab. Alle Rechte vorbehalten.",
+      "legal": "Rechtliche Links",
+      "privacy": "Datenschutz",
+      "cookies": "Cookies",
+      "deletion": "Kontolöschung",
+      "reset": "Passwort zurücksetzen"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Anmelden",
+      "subtitle": "Melde dich in deinem MetaSpy-Konto an",
+      "email": "E-Mail",
+      "password": "Passwort",
+      "submit": "Anmelden",
+      "submitting": "Anmeldung...",
+      "forgot": "Passwort vergessen?",
+      "noAccount": "Kein Konto?",
+      "signupLink": "Registrieren",
+      "back": "Zurück",
+      "required": "Fülle alle Felder aus."
+    },
+    "signup": {
+      "titleFree": "Kostenlos testen",
+      "titleCreate": "Konto erstellen",
+      "descEmail": "Gib deine E-Mail ein, um zu starten",
+      "descForm": "Vervollständige deine Registrierung",
+      "email": "E-Mail",
+      "name": "Name",
+      "namePlaceholder": "Dein Name",
+      "password": "Passwort",
+      "passwordPlaceholder": "Mindestens 6 Zeichen",
+      "continue": "Weiter",
+      "checking": "Wird geprüft...",
+      "submit": "Konto erstellen",
+      "submitting": "Wird erstellt...",
+      "noEmail": "Gib deine E-Mail ein.",
+      "emailExists": "E-Mail bereits registriert!",
+      "loginHere": "Anmelden",
+      "connectionError": "Verbindungsfehler zum Server.",
+      "required": "Fülle alle Felder aus.",
+      "shortPassword": "Das Passwort muss mindestens 6 Zeichen haben.",
+      "haveAccount": "Schon ein Konto?",
+      "enter": "Anmelden",
+      "switchEmail": "E-Mail ändern",
+      "back": "Zurück"
+    },
+    "forgot": {
+      "title": "Passwort wiederherstellen",
+      "doneTitle": "Fertig!",
+      "descEmail": "Gib deine E-Mail ein, um einen Wiederherstellungscode zu erhalten.",
+      "descCode": "Gib den erhaltenen Code ein und erstelle ein neues Passwort.",
+      "descDone": "Dein Passwort wurde erfolgreich zurückgesetzt.",
+      "email": "E-Mail",
+      "codeLabel": "Code (6 Ziffern)",
+      "newPassword": "Neues Passwort",
+      "newPasswordPlaceholder": "Mindestens 6 Zeichen",
+      "confirmPassword": "Passwort bestätigen",
+      "confirmPlaceholder": "Passwort wiederholen",
+      "sendCode": "Code senden",
+      "sending": "Wird gesendet...",
+      "resetPassword": "Passwort zurücksetzen",
+      "resetting": "Wird zurückgesetzt...",
+      "gotoLogin": "Zur Anmeldung",
+      "backToLogin": "Zurück zur Anmeldung",
+      "codeToEmail": "Ein 6-stelliger Code wurde gesendet. Er läuft in 15 Minuten ab.",
+      "codeOk": "Passwort erfolgreich zurückgesetzt!",
+      "requiredCode": "Gib den 6-stelligen Code ein.",
+      "shortPassword": "Das neue Passwort muss mindestens 6 Zeichen haben.",
+      "mismatch": "Passwörter stimmen nicht überein.",
+      "connectionError": "Verbindungsfehler zum Server."
+    }
+  },
+  "planos": {
+    "hero": {
+      "title": "Warum du mit uns skalieren solltest",
+      "subtitle": "Die Tools, die Top-Player nutzen, um Angebote auf Meta Ads zu skalieren.\nKein Gratisplan. Kein Schnickschnack. Ergebnisse ab Tag eins.",
+      "ctaStart": "KOSTENLOS TESTEN",
+      "ctaLogin": "Anmelden",
+      "ctaDashboard": "Zum Dashboard"
+    },
+    "badge": "AM HÄUFIGSTEN GEWÄHLT",
+    "period": "/Monat",
+    "redirecting": "Weiterleitung...",
+    "start": "Jetzt Starten",
+    "checkoutError": "Fehler beim Erstellen der Zahlung. Versuche es erneut.",
+    "connectionError": "Verbindungsfehler. Prüfe dein Internet.",
+    "trust": {
+      "secure": "Sichere Zahlung",
+      "instant": "Sofortige Aktivierung nach Bestätigung",
+      "cancel": "Jederzeit kündbar"
+    },
+    "help": "Hilfe",
+    "comparison": {
+      "title": "Vollständiger Vergleich",
+      "aria": "Vollständiger Planvergleich",
+      "feature": "Funktion"
+    },
+    "depo": {
+      "title": "Lerne die Top-Player des Marktes kennen, die mit uns skalieren"
+    },
+    "faq": {
+      "title": "Häufige Fragen",
+      "q1": "Kann ich jederzeit kündigen?",
+      "a1": "Ja. Kündige jederzeit. Du behältst den Zugang bis zum Ende des bezahlten Zeitraums.",
+      "q2": "Ist die Zahlung sicher?",
+      "a2": "Ja. Alle Zahlungen werden über ein verschlüsseltes und sicheres Gateway abgewickelt.",
+      "q3": "Funktioniert es für jede Nische?",
+      "a3": "Ja. MetaSpy funktioniert mit Nutra/Info-Angeboten und jeder Nische auf Meta Ads.",
+      "q4": "Brauche ich technisches Wissen?",
+      "a4": "Nein. Das Tool ist für Affiliates und Media Buyer jeder Stufe gemacht.",
+      "q5": "Was ist der Unterschied zwischen den Plänen?",
+      "a5": "Basis bietet den Angebots-Miner und den Metadaten-Entferner. Gold fügt den Kloner und das Hosten von Seiten hinzu. Premium schaltet alle Tools ohne Limits frei."
+    },
+    "bottom": {
+      "title": "Bereit zu skalieren?",
+      "subtitle": "Schließe dich Hunderten von Profis an, die MetaSpy bereits nutzen, um Meta Ads zu dominieren.",
+      "cta": "JETZT STARTEN"
+    },
+    "features": {
+      "minerador": "Angebots-Miner",
+      "analise_concorrentes": "Wettbewerbsanalyse",
+      "limpeza_metadados": "Metadaten-Bereinigung",
+      "clonagem": "Seiten-Klonen",
+      "hospedagem": "Seiten-Hosting",
+      "paginas_ocultas": "Versteckte Seiten",
+      "analise_avancada": "Erweiterte Analyse",
+      "clonagem_50": "50 Seiten/Monat klonen",
+      "quebra_cloaker": "Cloaker-Brecher",
+      "camuflagem": "Video- & Bild-Tarnung",
+      "suporte": "Priority-Support"
+    },
+    "plan": {
+      "basicoTitle": "Basis",
+      "basicoDesc": "Ideal für alle, die anfangen, Gewinner-Angebote zu finden.",
+      "premiumTitle": "Premium",
+      "premiumDesc": "Voller Zugang für Affiliates, Produzenten und Media Buyer, die skalieren.",
+      "goldTitle": "Gold",
+      "goldDesc": "Für alle, die bereits werben und schneller skalieren wollen."
+    },
+    "footer": {
+      "copyright": "MetaSpy © 2026 — Angebots-Intelligenz in großem Maßstab. Alle Rechte vorbehalten.",
+      "privacy": "Datenschutz",
+      "cookies": "Cookies",
+      "deletion": "Konto löschen",
+      "reset": "Passwort zurücksetzen"
+    }
+  }
+}

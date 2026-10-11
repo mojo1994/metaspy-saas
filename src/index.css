@@ -415,6 +415,19 @@ select {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+.landing-langbar {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 30;
+}
+.planos-langbar {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 30;
 }
 .landing-nav {
   display: flex;

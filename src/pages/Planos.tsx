@@ -1,96 +1,42 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
-import { CheckCircle, Minus, SealCheck, Star } from '@phosphor-icons/react'
+import LanguageSelector from '../components/LanguageSelector'
+import { Minus, SealCheck } from '@phosphor-icons/react'
 
-const FEATURES_BASICO = [
-  { label: 'Minerador de ofertas', ok: true },
-  { label: 'Análise de concorrentes', ok: true },
-  { label: 'Limpeza de metadados', ok: true },
-]
-
-const FEATURES_GOLD = [
-  { label: 'Tudo do plano Básico', ok: true },
-  { label: 'Clonagem de páginas', ok: true },
-  { label: 'Hospedagem de páginas', ok: true },
-  { label: 'Páginas ocultas', ok: true },
-  { label: 'Análise avançada', ok: true },
-]
-
-const FEATURES_PREMIUM = [
-  { label: 'Tudo do plano Gold', ok: true },
-  { label: 'Minerador de ofertas avançado', ok: true },
-  { label: 'Clonagem de 50 páginas/mês', ok: true },
-  { label: 'Quebra de Cloaker', ok: true },
-  { label: 'Camuflagem de Vídeo e Imagem', ok: true },
-  { label: 'Limpeza de Metadados', ok: true },
-  { label: 'Suporte Prioritário', ok: true },
-]
+const FEATURE_KEYS = {
+  basico: ['minerador', 'analise_concorrentes', 'limpeza_metadados'],
+  gold: ['minerador', 'analise_concorrentes', 'limpeza_metadados', 'clonagem', 'hospedagem', 'paginas_ocultas', 'analise_avancada'],
+  premium: ['minerador', 'analise_concorrentes', 'limpeza_metadados', 'clonagem', 'hospedagem', 'paginas_ocultas', 'analise_avancada', 'clonagem_50', 'quebra_cloaker', 'camuflagem', 'suporte'],
+} as const
 
 const ALL_FEATURES = [
-  'Minerador de ofertas',
-  'Análise de concorrentes',
-  'Limpeza de metadados',
-  'Clonagem de páginas',
-  'Hospedagem de páginas',
-  'Páginas ocultas',
-  'Análise avançada',
-  'Clonagem de 50 páginas/mês',
-  'Quebra de Cloaker',
-  'Camuflagem de Vídeo e Imagem',
-  'Suporte Prioritário',
-]
-
-function hasFeature(list: { label: string; ok: boolean }[], name: string) {
-  return list.some(f => {
-    if (!f.ok) return false
-    const clean = f.label.trim()
-    return clean === name || clean.startsWith(name)
-  })
-}
+  'minerador',
+  'analise_concorrentes',
+  'limpeza_metadados',
+  'clonagem',
+  'hospedagem',
+  'paginas_ocultas',
+  'analise_avancada',
+  'clonagem_50',
+  'quebra_cloaker',
+  'camuflagem',
+  'suporte',
+] as const
 
 const DEPO_IMAGENS = [
-  { handle: '@thzmkt', idade: '25 anos', arquivo: '/depoimentos/foto1.jpg' },
-  { handle: '@lucas.digital', idade: '23 anos', arquivo: '/depoimentos/foto2.jpg' },
-  { handle: '@alberto nogueira', idade: '23 anos', arquivo: '/depoimentos/foto3.jpg' },
-  { handle: '@nandokz', idade: '22 anos', arquivo: '/depoimentos/foto4.jpg' },
+  { handle: '@thzmkt', idade: '25', arquivo: '/depoimentos/foto1.jpg' },
+  { handle: '@lucas.digital', idade: '23', arquivo: '/depoimentos/foto2.jpg' },
+  { handle: '@alberto nogueira', idade: '23', arquivo: '/depoimentos/foto3.jpg' },
+  { handle: '@nandokz', idade: '22', arquivo: '/depoimentos/foto4.jpg' },
 ]
 
 const PLAN_CARD_DATA = [
-  {
-    key: 'basico',
-    title: 'Básico',
-    description: 'Ideal para quem está começando a encontrar ofertas vencedoras.',
-    original: null,
-    current: 'R$ 39,90',
-    button: 'Começar Agora',
-    features: FEATURES_BASICO,
-    className: 'plan-card-basic',
-    highlighted: false,
-  },
-  {
-    key: 'premium',
-    title: 'Premium',
-    description: 'Acesso completo para afiliados, produtores e gestores de tráfego que operam em escala.',
-    original: 'R$ 397',
-    current: 'R$ 97,00',
-    button: 'Começar Agora',
-    features: FEATURES_PREMIUM,
-    className: 'plan-card-premium',
-    highlighted: true,
-  },
-  {
-    key: 'gold',
-    title: 'Gold',
-    description: 'Para quem já anuncia e deseja escalar mais rápido.',
-    original: null,
-    current: 'R$ 57,90',
-    button: 'Começar Agora',
-    features: FEATURES_GOLD,
-    className: 'plan-card-gold',
-    highlighted: false,
-  },
+  { key: 'basico', current: 'R$ 39,90', features: FEATURE_KEYS.basico, className: 'plan-card-basic', highlighted: false },
+  { key: 'premium', current: 'R$ 97,00', original: 'R$ 397', features: FEATURE_KEYS.premium, className: 'plan-card-premium', highlighted: true },
+  { key: 'gold', current: 'R$ 57,90', features: FEATURE_KEYS.gold, className: 'plan-card-gold', highlighted: false },
 ] as const
 
 function revealStyle(delayMs: number): CSSProperties {
@@ -123,87 +69,71 @@ function ParticleField() {
       canvas!.style.height = ph + 'px'
       ctx!.scale(dpr, dpr)
     }
+
     resize()
-    window.addEventListener('resize', resize)
 
-    const ph = getPageH()
-    const count = Math.min(120, Math.floor(window.innerWidth * ph / 12000))
     const pts: { x: number; y: number; vx: number; vy: number; s: number; o: number }[] = []
-
+    const W = window.innerWidth
+    const H = getPageH()
+    const count = Math.min(90, Math.floor((W * H) / 26000))
     for (let i = 0; i < count; i++) {
       pts.push({
-        x: Math.random() * window.innerWidth,
-        y: Math.random() * ph,
+        x: Math.random() * W,
+        y: Math.random() * H,
         vx: (Math.random() - 0.5) * 0.35,
         vy: (Math.random() - 0.5) * 0.35,
-        s: Math.random() * 2.4 + 0.6,
-        o: Math.random() * 0.45 + 0.15,
+        s: Math.random() * 1.6 + 0.4,
+        o: Math.random() * 0.5 + 0.15,
       })
     }
 
     function draw() {
-      const w = window.innerWidth
       const h = getPageH()
-      ctx!.clearRect(0, 0, w, h)
-
-      for (let i = 0; i < pts.length; i++) {
-        const p = pts[i]
+      ctx!.clearRect(0, 0, window.innerWidth, h)
+      for (const p of pts) {
         const dx = mx - p.x
         const dy = (my + window.scrollY) - p.y
-
         const dist = Math.sqrt(dx * dx + dy * dy)
-        if (dist < 180) {
-          const f = ((180 - dist) / 180) * 0.015
+        if (dist < 160) {
+          const f = ((160 - dist) / 160) * 0.012
           p.vx -= dx * f
           p.vy -= dy * f
         }
-        p.vx += (Math.random() - 0.5) * 0.01
-        p.vy += (Math.random() - 0.5) * 0.01
-        p.vx *= 0.98
-        p.vy *= 0.98
+        p.vx *= 0.99
+        p.vy *= 0.99
         p.x += p.vx
         p.y += p.vy
-        if (p.x < -20) p.x = w + 20
-        if (p.x > w + 20) p.x = -20
-        if (p.y < -20) p.y = h + 20
-        if (p.y > h + 20) p.y = -20
-
+        if (p.x < 0 || p.x > window.innerWidth || p.y < 0 || p.y > h) {
+          p.x = Math.random() * window.innerWidth
+          p.y = Math.random() * h
+        }
         ctx!.beginPath()
         ctx!.arc(p.x, p.y, p.s, 0, Math.PI * 2)
         ctx!.fillStyle = `rgba(168,85,247,${p.o})`
         ctx!.fill()
       }
-
-      for (let i = 0; i < pts.length; i++) {
-        for (let j = i + 1; j < pts.length; j++) {
-          const a = pts[i], b = pts[j]
-          const dx = a.x - b.x, dy = a.y - b.y
-          const d = dx * dx + dy * dy
-          if (d < 150 * 150) {
-            const alpha = (1 - Math.sqrt(d) / 150) * 0.12
-            ctx!.beginPath()
-            ctx!.moveTo(a.x, a.y)
-            ctx!.lineTo(b.x, b.y)
-            ctx!.strokeStyle = `rgba(168,85,247,${alpha})`
-            ctx!.lineWidth = 0.8
-            ctx!.stroke()
-          }
-        }
-      }
-
       anim = requestAnimationFrame(draw)
     }
+
     draw()
 
-    function onMouse(e: MouseEvent) { mx = e.clientX; my = e.clientY }
-    function onLeave() { mx = -9999; my = -9999 }
-    window.addEventListener('mousemove', onMouse)
+    function onMove(e: MouseEvent) {
+      mx = e.clientX
+      my = e.clientY
+    }
+    function onLeave() {
+      mx = -9999
+      my = -9999
+    }
+
+    window.addEventListener('resize', resize)
+    window.addEventListener('mousemove', onMove)
     document.addEventListener('mouseleave', onLeave)
 
     return () => {
       cancelAnimationFrame(anim)
       window.removeEventListener('resize', resize)
-      window.removeEventListener('mousemove', onMouse)
+      window.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseleave', onLeave)
     }
   }, [])
@@ -213,6 +143,7 @@ function ParticleField() {
 
 export default function Planos() {
   const { isAuthenticated, fetchWithAuth } = useAuth()
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -240,34 +171,6 @@ export default function Planos() {
     return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    const el = pageRef.current
-    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-
-    let frame: number
-    let mx = 0, my = 0
-
-    function onMove(e: MouseEvent) {
-      mx = (e.clientX / window.innerWidth - 0.5) * 2
-      my = (e.clientY / window.innerHeight - 0.5) * 2
-      if (!frame) {
-        frame = requestAnimationFrame(apply)
-      }
-    }
-
-    function apply() {
-      frame = 0
-      el!.style.setProperty('--tilt-x', `${my * -3}deg`)
-      el!.style.setProperty('--tilt-y', `${mx * 3}deg`)
-    }
-
-    window.addEventListener('mousemove', onMove)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      cancelAnimationFrame(frame)
-    }
-  }, [])
-
   async function handleCheckout(plan: string) {
     if (!isAuthenticated) { navigate('/signup?redirect=planos'); return }
     setLoading(plan)
@@ -282,39 +185,56 @@ export default function Planos() {
         window.location.href = data.checkoutUrl
         return
       }
-      setError(data.error || 'Erro ao criar checkout. Tente novamente.')
-    } catch (e) {
-      setError('Erro de conexão. Verifique sua internet.')
+      setError(data.error || t('planos.checkoutError'))
+    } catch {
+      setError(t('planos.connectionError'))
     }
     setLoading(null)
   }
 
+  function hasFeature(planKey: keyof typeof FEATURE_KEYS, feature: string) {
+    return (FEATURE_KEYS[planKey] as readonly string[]).includes(feature)
+  }
+
+  const planDescKey: Record<string, string> = {
+    basico: 'planos.plan.basicoDesc',
+    gold: 'planos.plan.goldDesc',
+    premium: 'planos.plan.premiumDesc',
+  }
+  const planTitleKey: Record<string, string> = {
+    basico: 'planos.plan.basicoTitle',
+    gold: 'planos.plan.goldTitle',
+    premium: 'planos.plan.premiumTitle',
+  }
+
   return (
     <div className="planos-page" ref={pageRef}>
+      <div className="planos-langbar">
+        <LanguageSelector align="right" />
+      </div>
       <ParticleField />
       <div className="planos-bg" />
 
       <section className="planos-hero" data-tilt>
         <div className="planos-hero-inner">
           <h1 className="reveal-lift planos-hero-title" data-reveal style={revealStyle(120)}>
-            Porque voce deve escalar com a gente
+            {t('planos.hero.title')}
           </h1>
           <p className="planos-subtitle reveal-lift" data-reveal style={revealStyle(240)}>
-            As ferramentas que os top players usam para escalar ofertas no Meta Ads. <br />
-            Sem plano free. Sem enrolação. Resultado do primeiro dia.
+            {t('planos.hero.subtitle')}
           </p>
           <div className="planos-hero-cta-row" data-reveal style={revealStyle(360)}>
             {isAuthenticated ? (
               <button type="button" className="btn btn-gradient planos-hero-cta" onClick={() => navigate('/dashboard')}>
-                Ir para o Dashboard
+                {t('planos.hero.ctaDashboard')}
               </button>
             ) : (
               <>
                 <button type="button" className="btn btn-gradient planos-hero-cta" onClick={() => navigate('/signup')}>
-                  TESTE GRATIS
+                  {t('planos.hero.ctaStart')}
                 </button>
                 <button type="button" className="btn btn-primary planos-hero-cta" onClick={() => navigate('/login')}>
-                  Entrar
+                  {t('planos.hero.ctaLogin')}
                 </button>
               </>
             )}
@@ -351,33 +271,33 @@ export default function Planos() {
           >
             <div className="planos-card-header">
               <div className="planos-card-title-row">
-                <h2>{plan.title}</h2>
+                <h2>{t(planTitleKey[plan.key])}</h2>
                 {plan.highlighted && (
                   <div className="planos-card-badge planos-card-badge-animated">
-                    MAIS ESCOLHIDO
+                    {t('planos.badge')}
                   </div>
                 )}
               </div>
-              <p className="planos-card-desc">{plan.description}</p>
+              <p className="planos-card-desc">{t(planDescKey[plan.key])}</p>
             </div>
 
             <div className="planos-card-price">
-              {plan.original && (
+              {'original' in plan && plan.original && (
                 <span className="planos-original">
                   <span>{plan.original}</span>
                 </span>
               )}
               <span className="planos-current">{plan.current}</span>
-              <span className="planos-period">/mes</span>
+              <span className="planos-period">{t('planos.period')}</span>
             </div>
 
             <ul className="planos-features">
               {plan.features.map(f => (
-                <li key={f.label} className={f.ok ? '' : 'off'}>
+                <li key={f}>
                   <span className="planos-check">
-                    {f.ok ? <SealCheck size={14} weight="fill" /> : <Minus size={12} weight="bold" />}
+                    <SealCheck size={14} weight="fill" />
                   </span>
-                    <span>{f.label}</span>
+                  <span>{t(`planos.features.${f}`)}</span>
                 </li>
               ))}
             </ul>
@@ -388,49 +308,48 @@ export default function Planos() {
               onClick={() => handleCheckout(plan.key)}
               disabled={loading === plan.key}
             >
-              {loading === plan.key ? 'Redirecionando...' : plan.button}
+              {loading === plan.key ? t('planos.redirecting') : t('planos.start')}
             </button>
           </article>
         ))}
       </section>
 
       <div className="planos-trust" data-reveal style={revealStyle(160)}>
-        <div className="planos-trust-item"><svg className="planos-trust-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Pagamento seguro</div>
-        <div className="planos-trust-item"><svg className="planos-trust-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Liberação imediata após confirmação</div>
-        <div className="planos-trust-item"><svg className="planos-trust-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Cancele quando quiser</div>
+        <div className="planos-trust-item"><svg className="planos-trust-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> {t('planos.trust.secure')}</div>
+        <div className="planos-trust-item"><svg className="planos-trust-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> {t('planos.trust.instant')}</div>
+        <div className="planos-trust-item"><svg className="planos-trust-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> {t('planos.trust.cancel')}</div>
       </div>
 
       <div className="planos-help-btn" data-reveal style={revealStyle(160)}>
         <button type="button" className="btn btn-secondary" onClick={() => navigate('/ajuda')}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          Ajuda
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          {t('planos.help')}
         </button>
       </div>
 
       <section className="planos-comparison" data-reveal style={revealStyle(160)}>
         <div className="planos-section-heading">
-          <h2>Comparativo Completo</h2>
+          <h2>{t('planos.comparison.title')}</h2>
         </div>
         <div className="planos-table-shell">
-          <div className="planos-table" role="table" aria-label="Comparativo completo dos planos">
+          <div className="planos-table" role="table" aria-label={t('planos.comparison.aria')}>
             <div className="planos-table-row planos-table-header" role="row">
               <div className="planos-table-cell planos-table-plan-col planos-table-header-filler" role="columnheader" />
               <div className="planos-table-cell planos-table-plan-col" role="columnheader">
-                <span className="planos-plan-name">Básico</span>
+                <span className="planos-plan-name">{t('planos.plan.basicoTitle')}</span>
               </div>
               <div className="planos-table-cell planos-plan-col planos-plan-col-highlight" role="columnheader">
-                <span className="planos-plan-name">Premium</span>
-              
+                <span className="planos-plan-name">{t('planos.plan.premiumTitle')}</span>
               </div>
               <div className="planos-table-cell planos-plan-col" role="columnheader">
-                <span className="planos-plan-name">Gold</span>
+                <span className="planos-plan-name">{t('planos.plan.goldTitle')}</span>
               </div>
             </div>
 
             {ALL_FEATURES.map((feature, index) => {
-              const basic = hasFeature(FEATURES_BASICO, feature)
-              const gold = hasFeature(FEATURES_GOLD, feature)
-              const premium = hasFeature(FEATURES_PREMIUM, feature)
+              const basic = hasFeature('basico', feature)
+              const gold = hasFeature('gold', feature)
+              const premium = hasFeature('premium', feature)
 
               return (
                 <div
@@ -441,7 +360,7 @@ export default function Planos() {
                   style={revealStyle(80 + index * 70)}
                 >
                   <div className="planos-table-cell planos-table-feature" role="cell">
-                    {feature}
+                    {t(`planos.features.${feature}`)}
                   </div>
                   <div className="planos-table-cell planos-table-flag" role="cell">
                     {basic ? <SealCheck size={16} weight="fill" /> : <Minus size={16} weight="bold" />}
@@ -460,18 +379,17 @@ export default function Planos() {
       </section>
 
       <section className="planos-depoimentos" data-reveal style={revealStyle(160)}>
-        <h2>conheca os top players do mercado que escalam com a gente</h2>
+        <h2>{t('planos.depo.title')}</h2>
         <div className="planos-depo-grid-fotos">
           {DEPO_IMAGENS.map((d, index) => (
             <div key={d.handle} className="planos-depo-card-foto" data-reveal style={revealStyle(index * 60)}>
               <div className="planos-depo-moldura">
                 <div className="planos-depo-moldura-borda" />
                 <div className="planos-depo-moldura-brilho" />
-                <img src={d.arquivo} alt={`Depoimento de ${d.handle}`} className="planos-depo-img" loading="lazy" />
-                <div className="planos-depo-img-overlay" />
+                <img src={d.arquivo} alt={d.handle} className="planos-depo-img" />
               </div>
-              <div className="planos-depo-info">
-                <strong className="planos-depo-handle">{d.handle}</strong>
+              <div className="planos-depo-tag">
+                <span className="planos-depo-handle">{d.handle}</span>
                 <span className="planos-depo-idade">{d.idade}</span>
               </div>
             </div>
@@ -480,38 +398,39 @@ export default function Planos() {
       </section>
 
       <section className="planos-faq" data-reveal style={revealStyle(160)}>
-        <h2>Dúvidas Frequentes</h2>
-        <div className="planos-faq-grid">
-          {[
-            { p: 'Posso cancelar quando quiser?', r: 'Sim. Cancele a qualquer momento. Seu acesso continua até o fim do período pago.' },
-            { p: 'O pagamento é seguro?', r: 'Totalmente. Processamos via PerfectPay com cartão, Pix ou boleto. Seus dados estão protegidos.' },
-            { p: 'Funciona para qualquer nicho?', r: 'Sim. O MetaSpy funciona para Nutra, Info, Ecommerce, leads e qualquer vertical do Meta Ads.' },
-            { p: 'Precisa de conhecimento técnico?', r: 'Não. A ferramenta foi feita para ser usada por afiliados, media buyers e diretos sem experiência em programação.' },
-            { p: 'Qual a diferença entre os planos?', r: 'O Básico dá acesso à extensão Minerador de Anúncios e ao Removedor de Metadados. O Gold inclui tudo isso mais Clonador, Detector de Cloacking e hospedar 10 páginas/mês. O Premium libera todas as ferramentas incluindo o Cloacker completo e hospedar 50 páginas/mês.' },
-          ].map((faq, index) => (
-            <details key={faq.p} className="planos-faq-item" data-reveal style={revealStyle(index * 60)}>
-              <summary>{faq.p}</summary>
-              <p>{faq.r}</p>
+        <div className="planos-section-heading">
+          <h2>{t('planos.faq.title')}</h2>
+        </div>
+        <div className="planos-faq-list">
+          {[1, 2, 3, 4, 5].map(n => (
+            <details key={n} className="planos-faq-item" data-reveal style={revealStyle(80 + n * 60)}>
+              <summary>{t(`planos.faq.q${n}`)}</summary>
+              <p>{t(`planos.faq.a${n}`)}</p>
             </details>
           ))}
         </div>
       </section>
 
       <section className="planos-cta-bottom" data-reveal style={revealStyle(180)}>
-        <h2>Pronto para escalar?</h2>
-        <p>Junte-se a centenas de profissionais que ja usam o MetaSpy para dominar o Meta Ads.</p>
-        <button type="button" className="btn btn-gradient planos-bottom-cta" onClick={() => handleCheckout('basico')}>
-          COMEÇAR AGORA
+        <h2>{t('planos.bottom.title')}</h2>
+        <p>{t('planos.bottom.subtitle')}</p>
+        <button
+          type="button"
+          className="btn btn-gradient planos-cta-bottom-btn"
+          onClick={() => navigate('/signup')}
+          style={{ marginTop: 20 }}
+        >
+          {t('planos.bottom.cta')}
         </button>
       </section>
 
       <footer className="planos-footer">
-        <p>MetaSpy © 2026 — Inteligência de Ofertas em Escala. Todos os direitos reservados.</p>
-        <nav className="legal-links-footer">
-          <Link to="/privacidade">Privacidade</Link>
-          <Link to="/cookies">Cookies</Link>
-          <Link to="/excluir-conta">Excluir Conta</Link>
-          <Link to="/redefinir-senha">Redefinir Senha</Link>
+        <p>{t('planos.footer.copyright')}</p>
+        <nav className="planos-footer-links">
+          <Link to="/privacidade">{t('planos.footer.privacy')}</Link>
+          <Link to="/cookies">{t('planos.footer.cookies')}</Link>
+          <Link to="/excluir-conta">{t('planos.footer.deletion')}</Link>
+          <Link to="/redefinir-senha">{t('planos.footer.reset')}</Link>
         </nav>
       </footer>
     </div>

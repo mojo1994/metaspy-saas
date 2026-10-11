@@ -570,7 +570,7 @@ async function authMiddleware(req, res, next) {
   const token = authHeader.slice(7)
   try {
     const decoded = jwt.verify(token, JWT_SECRET)
-    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [decoded.userId])
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at, preferred_language FROM users WHERE id = $1', [decoded.userId])
     if (!user) return res.status(401).json({ error: 'Usuario nao encontrado' })
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
     if (user.subscription_expiry && user.subscription_expiry < now && user.plan !== 'nenhum') {
@@ -747,7 +747,7 @@ app.post('/api/auth/signup', validate(signupSchema), async (req, res) => {
     await run('INSERT INTO users (id, name, email, password_hash, plan, subscription_status, email_verified, clones_used, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
       [id, name.trim(), emailLower, hash, 'nenhum', 'inactive', 1, 0, now])
 
-    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [id])
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at, preferred_language FROM users WHERE id = $1', [id])
     const accessToken = generateToken(id)
     await issueRefreshToken(res, id)
     await audit('signup', { userId: id, ip: req.ip, userAgent: req.headers['user-agent'] })
@@ -775,7 +775,7 @@ app.post('/api/auth/verify-signup', validate(verifyCodeSchema), async (req, res)
       [id, metadata.name, emailLower, metadata.password_hash, 'nenhum', 'inactive', 1, 0, now])
     await run('UPDATE email_codes SET used = 1 WHERE id = $1', [record.id])
 
-    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at FROM users WHERE id = $1', [id])
+    const user = await one('SELECT id, name, email, plan, subscription_status, subscription_expiry, clones_used, email_verified, created_at, preferred_language FROM users WHERE id = $1', [id])
     const accessToken = generateToken(id)
     await issueRefreshToken(res, id)
     await audit('signup_verified', { userId: id, ip: req.ip, userAgent: req.headers['user-agent'] })
@@ -876,7 +876,7 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 })
 
 // ─── Email / Recovery Routes ──────────────────────────────────────
-import { sendEmail, verificationEmailHtml, recoveryEmailHtml, accountDeletionEmailHtml, purchaseConfirmationEmailHtml, pendingCheckoutEmailHtml } from './email.js'
+import { sendEmail, verificationEmailHtml, recoveryEmailHtml, accountDeletionEmailHtml, purchaseConfirmationEmailHtml, pendingCheckoutEmailHtml, emailSubject, normalizeLang } from './email.js'
 
 function generateCode() {
   return String(randomInt(100000, 999999))
@@ -887,7 +887,7 @@ app.post('/api/auth/forgot-password', strictAuthLimiter, validate(forgotPassword
     const { email } = req.body
     if (!email) return res.status(400).json({ error: 'Email obrigatorio.' })
     const emailLower = email.toLowerCase().trim()
-    const user = await one('SELECT id, email FROM users WHERE email = $1', [emailLower])
+    const user = await one('SELECT id, email, preferred_language FROM users WHERE email = $1', [emailLower])
     // Resposta generica para nao revelar a existencia da conta.
     if (user) {
       await run('UPDATE email_codes SET used = 1 WHERE user_id = $1 AND type = $2 AND used = 0', [user.id, 'recovery'])
@@ -896,7 +896,8 @@ app.post('/api/auth/forgot-password', strictAuthLimiter, validate(forgotPassword
       const expires = new Date(now.getTime() + 5 * 60 * 1000)
       await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
         [randomUUID(), user.id, emailLower, code, 'recovery', expires.toISOString(), now.toISOString()])
-      const emailResult = await sendEmail({ to: user.email, subject: 'MetaSpy - Codigo de Recuperacao', html: recoveryEmailHtml(code) })
+      const userLang = normalizeLang(user.preferred_language)
+      const emailResult = await sendEmail({ to: user.email, subject: emailSubject('recovery', userLang), html: recoveryEmailHtml(code, userLang) })
       if (emailResult.error) logger.error({ emailError: emailResult.error }, 'Falha ao enviar codigo de recuperacao')
     }
     res.json({ ok: true })
@@ -943,7 +944,8 @@ app.post('/api/auth/send-verification', authMiddleware, async (req, res) => {
     await run('INSERT INTO email_codes (id, user_id, email, code, type, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [id, user.id, user.email, code, 'verification', expires.toISOString(), now.toISOString()])
 
-    const emailResult = await sendEmail({ to: user.email, subject: 'MetaSpy - Confirme seu Email', html: verificationEmailHtml(code) })
+    const userLang = normalizeLang(user.preferred_language)
+    const emailResult = await sendEmail({ to: user.email, subject: emailSubject('verification', userLang), html: verificationEmailHtml(code, userLang) })
     if (emailResult.error) {
       logger.error({ emailError: emailResult.error, userId: user.id }, 'Falha ao enviar email de verificacao')
       return res.status(500).json({ error: 'Erro ao enviar codigo. Tente novamente mais tarde.' })
@@ -1212,8 +1214,8 @@ app.post('/api/subscription/create-checkout', authMiddleware, validate(checkoutS
     try {
       await sendEmail({
         to: req.user.email,
-        subject: 'MetaSpy - Finalize sua compra!',
-        html: pendingCheckoutEmailHtml({ name: req.user.name, email: req.user.email }),
+        subject: emailSubject('pending_checkout', req.user.preferred_language),
+        html: pendingCheckoutEmailHtml({ name: req.user.name, email: req.user.email, lang: req.user.preferred_language }),
       })
     } catch (emailErr) {
       logger.error({ err: emailErr }, 'Erro ao enviar email de checkout pendente')
@@ -1300,7 +1302,7 @@ async function handleKirvanoWebhook(req, res) {
       if (userId) {
         if (isApproved) {
           logger.info({ userId, source, eventId: eventId.slice(0, 20) }, 'Webhook Kirvano: usuario identificado')
-          const user = await one('SELECT id, name, email, pending_plan FROM users WHERE id = $1', [userId])
+          const user = await one('SELECT id, name, email, pending_plan, preferred_language FROM users WHERE id = $1', [userId])
 
           // Prioridade: pending_plan > plano mapeado pelo produto > 'nenhum'
           let plan = user?.pending_plan || planFromProduct || 'nenhum'
@@ -1315,8 +1317,8 @@ async function handleKirvanoWebhook(req, res) {
               try {
                 await sendEmail({
                   to: user.email,
-                  subject: 'MetaSpy - Pagamento confirmado!',
-                  html: purchaseConfirmationEmailHtml({ name: user.name || user.email, plan, days: config.days }),
+                  subject: emailSubject('purchase', user.preferred_language),
+                  html: purchaseConfirmationEmailHtml({ name: user.name || user.email, plan, days: config.days, lang: user.preferred_language }),
                 })
               } catch (emailErr) {
                 logger.error({ err: emailErr }, 'Erro ao enviar email de confirmacao')
@@ -2487,8 +2489,18 @@ app.put('/api/user/profile', authMiddleware, validate(profileSchema), async (req
   }
 })
 
-app.put('/api/user/password', authMiddleware, validate(passwordSchema), async (req, res) => {
+const languageSchema = z.object({ preferred_language: z.enum(['pt-BR', 'en', 'es', 'fr', 'de', 'it']) }).strict()
+
+app.put('/api/user/language', authMiddleware, validate(languageSchema), async (req, res) => {
   try {
+    await run('UPDATE users SET preferred_language = $1 WHERE id = $2', [req.body.preferred_language, req.user.id])
+    res.json({ ok: true, preferred_language: req.body.preferred_language })
+  } catch {
+    res.status(500).json({ error: 'Erro ao atualizar idioma' })
+  }
+})
+
+app.put('/api/user/password', authMiddleware, validate(passwordSchema), async (req, res) => {  try {
     const { current_password, new_password } = req.body
     if (!current_password || !new_password) return res.status(400).json({ error: 'Senha atual e nova senha sao obrigatorias' })
     const user = await one('SELECT * FROM users WHERE id = $1', [req.user.id])
@@ -2545,7 +2557,7 @@ app.post('/api/account/deletion-request', authMiddleware, validate(accountDeleti
     await run('INSERT INTO account_deletion_requests (id, user_id, status, requested_at, scheduled_for) VALUES ($1,$2,$3,$4,$5)',
       [randomUUID(), user.id, 'pending', nowIso, scheduledIso])
     await audit('account_deletion_requested', { userId: user.id, ip: req.ip, userAgent: req.headers['user-agent'], metadata: { scheduledFor: scheduledIso } })
-    sendEmail({ to: user.email, subject: 'MetaSpy - Solicitacao de exclusao de conta', html: accountDeletionEmailHtml(scheduledIso) }).catch(() => {})
+    sendEmail({ to: user.email, subject: emailSubject('account_deletion', user.preferred_language), html: accountDeletionEmailHtml(scheduledIso, user.preferred_language) }).catch(() => {})
     res.json({ ok: true, scheduledFor: scheduledIso })
   } catch (err) {
     logger.error({ err }, 'Erro deletion-request')
@@ -2639,7 +2651,7 @@ app.post('/api/admin/activate-plan', adminMiddleware, async (req, res) => {
     const config = PLAN_CONFIG[plan]
     if (!config) return res.status(400).json({ error: 'Plano invalido' })
 
-    const user = await one('SELECT id, name, email, plan, subscription_status, pending_plan FROM users WHERE LOWER(email) = LOWER($1)', [email.trim()])
+    const user = await one('SELECT id, name, email, plan, subscription_status, pending_plan, preferred_language FROM users WHERE LOWER(email) = LOWER($1)', [email.trim()])
     if (!user) return res.status(404).json({ error: 'Usuario nao encontrado' })
 
     const now = new Date()
@@ -2656,8 +2668,8 @@ app.post('/api/admin/activate-plan', adminMiddleware, async (req, res) => {
     try {
       await sendEmail({
         to: user.email,
-        subject: 'MetaSpy - Plano ativado!',
-        html: purchaseConfirmationEmailHtml({ name: user.name || user.email, plan, days: planDays }),
+        subject: emailSubject('purchase', user.preferred_language),
+        html: purchaseConfirmationEmailHtml({ name: user.name || user.email, plan, days: planDays, lang: user.preferred_language }),
       })
     } catch (emailErr) {
       logger.error({ err: emailErr }, 'Erro ao enviar email de confirmacao (admin)')

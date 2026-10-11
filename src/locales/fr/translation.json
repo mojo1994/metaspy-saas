@@ -1,0 +1,247 @@
+{
+  "common": {
+    "appName": "MetaSpy",
+    "login": "Connexion",
+    "signup": "Créer un compte",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "loading": "Chargement...",
+    "dashboard": "Aller au Tableau de bord",
+    "help": "Aide"
+  },
+  "language": {
+    "label": "Langue",
+    "select": "Choisir la langue"
+  },
+  "landing": {
+    "hero": {
+      "title": "Intelligence d'Offres à l'Échelle",
+      "subtitle": "Identifiez, analysez et clonez les meilleures offres de la Bibliothèque d'Annonces Meta avec des filtres avancés et une mise en évidence visuelle en temps réel.",
+      "start": "COMMENCER MAINTENANT",
+      "dashboard": "Aller au Tableau de bord",
+      "login": "Connexion"
+    },
+    "features": {
+      "adintelligence": {
+        "title": "MetaSpy Ad Intelligence",
+        "description": "Scannez la Bibliothèque de Publicités Facebook en temps réel. Découvrez les offres scalées par score, durée d'activité, variations créatives et bien plus."
+      },
+      "cloner": {
+        "title": "Cloneur",
+        "description": "Clonez des pages web complètes sur votre ordinateur. Prise en charge de sites complexes, quiz Inlead et contournement de sécurité multicouche."
+      },
+      "cloaker": {
+        "title": "Cloaker",
+        "description": "Générez des scripts de cloaking professionnels pour protéger vos campagnes. Détection de bots, fingerprinting et blocage par IP en un clic."
+      },
+      "analytics": {
+        "title": "Analyse Avancée",
+        "description": "Tableau de bord complet avec statistiques de score, répartition par segment, compétitivité de niche et meilleures offres à l'échelle."
+      },
+      "filters": {
+        "title": "Filtres Intelligents",
+        "description": "Filtrez par pays, plateforme, statut, type de média, score minimum, jours actifs, segment (Nutra/Info), mots-clés négatifs et bien plus."
+      },
+      "csv": {
+        "title": "Export CSV",
+        "description": "Exportez tous les résultats en CSV en un clic. Parfait pour les analyses externes et les rapports personnalisés."
+      },
+      "bypass": {
+        "title": "Bypass Engine",
+        "description": "Moteur de bypass en JS, Python, Node et PHP. Compatible avec Cloudflare, SSL, quiz interactifs et sites à protection avancée."
+      }
+    },
+    "plans": {
+      "title": "Choisissez le Plan Idéal pour Évoluer",
+      "subtitle": "Pas de plan gratuit. Sans détour. Résultats dès le premier jour.",
+      "comparison": "Voir le Comparatif Complet",
+      "period": "/mois",
+      "badge": "RECOMMANDÉ",
+      "start": "Commencer",
+      "basico": {
+        "title": "Basique",
+        "desc": "Pour ceux qui veulent commencer à évoluer maintenant",
+        "price": { "original": "R$ 97", "current": "R$ 39,90" },
+        "features": ["Mineur d'Annonces", "Suppresseur de Métadonnées"]
+      },
+      "gold": {
+        "title": "Gold",
+        "desc": "Le pack complet pour les machines de guerre",
+        "price": { "original": "R$ 197", "current": "R$ 57,00" },
+        "features": ["Mineur d'Annonces", "Héberger des Pages", "Suppresseur de Métadonnées"]
+      },
+      "premium": {
+        "title": "Premium",
+        "desc": "Tous les outils sans limites",
+        "price": { "original": "R$ 397", "current": "R$ 97,00" },
+        "features": [
+          "Mineur d'Annonces",
+          "Cloneur",
+          "Héberger 50 pages/mois",
+          "Cloaker Premium",
+          "Générateur de Scripts",
+          "Script Avancé",
+          "Détecteur de Cloaking",
+          "Camouflage de Texte",
+          "Camouflage de Média",
+          "Campagnes",
+          "Liens Signés",
+          "Stéganographie",
+          "Logs en Temps Réel",
+          "Bypass Engines",
+          "Suppression de Métadonnées",
+          "Support Prioritaire 24/7"
+        ]
+      }
+    },
+    "footer": {
+      "copyright": "MetaSpy © 2026 — Intelligence d'Offres à l'Échelle. Tous droits réservés.",
+      "legal": "Liens légaux",
+      "privacy": "Confidentialité",
+      "cookies": "Cookies",
+      "deletion": "Suppression de Compte",
+      "reset": "Réinitialiser le Mot de Passe"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Connexion",
+      "subtitle": "Connectez-vous à votre compte MetaSpy",
+      "email": "E-mail",
+      "password": "Mot de passe",
+      "submit": "Connexion",
+      "submitting": "Connexion...",
+      "forgot": "Mot de passe oublié ?",
+      "noAccount": "Vous n'avez pas de compte ?",
+      "signupLink": "Inscrivez-vous",
+      "back": "Retour",
+      "required": "Remplissez tous les champs."
+    },
+    "signup": {
+      "titleFree": "Essai Gratuit",
+      "titleCreate": "Créer un Compte",
+      "descEmail": "Saisissez votre e-mail pour commencer",
+      "descForm": "Complétez votre inscription",
+      "email": "E-mail",
+      "name": "Nom",
+      "namePlaceholder": "Votre nom",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Au moins 6 caractères",
+      "continue": "Continuer",
+      "checking": "Vérification...",
+      "submit": "Créer un Compte",
+      "submitting": "Création...",
+      "noEmail": "Saisissez votre e-mail.",
+      "emailExists": "E-mail déjà enregistré !",
+      "loginHere": "Connectez-vous",
+      "connectionError": "Erreur de connexion au serveur.",
+      "required": "Remplissez tous les champs.",
+      "shortPassword": "Le mot de passe doit contenir au moins 6 caractères.",
+      "haveAccount": "Vous avez déjà un compte ?",
+      "enter": "Connectez-vous",
+      "switchEmail": "Changer d'e-mail",
+      "back": "Retour"
+    },
+    "forgot": {
+      "title": "Récupérer le Mot de Passe",
+      "doneTitle": "Terminé !",
+      "descEmail": "Saisissez votre e-mail pour recevoir un code de récupération.",
+      "descCode": "Saisissez le code reçu et créez un nouveau mot de passe.",
+      "descDone": "Votre mot de passe a été réinitialisé avec succès.",
+      "email": "E-mail",
+      "codeLabel": "Code (6 chiffres)",
+      "newPassword": "Nouveau mot de passe",
+      "newPasswordPlaceholder": "Au moins 6 caractères",
+      "confirmPassword": "Confirmer le mot de passe",
+      "confirmPlaceholder": "Répétez le mot de passe",
+      "sendCode": "Envoyer le code",
+      "sending": "Envoi...",
+      "resetPassword": "Réinitialiser le Mot de Passe",
+      "resetting": "Réinitialisation...",
+      "gotoLogin": "Aller à la Connexion",
+      "backToLogin": "Retour à la connexion",
+      "codeToEmail": "Un code à 6 chiffres a été envoyé. Il expire dans 15 minutes.",
+      "codeOk": "Mot de passe réinitialisé avec succès !",
+      "requiredCode": "Saisissez le code à 6 chiffres.",
+      "shortPassword": "Le nouveau mot de passe doit contenir au moins 6 caractères.",
+      "mismatch": "Les mots de passe ne correspondent pas.",
+      "connectionError": "Erreur de connexion au serveur."
+    }
+  },
+  "planos": {
+    "hero": {
+      "title": "Pourquoi évoluer avec nous",
+      "subtitle": "Les outils que les top players utilisent pour évoluer sur Meta Ads.\nPas de plan gratuit. Pas de blabla. Résultats dès le premier jour.",
+      "ctaStart": "ESSAI GRATUIT",
+      "ctaLogin": "Connexion",
+      "ctaDashboard": "Aller au Tableau de bord"
+    },
+    "badge": "LE PLUS CHOISI",
+    "period": "/mois",
+    "redirecting": "Redirection...",
+    "start": "Commencer Maintenant",
+    "checkoutError": "Erreur lors de la création du paiement. Réessayez.",
+    "connectionError": "Erreur de connexion. Vérifiez votre internet.",
+    "trust": {
+      "secure": "Paiement sécurisé",
+      "instant": "Activation immédiate après confirmation",
+      "cancel": "Annulez quand vous voulez"
+    },
+    "help": "Aide",
+    "comparison": {
+      "title": "Comparatif Complet",
+      "aria": "Comparatif complet des plans",
+      "feature": "Fonctionnalité"
+    },
+    "depo": {
+      "title": "Rencontrez les top players du marché qui évoluent avec nous"
+    },
+    "faq": {
+      "title": "Questions Fréquentes",
+      "q1": "Puis-je annuler à tout moment ?",
+      "a1": "Oui. Annulez quand vous voulez. Vous conservez l'accès jusqu'à la fin de la période payée.",
+      "q2": "Le paiement est-il sécurisé ?",
+      "a2": "Oui. Tous les paiements passent par une passerelle chiffrée et sécurisée.",
+      "q3": "Fonctionne-t-il pour toutes les niches ?",
+      "a3": "Oui. MetaSpy fonctionne avec les offres Nutra/Info et toute niche sur Meta Ads.",
+      "q4": "Ai-je besoin de connaissances techniques ?",
+      "a4": "Non. L'outil est conçu pour les affiliés et media buyers de tous niveaux.",
+      "q5": "Quelle est la différence entre les plans ?",
+      "a5": "Basique donne le mineur d'offres et le suppresseur de métadonnées. Gold ajoute le cloneur et l'hébergement de pages. Premium débloque tous les outils sans limites."
+    },
+    "bottom": {
+      "title": "Prêt à évoluer ?",
+      "subtitle": "Rejoignez des centaines de professionnels qui utilisent déjà MetaSpy pour dominer Meta Ads.",
+      "cta": "COMMENCER MAINTENANT"
+    },
+    "features": {
+      "minerador": "Mineur d'offres",
+      "analise_concorrentes": "Analyse des concurrents",
+      "limpeza_metadados": "Nettoyage des métadonnées",
+      "clonagem": "Clonage de pages",
+      "hospedagem": "Hébergement de pages",
+      "paginas_ocultas": "Pages cachées",
+      "analise_avancada": "Analyse avancée",
+      "clonagem_50": "Cloner 50 pages/mois",
+      "quebra_cloaker": "Briseur de Cloaker",
+      "camuflagem": "Camouflage Vidéo et Image",
+      "suporte": "Support Prioritaire"
+    },
+    "plan": {
+      "basicoTitle": "Basique",
+      "basicoDesc": "Idéal pour ceux qui commencent à trouver des offres gagnantes.",
+      "premiumTitle": "Premium",
+      "premiumDesc": "Accès complet pour affiliés, producteurs et media buyers opérant à l'échelle.",
+      "goldTitle": "Gold",
+      "goldDesc": "Pour ceux qui font déjà de la pub et veulent évoluer plus vite."
+    },
+    "footer": {
+      "copyright": "MetaSpy © 2026 — Intelligence d'Offres à l'Échelle. Tous droits réservés.",
+      "privacy": "Confidentialité",
+      "cookies": "Cookies",
+      "deletion": "Supprimer le Compte",
+      "reset": "Réinitialiser le Mot de Passe"
+    }
+  }
+}
