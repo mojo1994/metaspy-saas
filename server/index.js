@@ -158,8 +158,8 @@ const KIRVANO_PRODUCT_REVERSE = {
 
 const PLAN_FEATURES = {
   nenhum: { clone: false, minerador: false, cloaker: false, pagevault: true, analise: false, cleaner: false, bypass: false },
-  basico: { clone: false, minerador: true, cloaker: false, pagevault: false, analise: false, cleaner: true, bypass: false },
-  gold: { clone: false, minerador: true, cloaker: false, cloaker_detect: true, pagevault: true, analise: true, cleaner: true, bypass: true },
+  basico: { clone: true, minerador: true, cloaker: false, pagevault: false, analise: false, cleaner: true, bypass: false },
+  gold: { clone: true, minerador: true, cloaker: false, cloaker_detect: true, pagevault: true, analise: true, cleaner: true, bypass: true },
   premium: { clone: true, minerador: true, cloaker: true, pagevault: true, analise: true, cleaner: true, bypass: true },
 }
 

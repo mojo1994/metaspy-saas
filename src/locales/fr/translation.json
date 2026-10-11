@@ -63,7 +63,7 @@
         "title": "Basique",
         "desc": "Pour ceux qui veulent commencer à évoluer maintenant",
         "price": { "original": "R$ 97", "current": "R$ 39,90" },
-        "features": ["Mineur d'Annonces", "Suppresseur de Métadonnées"]
+        "features": ["Mineur d'Annonces", "Suppresseur de Métadonnées", "Clonage de pages"]
       },
       "gold": {
         "title": "Gold",

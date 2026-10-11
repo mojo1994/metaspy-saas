@@ -63,7 +63,7 @@
         "title": "Base",
         "desc": "Per chi vuole iniziare a scalare ora",
         "price": { "original": "R$ 97", "current": "R$ 39,90" },
-        "features": ["Miner Annunci", "Rimuovi Metadati"]
+        "features": ["Miner Annunci", "Rimuovi Metadati", "Clonazione pagine"]
       },
       "gold": {
         "title": "Gold",

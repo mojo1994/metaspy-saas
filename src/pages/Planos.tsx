@@ -7,7 +7,7 @@ import LanguageSelector from '../components/LanguageSelector'
 import { Minus, SealCheck } from '@phosphor-icons/react'
 
 const FEATURE_KEYS = {
-  basico: ['minerador', 'analise_concorrentes', 'limpeza_metadados'],
+  basico: ['minerador', 'analise_concorrentes', 'limpeza_metadados', 'clonagem'],
   gold: ['minerador', 'analise_concorrentes', 'limpeza_metadados', 'clonagem', 'hospedagem', 'paginas_ocultas', 'analise_avancada'],
   premium: ['minerador', 'analise_concorrentes', 'limpeza_metadados', 'clonagem', 'hospedagem', 'paginas_ocultas', 'analise_avancada', 'clonagem_50', 'quebra_cloaker', 'camuflagem', 'suporte'],
 } as const

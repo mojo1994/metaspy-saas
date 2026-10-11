@@ -63,7 +63,7 @@
         "title": "Básico",
         "desc": "Para quem quer começar a escalar agora",
         "price": { "original": "R$ 97", "current": "R$ 39,90" },
-        "features": ["Minerador de Anúncios", "Removedor de Metadados"]
+        "features": ["Minerador de Anúncios", "Removedor de Metadados", "Clonagem de páginas"]
       },
       "gold": {
         "title": "Gold",

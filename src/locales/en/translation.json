@@ -63,7 +63,7 @@
         "title": "Basic",
         "desc": "For those who want to start scaling now",
         "price": { "original": "R$ 97", "current": "R$ 39,90" },
-        "features": ["Ad Miner", "Metadata Remover"]
+        "features": ["Ad Miner", "Metadata Remover", "Page cloning"]
       },
       "gold": {
         "title": "Gold",

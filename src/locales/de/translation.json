@@ -63,7 +63,7 @@
         "title": "Basis",
         "desc": "Für alle, die jetzt skalieren wollen",
         "price": { "original": "R$ 97", "current": "R$ 39,90" },
-        "features": ["Anzeigen-Miner", "Metadaten-Entferner"]
+        "features": ["Anzeigen-Miner", "Metadaten-Entferner", "Seiten-Klonen"]
       },
       "gold": {
         "title": "Gold",
