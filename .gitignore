@@ -22,3 +22,7 @@ depoimentos/
 pf.txt
 # Local Netlify folder
 .netlify
+# Segredos / arquivos locais (nao commitar)
+kirvano.txt
+env.txt
+prompt.txt

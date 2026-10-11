@@ -80,7 +80,19 @@ const DATA_DIR = IS_RENDER ? '/tmp/metaspy' : __dirname
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
 
 initDb(DATABASE_URL)
-await initSchema()
+// Nao derruba o servidor se o banco estiver indisponivel no boot.
+// Faz retry em background para evitar crash-loop (ex: cold start do Neon).
+async function ensureSchema(attempt = 1) {
+  try {
+    await initSchema()
+    logger.info('Schema do banco verificado com sucesso.')
+  } catch (err) {
+    const delay = Math.min(30000, 2000 * attempt)
+    logger.error({ err: err.message, attempt, retryInMs: delay }, 'Falha ao inicializar schema do banco; nova tentativa em breve.')
+    if (attempt < 15) setTimeout(() => ensureSchema(attempt + 1), delay)
+  }
+}
+await ensureSchema()
 
 // ─── LRU Cache com TTL ──────────────────────────────────────────
 class TtlLRUMap {
