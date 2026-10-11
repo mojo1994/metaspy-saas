@@ -35,7 +35,7 @@ export default function ExtensionDownload() {
   const [loading, setLoading] = useState(true)
 
   const isFree = !user || user.plano === 'nenhum'
-  const downloadUrl = info?.downloadUrl || (import.meta.env.VITE_EXTENSION_DOWNLOAD_URL as string | undefined) || null
+  const downloadUrl = info?.downloadUrl || (import.meta.env.VITE_EXTENSION_DOWNLOAD_URL as string | undefined) || '/metaspy-extensao.zip'
 
   useEffect(() => {
     fetch('/api/extension/latest')

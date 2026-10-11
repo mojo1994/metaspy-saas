@@ -329,10 +329,10 @@ export async function initSchema() {
     `INSERT INTO extension_releases (id, version, release_date, download_url, notes, min_browser_version, created_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING`,
     [
-      'ext-1.0.0',
-      '1.0.0',
+      'ext-3.0.0',
+      '3.0.0',
       '2026-10-11',
-      null,
+      '/metaspy-extensao.zip',
       JSON.stringify([
         { type: 'novo', description: 'Minerador de anuncios do Facebook direto no navegador.' },
         { type: 'novo', description: 'Score de escala e deteccao de estrategias sem sair do Meta Ads.' },
